@@ -5914,6 +5914,153 @@ def delete_order(order_id: str, current_user: Dict[str, Any] = Depends(get_curre
         raise HTTPException(status_code=500, detail=f"删除订单失败: {str(e)}")
 
 
+@app.post('/api/orders/refresh')
+async def refresh_orders_status(
+    cookie_id: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    智能刷新订单状态
+    1. 从数据库获取订单列表（支持筛选）
+    2. 对非'已发货'状态的订单，使用Playwright查询最新状态
+    3. 更新数据库中有变化的订单
+    """
+    try:
+        from db_manager import db_manager
+        from order_status_query_playwright import OrderStatusQueryPlaywright
+
+        user_id = current_user['user_id']
+        log_with_user('info', f"开始智能刷新订单状态 (cookie_id={cookie_id}, status={status})", current_user)
+
+        # 获取用户的所有Cookie
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        # 如果指定了cookie_id，只使用该Cookie
+        if cookie_id:
+            if cookie_id not in user_cookies:
+                raise HTTPException(status_code=404, detail="Cookie不存在或无权访问")
+            user_cookies = {cookie_id: user_cookies[cookie_id]}
+
+        # 获取需要刷新的订单
+        orders_to_refresh = []
+        for cid in user_cookies.keys():
+            # 获取该Cookie的所有订单
+            orders = db_manager.get_orders_by_cookie(cid, limit=1000)
+
+            # 筛选需要刷新的订单（非已发货状态）
+            for order in orders:
+                # 如果指定了状态筛选，只刷新该状态的订单
+                if status and order.get('order_status') != status:
+                    continue
+
+                # 只刷新非'shipped'（已发货）状态的订单
+                # 根据前端状态映射：processing, pending_ship, processed, refunding, cancelled等
+                if order.get('order_status') != 'shipped':
+                    orders_to_refresh.append({
+                        'order_id': order['order_id'],
+                        'cookie_id': cid,
+                        'current_status': order.get('order_status', 'unknown')
+                    })
+
+        log_with_user('info', f"找到 {len(orders_to_refresh)} 个需要刷新的订单", current_user)
+
+        # 刷新订单状态
+        updated_count = 0
+        failed_count = 0
+        no_change_count = 0
+        refresh_results = []
+
+        for order_info in orders_to_refresh:
+            order_id = order_info['order_id']
+            cookie_id = order_info['cookie_id']
+            current_status = order_info['current_status']
+
+            try:
+                # 获取Cookie
+                cookie_data = user_cookies[cookie_id]
+                cookies_str = cookie_data.get('value', '')
+
+                if not cookies_str:
+                    log_with_user('warning', f"Cookie {cookie_id} 没有value字段，跳过订单 {order_id}", current_user)
+                    failed_count += 1
+                    continue
+
+                # 使用Playwright查询订单状态
+                query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
+                result = await query.query_order_status(order_id)
+
+                if result.get('success'):
+                    # 获取新的状态信息
+                    new_status_code = result.get('order_status')
+                    new_status_text = result.get('status_text')
+
+                    # 将状态码转换为数据库状态
+                    status_mapping = {
+                        1: 'processing',      # 待付款
+                        2: 'pending_ship',    # 待发货
+                        3: 'shipped',         # 已发货
+                        4: 'completed',       # 交易成功
+                        5: 'refunding',       # 退款中
+                        6: 'cancelled',       # 交易关闭
+                    }
+                    new_status = status_mapping.get(new_status_code, 'unknown')
+
+                    # 检查状态是否有变化
+                    if new_status != current_status:
+                        # 更新数据库
+                        success = db_manager.insert_or_update_order(
+                            order_id=order_id,
+                            order_status=new_status,
+                            cookie_id=cookie_id
+                        )
+
+                        if success:
+                            updated_count += 1
+                            refresh_results.append({
+                                'order_id': order_id,
+                                'old_status': current_status,
+                                'new_status': new_status,
+                                'status_text': new_status_text
+                            })
+                            log_with_user('info', f"订单 {order_id} 状态已更新: {current_status} -> {new_status} ({new_status_text})", current_user)
+                        else:
+                            failed_count += 1
+                            log_with_user('error', f"订单 {order_id} 状态更新失败", current_user)
+                    else:
+                        no_change_count += 1
+                        log_with_user('debug', f"订单 {order_id} 状态无变化: {current_status}", current_user)
+                else:
+                    failed_count += 1
+                    error_msg = result.get('error', '未知错误')
+                    log_with_user('warning', f"订单 {order_id} 状态查询失败: {error_msg}", current_user)
+
+            except Exception as e:
+                failed_count += 1
+                log_with_user('error', f"刷新订单 {order_id} 时发生异常: {str(e)}", current_user)
+
+        # 返回刷新结果
+        log_with_user('info', f"订单刷新完成: 更新{updated_count}个, 无变化{no_change_count}个, 失败{failed_count}个", current_user)
+
+        return JSONResponse({
+            "success": True,
+            "message": f"刷新完成: 更新{updated_count}个, 无变化{no_change_count}个, 失败{failed_count}个",
+            "summary": {
+                "total": len(orders_to_refresh),
+                "updated": updated_count,
+                "no_change": no_change_count,
+                "failed": failed_count
+            },
+            "updated_orders": refresh_results
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"刷新订单状态失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"刷新订单状态失败: {str(e)}")
+
+
 # ==================== 前端 SPA Catch-All 路由 ====================
 # 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问
 # 这样用户直接访问 /dashboard、/accounts 等前端路由时，会返回 index.html

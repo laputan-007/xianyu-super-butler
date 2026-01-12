@@ -67,3 +67,47 @@ export const batchDeleteOrders = async (_ids: string[]): Promise<ApiResponse> =>
 export const updateOrderStatus = async (_id: string, _status: string): Promise<ApiResponse> => {
   return { success: false, message: '后端暂未实现订单状态更新接口' }
 }
+
+// 刷新订单状态
+export const refreshOrdersStatus = async (
+  cookieId?: string,
+  status?: string
+): Promise<{
+  success: boolean
+  message?: string
+  summary?: {
+    total: number
+    updated: number
+    no_change: number
+    failed: number
+  }
+  updated_orders?: Array<{
+    order_id: string
+    old_status: string
+    new_status: string
+    status_text: string
+  }>
+}> => {
+  try {
+    const formData = new FormData()
+    if (cookieId) formData.append('cookie_id', cookieId)
+    if (status) formData.append('status', status)
+
+    const response = await fetch('/api/orders/refresh', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw new Error('刷新失败')
+    }
+
+    const result = await response.json()
+    return result
+  } catch (error) {
+    return { success: false, message: '刷新订单状态失败' }
+  }
+}

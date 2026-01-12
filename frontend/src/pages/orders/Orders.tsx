@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { getOrders, deleteOrder, getOrderDetail, type OrderDetail } from '@/api/orders'
+import { ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus, type OrderDetail } from '@/api/orders'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
@@ -38,6 +38,21 @@ export function Orders() {
   const [pageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  // 智能刷新状态
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshModalOpen, setRefreshModalOpen] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<{
+    total: number
+    updated: number
+    no_change: number
+    failed: number
+    updated_orders: Array<{
+      order_id: string
+      old_status: string
+      new_status: string
+      status_text: string
+    }>
+  } | null>(null)
 
   const loadOrders = async (page: number = currentPage) => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -113,6 +128,47 @@ export function Orders() {
     }
   }
 
+  const handleSmartRefresh = async () => {
+    if (refreshing) return
+
+    setRefreshing(true)
+    setRefreshModalOpen(true)
+    setRefreshResult(null)
+
+    try {
+      const result = await refreshOrdersStatus(
+        selectedAccount || undefined,
+        selectedStatus || undefined
+      )
+
+      if (result.success && result.summary) {
+        setRefreshResult({
+          total: result.summary.total,
+          updated: result.summary.updated,
+          no_change: result.summary.no_change,
+          failed: result.summary.failed,
+          updated_orders: result.updated_orders || []
+        })
+
+        addToast({
+          type: 'success',
+          message: result.message || '刷新完成'
+        })
+
+        // 刷新订单列表
+        await loadOrders(currentPage)
+      } else {
+        addToast({ type: 'error', message: result.message || '刷新失败' })
+        setRefreshModalOpen(false)
+      }
+    } catch {
+      addToast({ type: 'error', message: '刷新订单状态失败' })
+      setRefreshModalOpen(false)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const filteredOrders = orders.filter((order) => {
     if (!searchKeyword) return true
     const keyword = searchKeyword.toLowerCase()
@@ -135,10 +191,24 @@ export function Orders() {
           <h1 className="page-title">订单管理</h1>
           <p className="page-description">查看和管理所有订单信息</p>
         </div>
-        <button onClick={() => loadOrders(currentPage)} className="btn-ios-secondary w-full sm:w-auto">
-          <RefreshCw className="w-4 h-4" />
-          刷新
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => loadOrders(currentPage)}
+            disabled={loading}
+            className="btn-ios-secondary w-full sm:w-auto"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            刷新列表
+          </button>
+          <button
+            onClick={handleSmartRefresh}
+            disabled={refreshing}
+            className="btn-ios-primary w-full sm:w-auto"
+          >
+            <Sparkles className={`w-4 h-4 ${refreshing ? 'animate-pulse' : ''}`} />
+            {refreshing ? '智能刷新中...' : '智能刷新'}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -447,6 +517,102 @@ export function Orders() {
             <div className="modal-footer">
               <button onClick={() => setDetailModalOpen(false)} className="btn-ios-secondary">
                 关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 智能刷新结果弹窗 */}
+      {refreshModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content max-w-2xl">
+            <div className="modal-header flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-500" />
+                智能刷新结果
+              </h2>
+              {!refreshing && (
+                <button
+                  onClick={() => setRefreshModalOpen(false)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              )}
+            </div>
+            <div className="modal-body">
+              {refreshing ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                  <span className="text-gray-500">正在刷新订单状态...</span>
+                  <span className="text-sm text-gray-400 mt-2">这可能需要几分钟时间</span>
+                </div>
+              ) : refreshResult ? (
+                <div className="space-y-4">
+                  {/* 统计摘要 */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{refreshResult.total}</div>
+                      <div className="text-sm text-gray-500">总订单</div>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">{refreshResult.updated}</div>
+                      <div className="text-sm text-gray-500">已更新</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">{refreshResult.no_change}</div>
+                      <div className="text-sm text-gray-500">无变化</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600 dark:text-red-400">{refreshResult.failed}</div>
+                      <div className="text-sm text-gray-500">失败</div>
+                    </div>
+                  </div>
+
+                  {/* 更新的订单列表 */}
+                  {refreshResult.updated_orders.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        已更新的订单 ({refreshResult.updated_orders.length})
+                      </h3>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {refreshResult.updated_orders.map((order, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                          >
+                            <div className="flex-1">
+                              <div className="font-mono text-sm">{order.order_id}</div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {statusMap[order.old_status]?.label || order.old_status} → {statusMap[order.new_status]?.label || order.new_status}
+                              </div>
+                            </div>
+                            <div className="text-sm text-green-600 font-medium">
+                              {order.status_text}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {refreshResult.updated_orders.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                      <p>没有订单状态发生变化</p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-footer">
+              <button
+                onClick={() => setRefreshModalOpen(false)}
+                disabled={refreshing}
+                className="btn-ios-secondary"
+              >
+                {refreshing ? '刷新中...' : '关闭'}
               </button>
             </div>
           </div>

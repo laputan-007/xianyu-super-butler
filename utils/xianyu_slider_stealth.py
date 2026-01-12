@@ -243,10 +243,10 @@ strategy_stats = RetryStrategyStats()
 
 class XianyuSliderStealth:
     
-    def __init__(self, user_id: str = "default", enable_learning: bool = True, headless: bool = True):
+    def __init__(self, user_id: str = "default", enable_learning: bool = True, headless: bool = False):
         self.user_id = user_id
         self.enable_learning = enable_learning
-        self.headless = headless  # 是否使用无头模式
+        self.headless = headless  # 是否使用无头模式（默认False，显示浏览器窗口以便手动辅助）
         self.browser = None
         self.page = None
         self.context = None
@@ -279,11 +279,11 @@ class XianyuSliderStealth:
         
         self.success_history_file = f"trajectory_history/{self.pure_user_id}_success.json"
         self.trajectory_params = {
-            "total_steps_range": [5, 8],  # 极速：5-8步（超快滑动）
-            "base_delay_range": [0.0002, 0.0005],  # 极速：0.2-0.5ms延迟
-            "jitter_x_range": [0, 1],  # 极小抖动
-            "jitter_y_range": [0, 1],  # 极小抖动
-            "slow_factor_range": [10, 15],  # 极快加速因子
+            "total_steps_range": [15, 25],  # 适中步数（平衡速度和真实度）
+            "base_delay_range": [0.003, 0.008],  # 适中延迟：3-8ms（更接近人类操作）
+            "jitter_x_range": [0, 2],  # 小幅抖动
+            "jitter_y_range": [0, 2],  # 小幅抖动
+            "slow_factor_range": [8, 12],  # 适中加速因子
             "acceleration_phase": 1.0,  # 全程加速
             "fast_phase": 1.0,  # 无慢速
             "slow_start_ratio_base": 2.0,  # 确保超调100%
@@ -1180,40 +1180,41 @@ class XianyuSliderStealth:
             return t
     
     def _generate_physics_trajectory(self, distance: float):
-        """基于物理加速度模型生成轨迹 - 极速模式
-        
+        """基于物理加速度模型生成轨迹 - 适中速度模式
+
         优化策略：
-        1. 极少轨迹点（5-8步）：快速完成
+        1. 适中轨迹点（15-25步）：平衡速度和真实度
         2. 持续加速：一气呵成，不减速
-        3. 确保超调50%以上：保证滑动到位
+        3. 确保超调100%以上：保证滑动到位
         4. 无回退：单向滑动
+        5. 适中延迟：3-8ms（更接近人类操作）
         """
         trajectory = []
         # 确保超调100%
         target_distance = distance * random.uniform(2.0, 2.1)  # 超调100-110%
-        
-        # 极少步数（5-8步）
-        steps = random.randint(5, 8)
-        
-        # 极快时间间隔
-        base_delay = random.uniform(0.0002, 0.0005)
-        
+
+        # 适中步数（15-25步）
+        steps = random.randint(15, 25)
+
+        # 适中时间间隔（3-8ms）
+        base_delay = random.uniform(0.003, 0.008)
+
         # 生成轨迹点 - 直线加速
         for i in range(steps):
             progress = (i + 1) / steps
-            
+
             # 计算当前位置（使用平方加速曲线，越来越快）
             x = target_distance * (progress ** 1.5)  # 加速曲线
-            
-            # 极小Y轴抖动
+
+            # 小幅Y轴抖动
             y = random.uniform(0, 2)
-            
-            # 极短延迟
+
+            # 适中延迟
             delay = base_delay * random.uniform(0.9, 1.1)
-            
+
             trajectory.append((x, y, delay))
-        
-        logger.info(f"【{self.pure_user_id}】极速模式：{len(trajectory)}步，超调100%+")
+
+        logger.info(f"【{self.pure_user_id}】适中速度模式：{len(trajectory)}步，超调100%+")
         return trajectory
     
     def generate_human_trajectory(self, distance: float):
@@ -1982,10 +1983,14 @@ class XianyuSliderStealth:
             return 0
     
     def check_verification_success_fast(self, slider_button: ElementHandle):
-        """检查验证结果 - 极速模式"""
+        """检查验证结果 - 极速模式
+
+        Returns:
+            tuple: (success: bool, retry_element: ElementHandle or None)
+        """
         try:
             logger.info(f"【{self.pure_user_id}】检查验证结果（极速模式）...")
-            
+
             # 确定滑块所在的frame（如果已知）
             target_frame = None
             if hasattr(self, '_detected_slider_frame') and self._detected_slider_frame is not None:
@@ -2000,14 +2005,14 @@ class XianyuSliderStealth:
                     # 如果frame被分离（detached），说明验证成功，容器已消失
                     if 'detached' in error_msg or 'disconnected' in error_msg:
                         logger.info(f"【{self.pure_user_id}】✓ Frame已被分离，验证成功")
-                        return True
+                        return True, None
             else:
                 target_frame = self.page
                 logger.info(f"【{self.pure_user_id}】在主页面检查验证结果")
-            
+
             # 等待一小段时间让验证结果出现
             time.sleep(0.3)
-            
+
             # 核心逻辑：首先检查frame容器状态
             # 如果容器消失，直接返回成功；如果容器还在，检查失败提示
             def check_container_status():
@@ -2029,10 +2034,10 @@ class XianyuSliderStealth:
                                 return (False, False)
                             # 其他错误，继续尝试
                             raise frame_error
-                    
+
                     if container is None:
                         return (False, False)  # 容器不存在
-                    
+
                     try:
                         is_visible = container.is_visible()
                         return (True, is_visible)
@@ -2053,50 +2058,52 @@ class XianyuSliderStealth:
                     # 其他错误，保守处理，假设存在
                     logger.warning(f"【{self.pure_user_id}】检查容器状态时出错: {e}")
                     return (True, True)
-            
+
             # 第一次检查容器状态
             container_exists, container_visible = check_container_status()
-            
+
             # 如果容器不存在或不可见，直接返回成功
             if not container_exists or not container_visible:
                 logger.info(f"【{self.pure_user_id}】✓ 滑块容器已消失（不存在或不可见），验证成功")
-                return True
-            
+                return True, None
+
             # 容器还在，需要等待更长时间并检查失败提示
             logger.info(f"【{self.pure_user_id}】滑块容器仍存在且可见，等待验证结果...")
             time.sleep(1.2)  # 等待验证结果
-            
+
             # 再次检查容器状态
             container_exists, container_visible = check_container_status()
-            
+
             # 如果容器消失了，返回成功
             if not container_exists or not container_visible:
                 logger.info(f"【{self.pure_user_id}】✓ 滑块容器已消失，验证成功")
-                return True
-            
+                return True, None
+
             # 容器还在，检查是否有验证失败提示
             logger.info(f"【{self.pure_user_id}】滑块容器仍存在，检查验证失败提示...")
-            if self.check_verification_failure():
+            has_failure, retry_element = self.check_verification_failure()
+
+            if has_failure:
                 logger.warning(f"【{self.pure_user_id}】检测到验证失败提示，验证失败")
-                return False
-            
+                return False, retry_element
+
             # 容器还在，但没有失败提示，可能还在验证中或验证失败
             # 再等待一小段时间后再次检查
             time.sleep(0.5)
             container_exists, container_visible = check_container_status()
-            
+
             if not container_exists or not container_visible:
                 logger.info(f"【{self.pure_user_id}】✓ 滑块容器已消失，验证成功")
-                return True
-            
+                return True, None
+
             # 容器仍然存在，且没有失败提示，可能是验证失败但没有显示失败提示
             # 或者验证还在进行中，但为了不无限等待，返回失败
             logger.warning(f"【{self.pure_user_id}】滑块容器仍存在且可见，且未检测到失败提示，但验证可能失败")
-            return False
-            
+            return False, None
+
         except Exception as e:
             logger.error(f"【{self.pure_user_id}】检查验证结果时出错: {str(e)}")
-            return False
+            return False, None
     
     def check_page_changed(self):
         """检查页面是否改变"""
@@ -2193,15 +2200,94 @@ class XianyuSliderStealth:
             
             if retry_button:
                 logger.info(f"【{self.pure_user_id}】检测到验证失败提示元素，验证失败")
-                return True
+                return True, retry_button  # 返回找到的重试按钮元素
             else:
                 logger.info(f"【{self.pure_user_id}】未找到验证失败提示，可能验证成功了")
-                return False
-                
+                return False, None
+
         except Exception as e:
             logger.error(f"【{self.pure_user_id}】检查验证失败时出错: {e}")
+            return False, None
+
+    def click_retry_button(self, retry_element=None):
+        """点击重试按钮以重置滑块验证
+
+        Args:
+            retry_element: 重试按钮元素（如果已知），如果为None则自动查找
+
+        Returns:
+            bool: 成功点击返回True，否则返回False
+        """
+        try:
+            logger.info(f"【{self.pure_user_id}】尝试点击重试按钮...")
+
+            # 如果没有传入重试元素，先查找
+            if retry_element is None:
+                # 定义重试按钮选择器（按优先级排序）
+                retry_selectors = [
+                    "text=验证失败，点击框体重试",  # 完整文本匹配
+                    "text=点击框体重试",  # 部分文本匹配
+                    ".nc-lang-cnt",  # 通用提示容器
+                    "[class*='retry']",  # 包含retry的类名
+                    ".captcha-tips",  # 验证码提示
+                ]
+
+                for selector in retry_selectors:
+                    try:
+                        # 在主页面和所有frame中查找
+                        frames_to_check = [self.page] + self.page.frames
+                        for frame in frames_to_check:
+                            try:
+                                element = frame.query_selector(selector)
+                                if element and element.is_visible():
+                                    element_text = element.text_content() or ""
+                                    logger.info(f"【{self.pure_user_id}】找到重试元素: {selector}, 文本: {element_text}")
+
+                                    # 检查是否包含"重试"相关文本
+                                    if "重试" in element_text or "retry" in element_text.lower():
+                                        retry_element = element
+                                        break
+                            except:
+                                continue
+
+                        if retry_element:
+                            break
+                    except:
+                        continue
+
+            # 如果找到了重试元素，点击它
+            if retry_element:
+                try:
+                    # 使用JavaScript点击（更可靠）
+                    retry_element.evaluate("el => el.click()")
+                    logger.success(f"【{self.pure_user_id}】✅ 已点击重试按钮（JavaScript点击）")
+
+                    # 等待滑块重置
+                    time.sleep(random.uniform(0.5, 1.0))
+                    return True
+
+                except Exception as js_error:
+                    logger.warning(f"【{self.pure_user_id}】JavaScript点击失败: {js_error}，尝试鼠标点击")
+
+                    try:
+                        # 备用方案：使用鼠标点击
+                        retry_element.click()
+                        logger.success(f"【{self.pure_user_id}】✅ 已点击重试按钮（鼠标点击）")
+
+                        # 等待滑块重置
+                        time.sleep(random.uniform(0.5, 1.0))
+                        return True
+                    except Exception as mouse_error:
+                        logger.error(f"【{self.pure_user_id}】鼠标点击也失败: {mouse_error}")
+                        return False
+            else:
+                logger.warning(f"【{self.pure_user_id}】未找到重试按钮，无法点击")
+                return False
+
+        except Exception as e:
+            logger.error(f"【{self.pure_user_id}】点击重试按钮时出错: {e}")
             return False
-    
+
     def _analyze_failure(self, attempt: int, slide_distance: float, trajectory_data: dict):
         """分析失败原因并记录"""
         try:
@@ -2277,40 +2363,52 @@ class XianyuSliderStealth:
                     continue
                 
                 # 5. 检查验证结果（极速模式）
-                if self.check_verification_success_fast(slider_button):
+                verification_success, retry_element = self.check_verification_success_fast(slider_button)
+                if verification_success:
                     logger.info(f"【{self.pure_user_id}】✅ 滑块验证成功! (第{attempt}次尝试)")
-                    
+
                     # 📊 记录策略成功
                     strategy_stats.record_attempt(attempt, current_strategy, success=True)
                     logger.info(f"【{self.pure_user_id}】📊 记录策略: 第{attempt}次-{current_strategy}策略-成功")
-                    
+
                     # 保存成功记录用于学习
                     if self.enable_learning and hasattr(self, 'current_trajectory_data'):
                         self._save_success_record(self.current_trajectory_data)
                         logger.info(f"【{self.pure_user_id}】已保存成功记录用于参数优化")
-                    
+
                     # 如果不是第一次就成功，记录重试信息
                     if attempt > 1:
                         logger.info(f"【{self.pure_user_id}】经过{attempt}次尝试后验证成功")
-                    
+
                     # 输出当前统计摘要
                     strategy_stats.log_summary()
-                    
+
                     return True
                 else:
                     logger.warning(f"【{self.pure_user_id}】❌ 第{attempt}次验证失败")
-                    
+
                     # 📊 记录策略失败
                     strategy_stats.record_attempt(attempt, current_strategy, success=False)
                     logger.info(f"【{self.pure_user_id}】📊 记录策略: 第{attempt}次-{current_strategy}策略-失败")
-                    
+
                     # 分析失败原因
                     if hasattr(self, 'current_trajectory_data'):
                         failure_info = self._analyze_failure(attempt, slide_distance, self.current_trajectory_data)
                         failure_records.append(failure_info)
-                    
-                    # 如果不是最后一次尝试，继续
+
+                    # 🔑 如果不是最后一次尝试，点击重试按钮后继续
                     if attempt < max_retries:
+                        # 点击重试按钮重置滑块
+                        if retry_element is not None:
+                            logger.info(f"【{self.pure_user_id}】检测到重试按钮，点击重置滑块...")
+                            if self.click_retry_button(retry_element):
+                                logger.success(f"【{self.pure_user_id}】✅ 已点击重试按钮，滑块已重置")
+                                # 等待滑块重新加载
+                                time.sleep(random.uniform(0.3, 0.6))
+                            else:
+                                logger.warning(f"【{self.pure_user_id}】点击重试按钮失败，继续尝试")
+                        else:
+                            logger.info(f"【{self.pure_user_id}】未检测到重试按钮，直接继续下一次尝试")
                         continue
                 
             except Exception as e:
