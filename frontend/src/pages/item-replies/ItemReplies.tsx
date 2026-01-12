@@ -222,7 +222,7 @@ export function ItemReplies() {
               ) : (
                 replies.map((reply) => (
                   <tr key={reply.id}>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{reply.cookie_id}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{reply.cookie_id}</td>
                     <td className="text-sm">{reply.item_id}</td>
                     <td className="max-w-[150px] truncate">{reply.title || '-'}</td>
                     <td className="max-w-[200px] truncate text-gray-500">{reply.reply}</td>
@@ -236,7 +236,7 @@ export function ItemReplies() {
                           className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
                           title="编辑"
                         >
-                          <Edit2 className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                          <Edit2 className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                         </button>
                         <button
                           onClick={() => handleDelete(reply)}

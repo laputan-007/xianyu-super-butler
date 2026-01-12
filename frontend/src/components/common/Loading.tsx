@@ -21,7 +21,7 @@ export function Loading({ size = 'md', fullScreen = false, text }: LoadingProps)
         animate={{ rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
       >
-        <Loader2 className={cn('text-blue-500', sizes[size])} />
+        <Loader2 className={cn('text-amber-500', sizes[size])} />
       </motion.div>
       {text && (
         <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{text}</p>

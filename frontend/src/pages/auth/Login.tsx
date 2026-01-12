@@ -202,22 +202,22 @@ export function Login() {
         {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
       </button>
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="hidden lg:flex lg:w-1/2 bg-slate-900 dark:bg-slate-950 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-600/20 to-transparent" />
         <div className="relative z-10 flex flex-col justify-center px-16">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5 }} className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center"><MessageSquare className="w-6 h-6 text-white" /></div>
+            <div className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center"><MessageSquare className="w-6 h-6 text-white" /></div>
             <span className="text-2xl font-bold text-white">闲鱼超级管家</span>
           </motion.div>
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }} className="text-4xl font-bold text-white mb-4 leading-tight">高效专业的<br />闲鱼自动化管理平台</motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.5 }} className="text-slate-400 text-lg max-w-md">自动回复、智能客服、订单管理、数据分析，一站式解决闲鱼运营难题</motion.p>
         </div>
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-blue-600/10" />
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-blue-600/5" />
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-amber-600/10" />
+        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-amber-600/5" />
       </motion.div>
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-md">
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }} className="lg:hidden text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-blue-500 text-white mx-auto mb-4 flex items-center justify-center"><MessageSquare className="w-6 h-6" /></div>
+            <div className="w-12 h-12 rounded-xl bg-amber-500 text-white mx-auto mb-4 flex items-center justify-center"><MessageSquare className="w-6 h-6" /></div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-white">闲鱼超级管家</h1>
           </motion.div>
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-5 sm:p-8">
@@ -227,7 +227,7 @@ export function Login() {
             </div>
             <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 sm:mb-6 overflow-x-auto scrollbar-hide">
               {[{ type: 'username' as const, label: '账号登录' }, { type: 'email-password' as const, label: '邮箱密码' }, { type: 'email-code' as const, label: '验证码' }].map((tab) => (
-                <button key={tab.type} onClick={() => setLoginType(tab.type)} className={cn('px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap flex-shrink-0', loginType === tab.type ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-700 dark:hover:text-slate-300')}>{tab.label}</button>
+                <button key={tab.type} onClick={() => setLoginType(tab.type)} className={cn('px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap flex-shrink-0', loginType === tab.type ? 'text-amber-600 dark:text-amber-400 border-amber-600 dark:border-amber-400' : 'text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-700 dark:hover:text-slate-300')}>{tab.label}</button>
               ))}
             </div>
             <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
@@ -243,13 +243,13 @@ export function Login() {
               </>)}
               {loginType === 'email-code' && (<>
                 <div className="input-group"><label className="input-label">邮箱地址</label><div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="email" value={emailForCode} onChange={(e) => setEmailForCode(e.target.value)} placeholder="name@example.com" className="input-ios pl-9" /></div></div>
-                <div className="input-group"><label className="input-label">图形验证码</label><div className="flex gap-2"><input type="text" value={captchaCode} onChange={(e) => setCaptchaCode(e.target.value)} placeholder="输入验证码" maxLength={4} className="input-ios flex-1" disabled={captchaVerified} /><img src={captchaImage} alt="验证码" onClick={loadCaptcha} className="h-[38px] rounded border border-gray-300 cursor-pointer hover:opacity-80 transition-opacity" /></div><p className={cn('text-xs', captchaVerified ? 'text-green-600' : verifying ? 'text-blue-500' : 'text-gray-400')}>{captchaVerified ? '✓ 验证成功' : verifying ? '验证中...' : '点击图片更换验证码'}</p></div>
+                <div className="input-group"><label className="input-label">图形验证码</label><div className="flex gap-2"><input type="text" value={captchaCode} onChange={(e) => setCaptchaCode(e.target.value)} placeholder="输入验证码" maxLength={4} className="input-ios flex-1" disabled={captchaVerified} /><img src={captchaImage} alt="验证码" onClick={loadCaptcha} className="h-[38px] rounded border border-gray-300 cursor-pointer hover:opacity-80 transition-opacity" /></div><p className={cn('text-xs', captchaVerified ? 'text-green-600' : verifying ? 'text-amber-500' : 'text-gray-400')}>{captchaVerified ? '✓ 验证成功' : verifying ? '验证中...' : '点击图片更换验证码'}</p></div>
                 <div className="input-group"><label className="input-label">邮箱验证码</label><div className="flex gap-2"><div className="relative flex-1"><KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="text" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} placeholder="6位数字验证码" maxLength={6} className="input-ios pl-9" /></div><button type="button" onClick={handleSendCode} disabled={!captchaVerified || !emailForCode || countdown > 0} className="btn-ios-secondary whitespace-nowrap">{countdown > 0 ? `${countdown}s` : '发送'}</button></div></div>
               </>)}
               <button type="submit" disabled={loading} className="w-full btn-ios-primary">{loading ? <ButtonLoading /> : '登 录'}</button>
             </form>
-            {registrationEnabled && (<p className="text-center mt-6 text-slate-500 dark:text-slate-400 text-sm">还没有账号？{' '}<Link to="/register" className="text-blue-600 dark:text-blue-400 font-medium hover:text-blue-700 dark:hover:text-blue-300">立即注册</Link></p>)}
-            {showDefaultLogin && (<div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700"><button type="button" onClick={fillDefaultCredentials} className="w-full flex items-center justify-between p-3 rounded-md bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm"><div className="text-left"><p className="text-slate-500 dark:text-slate-400">演示账号</p><p className="text-slate-900 dark:text-white font-medium">admin / admin123</p></div><span className="text-blue-600 dark:text-blue-400">一键填充 →</span></button></div>)}
+            {registrationEnabled && (<p className="text-center mt-6 text-slate-500 dark:text-slate-400 text-sm">还没有账号？{' '}<Link to="/register" className="text-amber-600 dark:text-amber-400 font-medium hover:text-amber-700 dark:hover:text-amber-300">立即注册</Link></p>)}
+            {showDefaultLogin && (<div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700"><button type="button" onClick={fillDefaultCredentials} className="w-full flex items-center justify-between p-3 rounded-md bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm"><div className="text-left"><p className="text-slate-500 dark:text-slate-400">演示账号</p><p className="text-slate-900 dark:text-white font-medium">admin / admin123</p></div><span className="text-amber-600 dark:text-amber-400">一键填充 →</span></button></div>)}
           </div>
           <p className="text-center mt-6 text-slate-400 dark:text-slate-500 text-xs">© {new Date().getFullYear()} 闲鱼超级管家</p>
         </motion.div>

@@ -209,7 +209,7 @@ export function Register() {
       <div className="w-full max-w-md">
         {/* Mobile header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white mx-auto mb-4 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-amber-600 text-white mx-auto mb-4 flex items-center justify-center">
             <MessageSquare className="w-6 h-6" />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">用户注册</h1>
@@ -308,7 +308,7 @@ export function Register() {
               </div>
               <p className={cn(
                 'text-xs',
-                captchaVerified ? 'text-green-600 dark:text-green-400' : verifying ? 'text-blue-500' : 'text-slate-400'
+                captchaVerified ? 'text-green-600 dark:text-green-400' : verifying ? 'text-amber-500' : 'text-slate-400'
               )}>
                 {captchaVerified ? '✓ 验证成功' : verifying ? '验证中...' : '点击图片更换验证码'}
               </p>
@@ -353,7 +353,7 @@ export function Register() {
           {/* Login link */}
           <p className="text-center mt-6 text-slate-500 dark:text-slate-400 text-sm">
             已有账号？{' '}
-            <Link to="/login" className="text-blue-600 dark:text-blue-400 font-medium hover:text-indigo-700">
+            <Link to="/login" className="text-amber-600 dark:text-amber-400 font-medium hover:text-amber-700">
               立即登录
             </Link>
           </p>

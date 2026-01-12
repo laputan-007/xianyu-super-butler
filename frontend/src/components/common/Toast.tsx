@@ -14,14 +14,14 @@ const colors = {
   success: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200',
   error: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200',
   warning: 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200',
-  info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200',
+  info: 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200',
 }
 
 const iconColors = {
   success: 'text-emerald-500 dark:text-emerald-400',
   error: 'text-red-500 dark:text-red-400',
   warning: 'text-amber-500 dark:text-amber-400',
-  info: 'text-blue-500 dark:text-blue-400',
+  info: 'text-amber-500 dark:text-amber-400',
 }
 
 export function Toast() {

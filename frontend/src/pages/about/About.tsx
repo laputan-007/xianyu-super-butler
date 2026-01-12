@@ -38,7 +38,7 @@ const limitOptions = [
 const levelOptions = [
   { value: '', label: '全部级别', color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300' },
   { value: 'DEBUG', label: '调试', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
-  { value: 'INFO', label: '信息', color: 'bg-blue-100 dark:bg-blue-700 text-blue-600 dark:text-blue-300' },
+  { value: 'INFO', label: '信息', color: 'bg-sky-100 dark:bg-sky-700 text-sky-600 dark:text-sky-300' },
   { value: 'WARNING', label: '警告', color: 'bg-amber-100 dark:bg-amber-700 text-amber-600 dark:text-amber-300' },
   { value: 'ERROR', label: '错误', color: 'bg-red-100 dark:bg-red-700 text-red-600 dark:text-red-300' },
   { value: 'CRITICAL', label: '严重', color: 'bg-purple-100 dark:bg-purple-700 text-purple-600 dark:text-purple-300' },
@@ -172,7 +172,7 @@ export function About() {
       case 'DEBUG':
         return <Bug className="w-4 h-4 text-gray-500" />
       default:
-        return <Info className="w-4 h-4 text-blue-500" />
+        return <Info className="w-4 h-4 text-sky-500" />
     }
   }
 
@@ -200,7 +200,7 @@ export function About() {
       <div className="page-header flex-between flex-wrap gap-4">
         <div>
           <h1 className="page-title flex items-center gap-2">
-            <Activity className="w-6 h-6 text-blue-500" />
+            <Activity className="w-6 h-6 text-amber-500" />
             Goofish 网络数据日志
           </h1>
           <p className="page-description">实时查看来自 Goofish (闲鱼) 网络的统一信息交互数据</p>
@@ -242,8 +242,8 @@ export function About() {
           <div className="vben-card">
             <div className="vben-card-body">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                  <Database className="w-5 h-5 text-blue-500" />
+                <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                  <Database className="w-5 h-5 text-amber-500" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">总日志数</p>
@@ -300,7 +300,7 @@ export function About() {
                 placeholder="搜索日志内容、来源、函数..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               />
               {searchQuery && (
                 <button
@@ -318,7 +318,7 @@ export function About() {
               <select
                 value={levelFilter}
                 onChange={(e) => setLevelFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
               >
                 {levelOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -332,7 +332,7 @@ export function About() {
               <select
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
               >
                 <option value="">全部来源</option>
                 {stats && Object.keys(stats.source_counts || {}).map(source => (
@@ -347,7 +347,7 @@ export function About() {
               <select
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
               >
                 {limitOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -361,7 +361,7 @@ export function About() {
               <select
                 value={autoRefresh}
                 onChange={(e) => setAutoRefresh(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
               >
                 {autoRefreshIntervals.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -375,7 +375,7 @@ export function About() {
               className={cn(
                 'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                 autoScroll
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-amber-500 text-white'
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               )}
               title={autoScroll ? '自动滚动已启用' : '自动滚动已禁用'}
@@ -388,13 +388,13 @@ export function About() {
           <div className="mt-3 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
             <span>显示 {filteredLogs.length} 条 / 共 {logs.length} 条</span>
             {searchQuery && (
-              <span className="text-blue-500">搜索: "{searchQuery}"</span>
+              <span className="text-amber-500">搜索: "{searchQuery}"</span>
             )}
             {levelFilter && (
-              <span className="text-blue-500">级别: {levelOptions.find(opt => opt.value === levelFilter)?.label}</span>
+              <span className="text-amber-500">级别: {levelOptions.find(opt => opt.value === levelFilter)?.label}</span>
             )}
             {sourceFilter && (
-              <span className="text-blue-500">来源: {sourceFilter}</span>
+              <span className="text-amber-500">来源: {sourceFilter}</span>
             )}
             {isPaused && (
               <span className="flex items-center gap-1 text-amber-500">
@@ -476,7 +476,7 @@ export function About() {
                             e.stopPropagation()
                             toggleExpand(timestamp)
                           }}
-                          className="mt-1 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                          className="mt-1 flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600"
                         >
                           {isExpanded ? (
                             <>
@@ -526,7 +526,7 @@ export function About() {
                     <span className={cn(
                       'px-2 py-1 rounded text-xs font-medium',
                       sourceFilter === source
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-amber-500 text-white'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                     )}>
                       {count}

@@ -99,8 +99,8 @@ export function Sidebar() {
           cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all duration-150',
             !showLabel && 'justify-center px-2',
-            isActive 
-              ? 'bg-blue-600 text-white dark:text-white hover:text-white hover:bg-blue-700 shadow-sm'
+            isActive
+              ? 'bg-amber-600 text-white dark:text-white hover:text-white hover:bg-amber-700 shadow-sm'
               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
           )
         }
@@ -146,7 +146,7 @@ export function Sidebar() {
           (!sidebarMobileOpen && sidebarCollapsed) ? 'justify-center px-2' : 'justify-between px-4'
         )}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center flex-shrink-0">
               <MessageSquare className="w-4 h-4 text-white" />
             </div>
             {(sidebarMobileOpen || !sidebarCollapsed) && (
@@ -227,9 +227,9 @@ export function Sidebar() {
         className={cn(
           'fixed top-2.5 left-2.5 z-50 sm:hidden',
           'w-8 h-8 rounded-md',
-          'bg-blue-500 text-white shadow-md',
+          'bg-amber-500 text-white shadow-md',
           'flex items-center justify-center',
-          'hover:bg-blue-600 active:scale-95 transition-all',
+          'hover:bg-amber-600 active:scale-95 transition-all',
           sidebarMobileOpen && 'pointer-events-none'
         )}
       >

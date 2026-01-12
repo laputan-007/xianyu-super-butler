@@ -435,17 +435,17 @@ export function Keywords() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="vben-card bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+        className="vben-card bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
       >
         <div className="vben-card-body py-3">
           <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <Info className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-blue-700 dark:text-blue-300 mb-1">支持变量替换</p>
-              <div className="text-blue-600 dark:text-blue-400 space-y-0.5">
-                <p><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_user_name}'}</code> - 用户昵称</p>
-                <p><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_user_id}'}</code> - 用户ID</p>
-                <p><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_message}'}</code> - 用户消息内容</p>
+              <p className="font-medium text-amber-700 dark:text-amber-300 mb-1">支持变量替换</p>
+              <div className="text-amber-600 dark:text-amber-400 space-y-0.5">
+                <p><code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_user_name}'}</code> - 用户昵称</p>
+                <p><code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_user_id}'}</code> - 用户ID</p>
+                <p><code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_message}'}</code> - 用户消息内容</p>
               </div>
             </div>
           </div>
@@ -503,7 +503,7 @@ export function Keywords() {
                 keywords.map((keyword, index) => (
                   <tr key={keyword.id || `keyword-${index}`}>
                     <td className="font-medium">
-                      <code className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded">
+                      <code className="bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-1 rounded">
                         {keyword.keyword}
                       </code>
                     </td>
@@ -521,7 +521,7 @@ export function Keywords() {
                             setPreviewImageUrl(keyword.image_url || '')
                             setIsImagePreviewOpen(true)
                           }}
-                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                          className="text-amber-600 dark:text-amber-400 hover:underline text-sm"
                         >
                           查看大图
                         </button>
@@ -545,7 +545,7 @@ export function Keywords() {
                           className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                           title="编辑"
                         >
-                          <Edit2 className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                          <Edit2 className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                         </button>
                         <button
                           onClick={() => handleDelete(keyword)}
@@ -661,7 +661,7 @@ export function Keywords() {
           <div className="modal-content max-w-lg">
             <div className="modal-header flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Image className="w-5 h-5 text-blue-500" />
+                <Image className="w-5 h-5 text-amber-500" />
                 添加图片关键词
               </h2>
               <button
@@ -692,15 +692,15 @@ export function Keywords() {
                 {/* 图片上传区域 */}
                 <div>
                   <label className="input-label">上传图片 <span className="text-red-500">*</span></label>
-                  <div 
-                    className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-4 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer"
+                  <div
+                    className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-4 text-center hover:border-amber-400 dark:hover:border-amber-500 transition-colors cursor-pointer"
                     onClick={() => imageInputRef.current?.click()}
                   >
                     {imagePreview ? (
                       <div className="flex flex-col items-center">
                         <img src={imagePreview} alt="预览" className="max-h-32 rounded-lg mb-2" />
                         <p className="text-sm text-slate-600 dark:text-slate-400">{imageFile?.name}</p>
-                        <p className="text-xs text-blue-500 mt-1">点击更换图片</p>
+                        <p className="text-xs text-amber-500 mt-1">点击更换图片</p>
                       </div>
                     ) : (
                       <div className="py-4">
@@ -738,10 +738,10 @@ export function Keywords() {
                 </div>
 
                 {/* 说明提示 */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                   <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-blue-700 dark:text-blue-300">
+                    <Info className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-amber-700 dark:text-amber-300">
                       <p className="font-medium mb-1">说明：</p>
                       <ul className="list-disc list-inside space-y-0.5 text-xs">
                         <li>图片关键词优先级高于文本关键词</li>

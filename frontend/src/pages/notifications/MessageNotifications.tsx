@@ -186,7 +186,7 @@ export function MessageNotifications() {
               ) : (
                 notifications.map((notification) => (
                   <tr key={`${notification.cookie_id}-${notification.channel_id}`}>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{notification.cookie_id}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{notification.cookie_id}</td>
                     <td className="text-sm">
                       {notification.channel_name || `渠道 ${notification.channel_id}`}
                     </td>
@@ -275,7 +275,7 @@ export function MessageNotifications() {
                     type="button"
                     onClick={() => setFormEnabled(!formEnabled)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      formEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                      formEnabled ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   >
                     <span

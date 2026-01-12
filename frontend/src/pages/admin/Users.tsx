@@ -107,7 +107,7 @@ export function Users() {
                 users.map((user) => (
                   <tr key={user.user_id}>
                     <td className="font-medium">{user.user_id}</td>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{user.username}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{user.username}</td>
                     <td className="text-slate-500 dark:text-slate-400">{user.email || '-'}</td>
                     <td>
                       {user.is_admin ? (

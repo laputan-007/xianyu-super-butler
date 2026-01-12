@@ -204,7 +204,7 @@ export function Dashboard() {
           <div className="vben-card-body">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                <p className="text-2xl font-bold text-blue-600">{adminStats.total_users}</p>
+                <p className="text-2xl font-bold text-amber-600">{adminStats.total_users}</p>
                 <p className="text-sm text-slate-500">总用户数</p>
               </div>
               <div className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
@@ -269,7 +269,7 @@ export function Dashboard() {
 
                   return (
                     <tr key={account.id}>
-                      <td className="font-medium text-blue-600 dark:text-blue-400">{account.id}</td>
+                      <td className="font-medium text-amber-600 dark:text-amber-400">{account.id}</td>
                       <td>{keywordCount}</td>
                       <td>
                         {(() => {

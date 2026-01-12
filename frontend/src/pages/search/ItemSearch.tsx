@@ -182,7 +182,7 @@ export function ItemSearch() {
       {/* Loading State */}
       {loading && (
         <div className="text-center py-12">
-          <div className="inline-flex items-center gap-2 text-blue-500">
+          <div className="inline-flex items-center gap-2 text-amber-500">
             <ButtonLoading />
             <span>正在搜索中...</span>
           </div>

@@ -67,7 +67,7 @@ export function Logs() {
       case 'warning':
         return <AlertTriangle className="w-4 h-4 text-amber-500" />
       default:
-        return <Info className="w-4 h-4 text-blue-500" />
+        return <Info className="w-4 h-4 text-amber-500" />
     }
   }
 
@@ -123,7 +123,7 @@ export function Logs() {
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                 levelFilter === level
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-amber-500 text-white'
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
               )}
             >
@@ -136,7 +136,7 @@ export function Logs() {
           <select
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
-            className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
           >
             {limitOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>

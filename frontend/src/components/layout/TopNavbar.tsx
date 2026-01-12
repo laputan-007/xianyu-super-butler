@@ -63,7 +63,7 @@ export function TopNavbar() {
                        hover:bg-slate-100 dark:hover:bg-slate-700
                        transition-colors duration-150"
           >
-            <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-medium">
+            <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-medium">
               {(user?.username || 'U').charAt(0).toUpperCase()}
             </div>
             <span className="text-sm font-medium hidden sm:inline">{user?.username || '用户'}</span>

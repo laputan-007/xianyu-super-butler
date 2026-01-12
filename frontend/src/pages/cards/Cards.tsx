@@ -364,7 +364,7 @@ export function Cards() {
       {/* 统计信息 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="vben-card p-4">
-          <div className="text-2xl font-bold text-blue-600">{cards.length}</div>
+          <div className="text-2xl font-bold text-amber-600">{cards.length}</div>
           <div className="text-sm text-gray-500">总卡券数</div>
         </div>
         <div className="vben-card p-4">
@@ -449,7 +449,7 @@ export function Cards() {
                     <td>{card.delay_seconds || 0}秒</td>
                     <td>
                       {card.is_multi_spec ? (
-                        <span className="text-xs text-blue-600">{card.spec_name}: {card.spec_value}</span>
+                        <span className="text-xs text-amber-600">{card.spec_name}: {card.spec_value}</span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
@@ -468,7 +468,7 @@ export function Cards() {
                           className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                           title="编辑"
                         >
-                          <Edit2 className="w-4 h-4 text-blue-500" />
+                          <Edit2 className="w-4 h-4 text-amber-500" />
                         </button>
                         <button
                           onClick={() => handleToggleEnabled(card)}
@@ -587,15 +587,15 @@ export function Cards() {
                         placeholder='{"type": "card", "count": 1}'
                       />
                       {formData.apiMethod === 'POST' && (
-                        <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                          <p className="text-sm text-blue-600 dark:text-blue-400 mb-2 font-medium">POST请求可用参数（点击添加）：</p>
+                        <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                          <p className="text-sm text-amber-600 dark:text-amber-400 mb-2 font-medium">POST请求可用参数（点击添加）：</p>
                           <div className="flex flex-wrap gap-2">
                             {postParams.map(p => (
                               <button
                                 key={p.name}
                                 type="button"
                                 onClick={() => insertParam(p.name)}
-                                className="px-2 py-1 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                className="px-2 py-1 bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-800 rounded text-xs hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
                                 title={p.desc}
                               >
                                 <code>{p.name}</code>
@@ -740,7 +740,7 @@ export function Cards() {
                           />
                         </div>
                       </div>
-                      <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-600 dark:text-blue-400">
+                      <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
                         <strong>多规格说明：</strong>
                         <ul className="list-disc list-inside mt-1 space-y-1">
                           <li>同一卡券名称可以创建多个不同规格的卡券</li>

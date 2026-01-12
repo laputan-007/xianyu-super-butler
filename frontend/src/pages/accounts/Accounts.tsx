@@ -581,10 +581,10 @@ export function Accounts() {
             {/* 扫码登录 */}
             <button
               onClick={startQRCodeLogin}
-              className="flex items-center gap-3 p-4 rounded-md border border-blue-200 dark:border-blue-800 
-                         bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-md border border-amber-200 dark:border-amber-800
+                         bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors text-left"
             >
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-amber-600 flex items-center justify-center flex-shrink-0">
                 <QrCode className="w-4 h-4 text-white" />
               </div>
               <div>
@@ -596,8 +596,8 @@ export function Accounts() {
             {/* 账号密码登录 */}
             <button
               onClick={() => handleOpenModal('password')}
-              className="flex items-center gap-3 p-4 rounded-md border border-slate-200 dark:border-slate-700 
-                         hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-md border border-slate-200 dark:border-slate-700
+                         hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
                 <Key className="w-4 h-4 text-slate-600 dark:text-slate-300" />
@@ -611,8 +611,8 @@ export function Accounts() {
             {/* 手动输入 */}
             <button
               onClick={() => handleOpenModal('manual')}
-              className="flex items-center gap-3 p-4 rounded-md border border-slate-200 dark:border-slate-700 
-                         hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-left"
+              className="flex items-center gap-3 p-4 rounded-md border border-slate-200 dark:border-slate-700
+                         hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
                 <Edit2 className="w-4 h-4 text-slate-600 dark:text-slate-300" />
@@ -657,10 +657,10 @@ export function Accounts() {
               ) : (
                 accounts.map((account) => (
                   <tr key={account.id}>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{account.id}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{account.id}</td>
                     <td>
                       <span className="inline-flex items-center gap-1.5 text-sm">
-                        <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                        <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
                         <span className="font-medium">{account.keywordCount || 0}</span>
                         <span className="text-slate-400">个</span>
                       </span>
@@ -730,8 +730,8 @@ export function Accounts() {
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                           title="编辑"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-blue-500" />
-                          <span className="text-blue-600 dark:text-blue-400">编辑</span>
+                          <Edit2 className="w-3.5 h-3.5 text-amber-500" />
+                          <span className="text-amber-600 dark:text-amber-400">编辑</span>
                         </button>
                         <button
                           onClick={() => handleDelete(account.id)}
@@ -764,7 +764,7 @@ export function Accounts() {
             <div className="modal-body flex flex-col items-center py-6">
               {qrStatus === 'loading' && (
                 <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
+                  <Loader2 className="w-10 h-10 text-amber-600 dark:text-amber-400 animate-spin" />
                   <p className="text-sm text-slate-500 dark:text-slate-400">正在生成二维码...</p>
                 </div>
               )}
@@ -778,7 +778,7 @@ export function Accounts() {
               {qrStatus === 'scanned' && (
                 <div className="flex flex-col items-center gap-3">
                   <img src={qrCodeUrl} alt="登录二维码" className="w-44 h-44 rounded-lg border opacity-50" />
-                  <div className=" text-blue-600 dark:text-blue-400 text-sm">
+                  <div className=" text-amber-600 dark:text-amber-400 text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>已扫描，等待确认...</span>
                   </div>
@@ -851,7 +851,7 @@ export function Accounts() {
                     type="checkbox"
                     checked={pwdShowBrowser}
                     onChange={(e) => setPwdShowBrowser(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-blue-600"
+                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-amber-600"
                   />
                   显示浏览器（调试用）
                 </label>
@@ -992,7 +992,7 @@ export function Accounts() {
                     type="button"
                     onClick={() => setEditAutoConfirm(!editAutoConfirm)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      editAutoConfirm ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                      editAutoConfirm ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   >
                     <span
@@ -1026,7 +1026,7 @@ export function Accounts() {
                 {/* 登录信息管理 */}
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2">
                   <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                    <Key className="w-4 h-4 text-blue-500" />
+                    <Key className="w-4 h-4 text-amber-500" />
                     登录信息（用于自动登录）
                   </h3>
                   <div className="space-y-3">
@@ -1068,7 +1068,7 @@ export function Accounts() {
                         type="button"
                         onClick={() => setEditShowBrowser(!editShowBrowser)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          editShowBrowser ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                          editShowBrowser ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-600'
                         }`}
                       >
                         <span
@@ -1182,12 +1182,12 @@ export function Accounts() {
                   </div>
                 )}
               </div>
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-xs text-blue-600 dark:text-blue-400">
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                <p className="text-xs text-amber-600 dark:text-amber-400">
                   <strong>支持变量：</strong><br />
-                  <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_user_name}'}</code> - 用户昵称<br />
-                  <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_user_id}'}</code> - 用户ID<br />
-                  <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{'{send_message}'}</code> - 用户消息内容
+                  <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_user_name}'}</code> - 用户昵称<br />
+                  <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_user_id}'}</code> - 用户ID<br />
+                  <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">{'{send_message}'}</code> - 用户消息内容
                 </p>
               </div>
             </div>
@@ -1223,7 +1223,7 @@ export function Accounts() {
             <div className="modal-body space-y-4">
               {aiSettingsLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
                 </div>
               ) : (
                 <>

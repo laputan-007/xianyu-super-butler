@@ -302,7 +302,7 @@ export function Items() {
                     title={selectedIds.size === filteredItems.length ? '取消全选' : '全选'}
                   >
                     {selectedIds.size === filteredItems.length && filteredItems.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                     ) : (
                       <Square className="w-4 h-4 text-gray-400" />
                     )}
@@ -330,26 +330,26 @@ export function Items() {
                 </tr>
               ) : (
                 filteredItems.map((item) => (
-                  <tr key={item.id} className={selectedIds.has(item.id) ? 'bg-blue-50 dark:bg-blue-900/30' : ''}>
+                  <tr key={item.id} className={selectedIds.has(item.id) ? 'bg-amber-50 dark:bg-amber-900/30' : ''}>
                     <td>
                       <button
                         onClick={() => toggleSelect(item.id)}
                         className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                       >
                         {selectedIds.has(item.id) ? (
-                          <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         ) : (
                           <Square className="w-4 h-4 text-gray-400" />
                         )}
                       </button>
                     </td>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{item.cookie_id}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{item.cookie_id}</td>
                     <td className="text-xs text-gray-500">
                       <a
                         href={`https://www.goofish.com/item?id=${item.item_id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:text-blue-500 flex items-center gap-1"
+                        className="hover:text-amber-500 flex items-center gap-1"
                       >
                         {item.item_id}
                         <ExternalLink className="w-3 h-3" />
@@ -407,10 +407,10 @@ export function Items() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => handleEdit(item)}
-                          className="table-action-btn hover:!bg-blue-50"
+                          className="table-action-btn hover:!bg-amber-50"
                           title="编辑"
                         >
-                          <Edit2 className="w-4 h-4 text-blue-500" />
+                          <Edit2 className="w-4 h-4 text-amber-500" />
                         </button>
                         <button
                           onClick={() => handleDelete(item)}

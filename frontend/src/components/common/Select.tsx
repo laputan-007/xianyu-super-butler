@@ -89,11 +89,11 @@ export function Select({
           'px-3 py-2 rounded-md text-sm text-left',
           'bg-white dark:bg-slate-700',
           'border border-slate-300 dark:border-slate-600',
-          'hover:border-blue-400 dark:hover:border-blue-500',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+          'hover:border-amber-400 dark:hover:border-amber-500',
+          'focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent',
           'transition-colors duration-150',
           disabled && 'opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800',
-          isOpen && 'ring-2 ring-blue-500 border-transparent'
+          isOpen && 'ring-2 ring-amber-500 border-transparent'
         )}
       >
         <span className={cn(
@@ -142,13 +142,13 @@ export function Select({
                   'transition-colors duration-100',
                   option.disabled
                     ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-700',
-                  option.value === value && 'bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-blue-400'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-slate-700',
+                  option.value === value && 'bg-amber-50 dark:bg-slate-700 text-amber-600 dark:text-amber-400'
                 )}
               >
                 <span className="truncate">{option.label}</span>
                 {option.value === value && (
-                  <Check className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <Check className="w-4 h-4 text-amber-500 flex-shrink-0" />
                 )}
               </button>
             ))

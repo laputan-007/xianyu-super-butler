@@ -38,7 +38,7 @@ export function Orders() {
   const [pageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  // 智能刷新状态
+  // 订单状态更新
   const [refreshing, setRefreshing] = useState(false)
   const [refreshModalOpen, setRefreshModalOpen] = useState(false)
   const [refreshResult, setRefreshResult] = useState<{
@@ -206,7 +206,7 @@ export function Orders() {
             className="btn-ios-primary w-full sm:w-auto"
           >
             <Sparkles className={`w-4 h-4 ${refreshing ? 'animate-pulse' : ''}`} />
-            {refreshing ? '智能刷新中...' : '智能刷新'}
+            {refreshing ? '更新中...' : '更新订单状态'}
           </button>
         </div>
       </div>
@@ -328,7 +328,7 @@ export function Orders() {
                           <span className="badge-gray">否</span>
                         )}
                       </td>
-                      <td className="font-medium text-blue-600 dark:text-blue-400">{order.cookie_id}</td>
+                      <td className="font-medium text-amber-600 dark:text-amber-400">{order.cookie_id}</td>
                       <td className="text-sm text-gray-500">
                         {order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '-'}
                       </td>
@@ -336,10 +336,10 @@ export function Orders() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleShowDetail(order.order_id)}
-                            className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                            className="p-2 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
                             title="查看详情"
                           >
-                            <Eye className="w-4 h-4 text-blue-500" />
+                            <Eye className="w-4 h-4 text-amber-500" />
                           </button>
                           <button
                             onClick={() => handleDelete(order.id)}
@@ -392,7 +392,7 @@ export function Orders() {
                       disabled={loading}
                       className={`w-8 h-8 rounded-lg text-sm transition-colors ${
                         currentPage === pageNum
-                          ? 'bg-blue-500 text-white'
+                          ? 'bg-amber-500 text-white'
                           : 'hover:bg-gray-100 dark:hover:bg-gray-800'
                       }`}
                     >
@@ -430,7 +430,7 @@ export function Orders() {
             <div className="modal-body">
               {loadingDetail ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
                   <span className="ml-2 text-gray-500">加载中...</span>
                 </div>
               ) : orderDetail ? (
@@ -453,7 +453,7 @@ export function Orders() {
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700">
                         <span className="text-gray-500">账号ID</span>
-                        <span className="text-blue-600">{orderDetail.cookie_id || '未知'}</span>
+                        <span className="text-amber-600">{orderDetail.cookie_id || '未知'}</span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700">
                         <span className="text-gray-500">订单状态</span>
@@ -523,14 +523,14 @@ export function Orders() {
         </div>
       )}
 
-      {/* 智能刷新结果弹窗 */}
+      {/* 更新订单状态结果弹窗 */}
       {refreshModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content max-w-2xl">
             <div className="modal-header flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-500" />
-                智能刷新结果
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                更新订单状态结果
               </h2>
               {!refreshing && (
                 <button
@@ -544,7 +544,7 @@ export function Orders() {
             <div className="modal-body">
               {refreshing ? (
                 <div className="flex flex-col items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mb-4"></div>
                   <span className="text-gray-500">正在刷新订单状态...</span>
                   <span className="text-sm text-gray-400 mt-2">这可能需要几分钟时间</span>
                 </div>
@@ -552,8 +552,8 @@ export function Orders() {
                 <div className="space-y-4">
                   {/* 统计摘要 */}
                   <div className="grid grid-cols-4 gap-4">
-                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{refreshResult.total}</div>
+                    <div className="text-center p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{refreshResult.total}</div>
                       <div className="text-sm text-gray-500">总订单</div>
                     </div>
                     <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">

@@ -208,11 +208,11 @@ export function Delivery() {
                   const relatedCard = cards.find(c => c.id === rule.card_id)
                   return (
                     <tr key={rule.id}>
-                      <td className="font-medium text-blue-600 dark:text-blue-400">{rule.keyword}</td>
+                      <td className="font-medium text-amber-600 dark:text-amber-400">{rule.keyword}</td>
                       <td className="text-sm">{rule.card_name || `卡券ID: ${rule.card_id}`}</td>
                       <td>
                         {relatedCard?.is_multi_spec ? (
-                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
                             {relatedCard.spec_name}: {relatedCard.spec_value}
                           </span>
                         ) : (
@@ -245,7 +245,7 @@ export function Delivery() {
                             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
                             title="编辑"
                           >
-                            <Edit2 className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                            <Edit2 className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                           </button>
                           <button
                             onClick={() => handleDelete(rule.id)}
@@ -322,7 +322,7 @@ export function Delivery() {
                     type="button"
                     onClick={() => setFormEnabled(!formEnabled)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      formEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                      formEnabled ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   >
                     <span

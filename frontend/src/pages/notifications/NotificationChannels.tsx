@@ -242,14 +242,14 @@ export function NotificationChannels() {
                   className={`relative p-4 rounded-xl border-2 transition-all ${
                     existingChannel
                       ? existingChannel.enabled
-                        ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20'
+                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20'
                         : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-600'
                   }`}
                 >
                   <div className="text-center">
                     <div className={`w-10 h-10 mx-auto mb-2 rounded-lg flex items-center justify-center ${
-                      existingChannel?.enabled ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                      existingChannel?.enabled ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
                     }`}>
                       <Icon className="w-5 h-5" />
                     </div>
@@ -260,7 +260,7 @@ export function NotificationChannels() {
                       <div className="mt-3 flex items-center justify-center gap-1">
                         <button
                           onClick={() => openEditModal(existingChannel)}
-                          className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800"
+                          className="text-xs px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-800"
                         >
                           编辑
                         </button>
@@ -278,7 +278,7 @@ export function NotificationChannels() {
                     ) : (
                       <button
                         onClick={() => openConfigModal(ct.type)}
-                        className="mt-3 text-xs px-3 py-1 rounded border border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                        className="mt-3 text-xs px-3 py-1 rounded border border-amber-300 dark:border-amber-600 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30"
                       >
                         <Plus className="w-3 h-3 inline mr-1" />
                         配置
@@ -307,7 +307,7 @@ export function NotificationChannels() {
                 <div key={channel.id} className="flex items-center justify-between py-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      channel.enabled ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
+                      channel.enabled ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
                     }`}>
                       <Bell className="w-4 h-4" />
                     </div>
@@ -393,7 +393,7 @@ export function NotificationChannels() {
                     type="button"
                     onClick={() => setFormEnabled(!formEnabled)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      formEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                      formEnabled ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   >
                     <span

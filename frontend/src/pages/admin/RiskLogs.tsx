@@ -150,7 +150,7 @@ export function RiskLogs() {
               ) : (
                 logs.map((log) => (
                   <tr key={log.id}>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{log.cookie_id}</td>
+                    <td className="font-medium text-amber-600 dark:text-amber-400">{log.cookie_id}</td>
                     <td>
                       <span className="badge-danger">{log.risk_type}</span>
                     </td>

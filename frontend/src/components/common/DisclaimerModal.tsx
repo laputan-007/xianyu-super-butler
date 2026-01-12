@@ -53,7 +53,7 @@ export function DisclaimerModal({ isOpen, onAgree, onDisagree }: DisclaimerModal
               type="checkbox"
               checked={checked}
               onChange={(e) => setChecked(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
             />
             <span className="text-sm text-slate-700 dark:text-slate-300">
               我已阅读并同意以上免责声明
@@ -78,7 +78,7 @@ export function DisclaimerModal({ isOpen, onAgree, onDisagree }: DisclaimerModal
               className={cn(
                 'flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors',
                 checked
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-amber-600 text-white hover:bg-amber-700'
                   : 'bg-slate-200 dark:bg-slate-600 text-slate-400 dark:text-slate-500 cursor-not-allowed'
               )}
             >
