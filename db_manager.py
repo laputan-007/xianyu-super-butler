@@ -4492,7 +4492,7 @@ class DBManager:
     def insert_or_update_order(self, order_id: str, item_id: str = None, buyer_id: str = None,
                               spec_name: str = None, spec_value: str = None, quantity: str = None,
                               amount: str = None, order_status: str = None, cookie_id: str = None,
-                              is_bargain: bool = None):
+                              is_bargain: bool = None, created_at: str = None):
         """插入或更新订单信息"""
         with self.lock:
             try:
@@ -4542,6 +4542,10 @@ class DBManager:
                     if is_bargain is not None:
                         update_fields.append("is_bargain = ?")
                         update_values.append(1 if is_bargain else 0)
+                    if created_at is not None:
+                        # 更新创建时间（仅当明确提供时）
+                        update_fields.append("created_at = ?")
+                        update_values.append(created_at)
 
                     if update_fields:
                         update_fields.append("updated_at = CURRENT_TIMESTAMP")
@@ -4552,13 +4556,24 @@ class DBManager:
                         logger.info(f"更新订单信息: {order_id}")
                 else:
                     # 插入新订单
-                    cursor.execute('''
-                    INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
-                                      quantity, amount, order_status, cookie_id, is_bargain)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (order_id, item_id, buyer_id, spec_name, spec_value,
-                          quantity, amount, order_status or 'unknown', cookie_id,
-                          1 if is_bargain else 0))
+                    if created_at:
+                        # 使用提供的创建时间
+                        cursor.execute('''
+                        INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
+                                          quantity, amount, order_status, cookie_id, is_bargain, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (order_id, item_id, buyer_id, spec_name, spec_value,
+                              quantity, amount, order_status or 'unknown', cookie_id,
+                              1 if is_bargain else 0, created_at))
+                    else:
+                        # 使用默认的创建时间（CURRENT_TIMESTAMP，UTC时间）
+                        cursor.execute('''
+                        INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
+                                          quantity, amount, order_status, cookie_id, is_bargain)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (order_id, item_id, buyer_id, spec_name, spec_value,
+                              quantity, amount, order_status or 'unknown', cookie_id,
+                              1 if is_bargain else 0))
                     logger.info(f"插入新订单: {order_id}")
 
                 self.conn.commit()

@@ -100,15 +100,15 @@ class OrderStatusQueryPlaywright:
                 response = await page.goto(page_url, wait_until='networkidle', timeout=timeout)
                 print(f"页面响应状态码: {response.status}")
 
-                # 等待页面加载
-                print("等待页面加载完成...")
-                await asyncio.sleep(5)
+                # 等待API响应（减少等待时间）
+                print("等待API响应...")
+                await asyncio.sleep(2)  # 从5秒减少到2秒
 
-                # 尝试滚动页面，触发可能延迟加载的内容
+                # 快速滚动，触发可能延迟加载的内容
                 await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.5)  # 从2秒减少到0.5秒
                 await page.evaluate('window.scrollTo(0, 0)')
-                await asyncio.sleep(3)
+                await asyncio.sleep(0.5)  # 从3秒减少到0.5秒
 
                 # 检查是否拦截到API响应
                 if self.api_responses:

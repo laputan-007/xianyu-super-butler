@@ -243,10 +243,10 @@ strategy_stats = RetryStrategyStats()
 
 class XianyuSliderStealth:
     
-    def __init__(self, user_id: str = "default", enable_learning: bool = True, headless: bool = False):
+    def __init__(self, user_id: str = "default", enable_learning: bool = True, headless: bool = True):
         self.user_id = user_id
         self.enable_learning = enable_learning
-        self.headless = headless  # 是否使用无头模式（默认False，显示浏览器窗口以便手动辅助）
+        self.headless = headless  # 是否使用无头模式（默认True，使用无头模式）
         self.browser = None
         self.page = None
         self.context = None

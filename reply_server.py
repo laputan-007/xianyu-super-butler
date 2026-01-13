@@ -5948,28 +5948,43 @@ async def refresh_orders_status(
             # 获取该Cookie的所有订单
             orders = db_manager.get_orders_by_cookie(cid, limit=1000)
 
-            # 筛选需要刷新的订单（非已发货状态）
+            # 筛选需要刷新的订单
             for order in orders:
                 # 如果指定了状态筛选，只刷新该状态的订单
-                if status and order.get('order_status') != status:
+                if status and order.get('status') != status:
                     continue
 
-                # 只刷新非'shipped'（已发货）状态的订单
-                # 根据前端状态映射：processing, pending_ship, processed, refunding, cancelled等
-                if order.get('order_status') != 'shipped':
+                order_status = order.get('status', 'unknown')
+                buyer_id = order.get('buyer_id', '')
+                amount = order.get('amount', '')
+
+                # 判断是否需要刷新：
+                # 1. 非稳定状态订单（非已发货、非交易成功）
+                # 2. 买家ID为空或unknown_user
+                # 3. 金额为空
+                needs_refresh = (
+                    order_status not in ['shipped', 'completed'] or
+                    not buyer_id or buyer_id == 'unknown_user' or
+                    not amount
+                )
+
+                if needs_refresh:
                     orders_to_refresh.append({
                         'order_id': order['order_id'],
                         'cookie_id': cid,
-                        'current_status': order.get('order_status', 'unknown')
+                        'current_status': order_status
                     })
 
         log_with_user('info', f"找到 {len(orders_to_refresh)} 个需要刷新的订单", current_user)
 
-        # 刷新订单状态
+        # 刷新订单信息（包括状态、买家ID、金额等）
         updated_count = 0
         failed_count = 0
         no_change_count = 0
         refresh_results = []
+
+        # 导入订单详情获取器
+        from utils.order_detail_fetcher import fetch_order_detail_simple
 
         for order_info in orders_to_refresh:
             order_id = order_info['order_id']
@@ -5977,45 +5992,119 @@ async def refresh_orders_status(
             current_status = order_info['current_status']
 
             try:
-                # 获取Cookie
-                cookie_data = user_cookies[cookie_id]
-                cookies_str = cookie_data.get('value', '')
+                # 获取Cookie (get_all_cookies返回的是 {cookie_id: cookie_value} 格式)
+                cookies_str = user_cookies[cookie_id]
 
                 if not cookies_str:
-                    log_with_user('warning', f"Cookie {cookie_id} 没有value字段，跳过订单 {order_id}", current_user)
+                    log_with_user('warning', f"Cookie {cookie_id} 的值为空，跳过订单 {order_id}", current_user)
                     failed_count += 1
                     continue
 
-                # 使用Playwright查询订单状态
-                query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
-                result = await query.query_order_status(order_id)
+                # 使用订单详情获取器获取完整信息（包括买家ID、金额等）
+                order_detail = await fetch_order_detail_simple(order_id, cookies_str, headless=True)
 
-                if result.get('success'):
-                    # 获取新的状态信息
-                    new_status_code = result.get('order_status')
-                    new_status_text = result.get('status_text')
+                if order_detail:
+                    # 提取订单详情（从页面获取）
+                    spec_name = order_detail.get('spec_name', '')
+                    spec_value = order_detail.get('spec_value', '')
+                    quantity = order_detail.get('quantity', '')
+                    amount = order_detail.get('amount', '')
 
-                    # 将状态码转换为数据库状态
-                    status_mapping = {
-                        1: 'processing',      # 待付款
-                        2: 'pending_ship',    # 待发货
-                        3: 'shipped',         # 已发货
-                        4: 'completed',       # 交易成功
-                        5: 'refunding',       # 退款中
-                        6: 'cancelled',       # 交易关闭
-                    }
-                    new_status = status_mapping.get(new_status_code, 'unknown')
+                    # 同时使用状态查询获取订单状态和完整信息
+                    query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
+                    status_result = await query.query_order_status(order_id)
 
-                    # 检查状态是否有变化
-                    if new_status != current_status:
-                        # 更新数据库
-                        success = db_manager.insert_or_update_order(
-                            order_id=order_id,
-                            order_status=new_status,
-                            cookie_id=cookie_id
+                    new_status = current_status
+                    new_status_text = ''
+                    buyer_id = ''
+                    item_id = ''
+                    is_bargain = None
+
+                    if status_result.get('success'):
+                        new_status_code = status_result.get('order_status')
+                        new_status_text = status_result.get('status_text', '')
+
+                        # 将状态码转换为数据库状态
+                        status_mapping = {
+                            1: 'processing',
+                            2: 'pending_ship',
+                            3: 'shipped',
+                            4: 'completed',
+                            5: 'refunding',
+                            6: 'cancelled',
+                        }
+                        new_status = status_mapping.get(new_status_code, current_status)
+
+                        # 从 raw_data 中提取完整信息
+                        raw_data = status_result.get('raw_data', {})
+
+                        # 提取买家ID、商品ID、时间信息
+                        created_at = None
+                        try:
+                            # 方法1: 从根级别提取 peerUserId (买家ID)
+                            buyer_id = str(raw_data.get('peerUserId', ''))
+
+                            # 方法2: 从根级别提取 itemId (商品ID)
+                            item_id = str(raw_data.get('itemId', ''))
+
+                            # 方法3: 从 orderStatusVO 组件中提取下单时间
+                            if 'components' in raw_data:
+                                for component in raw_data['components']:
+                                    if component.get('render') == 'orderStatusVO':
+                                        order_status_data = component.get('data', {})
+                                        # 从 orderStatusNodeList 中找到第一个时间节点（已拍下时间 = 创建时间）
+                                        node_list = order_status_data.get('orderStatusNodeList', [])
+                                        if node_list and len(node_list) > 0:
+                                            created_at = node_list[0].get('time')  # 第一个是"已拍下"时间
+                                        break
+
+                            # 方法4: 从 orderInfoVO 组件中提取是否小刀（如果有 bargainInfo）
+                            if 'components' in raw_data:
+                                for component in raw_data['components']:
+                                    if component.get('render') == 'orderInfoVO':
+                                        data = component.get('data', {})
+                                        # 检查是否有小刀信息
+                                        if 'bargainInfo' in data:
+                                            bargain_info = data.get('bargainInfo', {})
+                                            is_bargain = bargain_info.get('bargain', False)
+                                        # 如果前面没找到商品ID，尝试从 jumpUrl 中提取
+                                        if not item_id:
+                                            item_info = data.get('itemInfo', {})
+                                            jump_url = item_info.get('jumpUrl', '')
+                                            if 'id=' in jump_url:
+                                                item_id = jump_url.split('id=')[1].split('&')[0]
+                                        break
+
+                            if created_at:
+                                log_with_user('debug', f"提取到订单创建时间: {created_at}", current_user)
+
+                        except Exception as e:
+                            log_with_user('warning', f"提取订单信息失败: {str(e)}", current_user)
+
+                    # 更新数据库（包含所有字段）
+                    success = db_manager.insert_or_update_order(
+                        order_id=order_id,
+                        item_id=item_id if item_id else None,
+                        buyer_id=buyer_id if buyer_id else None,
+                        spec_name=spec_name if spec_name else None,
+                        spec_value=spec_value if spec_value else None,
+                        quantity=quantity if quantity else None,
+                        amount=amount if amount else None,
+                        order_status=new_status if new_status != current_status else None,
+                        is_bargain=is_bargain if is_bargain is not None else None,
+                        cookie_id=cookie_id,
+                        created_at=created_at  # 添加创建时间（从API提取的北京时间）
+                    )
+
+                    if success:
+                        # 检查是否有任何更新
+                        has_changes = (
+                            new_status != current_status or
+                            (buyer_id and buyer_id != 'unknown_user') or
+                            amount
                         )
 
-                        if success:
+                        if has_changes:
                             updated_count += 1
                             refresh_results.append({
                                 'order_id': order_id,
@@ -6023,17 +6112,16 @@ async def refresh_orders_status(
                                 'new_status': new_status,
                                 'status_text': new_status_text
                             })
-                            log_with_user('info', f"订单 {order_id} 状态已更新: {current_status} -> {new_status} ({new_status_text})", current_user)
+                            log_with_user('info', f"订单 {order_id} 信息已更新 | 状态: {current_status} -> {new_status} | 买家: {buyer_id} | 金额: {amount}", current_user)
                         else:
-                            failed_count += 1
-                            log_with_user('error', f"订单 {order_id} 状态更新失败", current_user)
+                            no_change_count += 1
+                            log_with_user('debug', f"订单 {order_id} 信息无变化", current_user)
                     else:
-                        no_change_count += 1
-                        log_with_user('debug', f"订单 {order_id} 状态无变化: {current_status}", current_user)
+                        failed_count += 1
+                        log_with_user('error', f"订单 {order_id} 信息更新失败", current_user)
                 else:
                     failed_count += 1
-                    error_msg = result.get('error', '未知错误')
-                    log_with_user('warning', f"订单 {order_id} 状态查询失败: {error_msg}", current_user)
+                    log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
 
             except Exception as e:
                 failed_count += 1
