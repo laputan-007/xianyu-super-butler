@@ -5261,6 +5261,301 @@ class DBManager:
             logger.error(f"清理历史数据时出错: {e}")
             return {'error': str(e)}
 
+    # ==================== BI报表统计函数 ====================
+
+    def get_order_analytics(self, start_date: str = None, end_date: str = None, user_id: int = None, exclude_statuses: list = None):
+        """
+        获取订单分析数据
+
+        Args:
+            start_date: 开始日期 (格式: YYYY-MM-DD)
+            end_date: 结束日期 (格式: YYYY-MM-DD)
+            user_id: 用户ID (可选)
+            exclude_statuses: 要排除的订单状态列表 (可选)
+
+        Returns:
+            包含订单分析数据的字典
+        """
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+
+                # 构建WHERE条件
+                where_conditions = []
+                params = []
+
+                if start_date:
+                    where_conditions.append("DATE(created_at) >= ?")
+                    params.append(start_date)
+
+                if end_date:
+                    where_conditions.append("DATE(created_at) <= ?")
+                    params.append(end_date)
+
+                # 关联cookies表以过滤user_id
+                if user_id is not None:
+                    where_conditions.append("EXISTS (SELECT 1 FROM cookies WHERE cookies.id = orders.cookie_id AND cookies.user_id = ?)")
+                    params.append(user_id)
+
+                # 排除指定状态（小写形式）
+                if exclude_statuses:
+                    placeholders = ','.join(['?' for _ in exclude_statuses])
+                    where_conditions.append(f"order_status NOT IN ({placeholders})")
+                    params.extend(exclude_statuses)
+
+                where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+
+                # 1. 总收益统计（估值，实际会扣税等）
+                cursor.execute(f"""
+                    SELECT
+                        COUNT(DISTINCT order_id) as total_orders,
+                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount,
+                        AVG(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as avg_amount,
+                        COUNT(DISTINCT buyer_id) as unique_buyers,
+                        COUNT(DISTINCT item_id) as unique_items
+                    FROM orders
+                    {where_clause}
+                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
+                """, params)
+
+                row = cursor.fetchone()
+                revenue_stats = {
+                    'total_orders': row[0] or 0,
+                    'total_amount': round(row[1] or 0, 2),
+                    'avg_amount': round(row[2] or 0, 2),
+                    'unique_buyers': row[3] or 0,
+                    'unique_items': row[4] or 0
+                } if row else {}
+
+                # 2. 按日期统计订单量和收益
+                cursor.execute(f"""
+                    SELECT
+                        DATE(created_at) as date,
+                        COUNT(DISTINCT order_id) as order_count,
+                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as daily_amount
+                    FROM orders
+                    {where_clause}
+                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
+                    GROUP BY DATE(created_at)
+                    ORDER BY date DESC
+                    LIMIT 30
+                """, params)
+
+                daily_stats = []
+                for row in cursor.fetchall():
+                    daily_stats.append({
+                        'date': row[0],
+                        'order_count': row[1],
+                        'amount': round(row[2] or 0, 2)
+                    })
+
+                # 3. 按状态统计订单
+                cursor.execute(f"""
+                    SELECT
+                        order_status,
+                        COUNT(DISTINCT order_id) as count,
+                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as amount
+                    FROM orders
+                    {where_clause}
+                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
+                    GROUP BY order_status
+                    ORDER BY count DESC
+                """, params)
+
+                status_stats = []
+                for row in cursor.fetchall():
+                    status_stats.append({
+                        'status': row[0] or 'unknown',
+                        'count': row[1],
+                        'amount': round(row[2] or 0, 2)
+                    })
+
+                # 4. 按城市统计地区分布（如果有收货城市数据）
+                cursor.execute(f"""
+                    SELECT
+                        receiver_city,
+                        COUNT(DISTINCT order_id) as order_count,
+                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount
+                    FROM orders
+                    {where_clause}
+                    AND receiver_city IS NOT NULL AND receiver_city != ''
+                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
+                    GROUP BY receiver_city
+                    ORDER BY order_count DESC
+                    LIMIT 50
+                """, params)
+
+                city_stats = []
+                for row in cursor.fetchall():
+                    city_stats.append({
+                        'city': row[0],
+                        'order_count': row[1],
+                        'total_amount': round(row[2] or 0, 2)
+                    })
+
+                # 5. 商品排行（按订单量）
+                cursor.execute(f"""
+                    SELECT
+                        item_id,
+                        COUNT(DISTINCT order_id) as order_count,
+                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount,
+                        AVG(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as avg_amount
+                    FROM orders
+                    {where_clause}
+                    AND item_id IS NOT NULL AND item_id != ''
+                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
+                    GROUP BY item_id
+                    ORDER BY order_count DESC
+                    LIMIT 20
+                """, params)
+
+                item_stats = []
+                for row in cursor.fetchall():
+                    item_stats.append({
+                        'item_id': row[0],
+                        'order_count': row[1],
+                        'total_amount': round(row[2] or 0, 2),
+                        'avg_amount': round(row[3] or 0, 2)
+                    })
+
+                return {
+                    'revenue_stats': revenue_stats,
+                    'daily_stats': daily_stats,
+                    'status_stats': status_stats,
+                    'city_stats': city_stats,
+                    'item_stats': item_stats
+                }
+
+            except Exception as e:
+                logger.error(f"获取订单分析数据失败: {e}")
+                return {'error': str(e)}
+
+    def update_order_address(self, order_id: str, receiver_address: str = None, receiver_city: str = None):
+        """
+        更新订单的收货地址信息
+
+        Args:
+            order_id: 订单ID
+            receiver_address: 收货地址
+            receiver_city: 收货城市
+
+        Returns:
+            bool: 更新是否成功
+        """
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+
+                update_fields = []
+                update_values = []
+
+                if receiver_address is not None:
+                    update_fields.append("receiver_address = ?")
+                    update_values.append(receiver_address)
+
+                if receiver_city is not None:
+                    update_fields.append("receiver_city = ?")
+                    update_values.append(receiver_city)
+
+                if update_fields:
+                    update_fields.append("updated_at = CURRENT_TIMESTAMP")
+                    update_values.append(order_id)
+
+                    sql = f"UPDATE orders SET {', '.join(update_fields)} WHERE order_id = ?"
+                    cursor.execute(sql, update_values)
+                    self.conn.commit()
+
+                    return cursor.rowcount > 0
+
+                return False
+
+            except Exception as e:
+                logger.error(f"更新订单地址失败: {order_id} - {e}")
+                self.conn.rollback()
+                return False
+
+    def get_orders_for_analytics(self, start_date: str = None, end_date: str = None,
+                                  user_id: int = None, exclude_statuses: list = None):
+        """
+        获取用于分析的订单列表
+
+        Args:
+            start_date: 开始日期
+            end_date: 结束日期
+            user_id: 用户ID
+            exclude_statuses: 要排除的订单状态列表
+
+        Returns:
+            订单列表
+        """
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+
+                # 构建WHERE条件
+                where_conditions = []
+                params = []
+
+                if start_date:
+                    where_conditions.append("DATE(created_at) >= ?")
+                    params.append(start_date)
+
+                if end_date:
+                    where_conditions.append("DATE(created_at) <= ?")
+                    params.append(end_date)
+
+                # 关联cookies表以过滤user_id
+                if user_id is not None:
+                    where_conditions.append("EXISTS (SELECT 1 FROM cookies WHERE cookies.id = orders.cookie_id AND cookies.user_id = ?)")
+                    params.append(user_id)
+
+                # 排除指定状态
+                if exclude_statuses:
+                    placeholders = ','.join(['?' for _ in exclude_statuses])
+                    where_conditions.append(f"order_status NOT IN ({placeholders})")
+                    params.extend(exclude_statuses)
+
+                where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+
+                cursor.execute(f"""
+                    SELECT
+                        order_id,
+                        item_id,
+                        buyer_id,
+                        amount,
+                        order_status,
+                        spec_name,
+                        spec_value,
+                        quantity,
+                        created_at,
+                        receiver_city
+                    FROM orders
+                    {where_clause}
+                    ORDER BY created_at DESC
+                    LIMIT 1000
+                """, params)
+
+                orders = []
+                for row in cursor.fetchall():
+                    orders.append({
+                        'order_id': row[0],
+                        'item_id': row[1],
+                        'buyer_id': row[2],
+                        'amount': row[3],
+                        'order_status': row[4],
+                        'spec_name': row[5],
+                        'spec_value': row[6],
+                        'quantity': row[7],
+                        'created_at': row[8],
+                        'receiver_city': row[9]
+                    })
+
+                return orders
+
+            except Exception as e:
+                logger.error(f"获取订单列表失败: {e}")
+                return []
+
 
 # 全局单例
 db_manager = DBManager()

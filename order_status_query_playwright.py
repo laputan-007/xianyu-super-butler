@@ -121,6 +121,8 @@ class OrderStatusQueryPlaywright:
                         components = order_data.get('components', [])
                         item_title = 'N/A'
                         price = 'N/A'
+                        receiver_address = None
+                        receiver_city = None
 
                         for component in components:
                             if component.get('render') == 'orderInfoVO':
@@ -129,6 +131,39 @@ class OrderStatusQueryPlaywright:
                                 price_info = component.get('data', {}).get('priceInfo', {})
                                 amount = price_info.get('amount', {})
                                 price = amount.get('value', 'N/A')
+
+                                # 提取收货地址信息
+                                address_info = component.get('data', {}).get('addressInfo', {})
+                                if address_info:
+                                    # 构建完整地址
+                                    receiver_name = address_info.get('receiverName', '')
+                                    province = address_info.get('province', '')
+                                    city = address_info.get('city', '')
+                                    district = address_info.get('district', '')
+                                    detail_address = address_info.get('detailAddress', '')
+                                    full_address = address_info.get('fullAddress', '')
+
+                                    # 设置城市（用于地区统计）
+                                    if city:
+                                        receiver_city = city
+
+                                    # 构建完整地址字符串
+                                    if full_address:
+                                        receiver_address = full_address
+                                    elif province or city or district or detail_address:
+                                        address_parts = []
+                                        if province:
+                                            address_parts.append(province)
+                                        if city:
+                                            address_parts.append(city)
+                                        if district:
+                                            address_parts.append(district)
+                                        if detail_address:
+                                            address_parts.append(detail_address)
+                                        if receiver_name:
+                                            address_parts.insert(0, f"{receiver_name}")
+
+                                        receiver_address = ' '.join(address_parts)
 
                         # 检查是否可评价
                         bottom_bar = order_data.get('bottomBarVO', {})
@@ -147,6 +182,8 @@ class OrderStatusQueryPlaywright:
                             'item_title': item_title,
                             'price': price,
                             'can_rate': can_rate,
+                            'receiver_address': receiver_address,
+                            'receiver_city': receiver_city,
                             'raw_data': order_data
                         }
                     else:
@@ -189,6 +226,12 @@ class OrderStatusQueryPlaywright:
         output.append(f"成交价: {result.get('price', 'N/A')}")
         output.append(f"订单状态: {result.get('status_text', 'N/A')}")
         output.append(f"状态码: {result.get('order_status', 'N/A')}")
+
+        # 显示收货地址
+        if result.get('receiver_address'):
+            output.append(f"收货地址: {result.get('receiver_address')}")
+        if result.get('receiver_city'):
+            output.append("收货城市: {}".format(result.get('receiver_city')))
 
         if result.get('can_rate'):
             output.append("[OK] 该订单可以评价")

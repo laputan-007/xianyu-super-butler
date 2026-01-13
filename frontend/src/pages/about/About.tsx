@@ -1,539 +1,770 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  Activity,
-  AlertCircle,
-  AlertTriangle,
-  Bug,
+  BarChart3,
+  Calendar,
   ChevronDown,
-  ChevronUp,
-  Clock,
-  Code,
-  Database,
-  Download,
-  FileText,
-  Filter,
-  Info,
-  Loader2,
-  Pause,
-  Play,
+  ChevronRight,
+  DollarSign,
+  MapPin,
+  Package,
   RefreshCw,
-  Search,
-  Server,
-  Trash2,
-  Zap,
-  X
+  PieChart,
+  Activity,
+  Eye,
+  EyeOff,
+  Filter
 } from 'lucide-react'
-import { getRealtimeLogs, getLogStats, clearRealtimeLogs, type RealtimeLogEntry } from '@/api/admin'
+import {
+  getOrderAnalytics,
+  getValidOrders,
+  DateRangePresets,
+  getStatusName,
+  getStatusColor,
+  INVALID_ORDER_STATUSES,
+  type OrderAnalytics,
+  type ValidOrder
+} from '@/api/analytics'
 import { useUIStore } from '@/store/uiStore'
 import { cn } from '@/utils/cn'
 
-const limitOptions = [
-  { value: 50, label: '50 条' },
-  { value: 100, label: '100 条' },
-  { value: 200, label: '200 条' },
-  { value: 500, label: '500 条' },
-  { value: 1000, label: '1000 条' },
-]
-
-const levelOptions = [
-  { value: '', label: '全部级别', color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300' },
-  { value: 'DEBUG', label: '调试', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
-  { value: 'INFO', label: '信息', color: 'bg-sky-100 dark:bg-sky-700 text-sky-600 dark:text-sky-300' },
-  { value: 'WARNING', label: '警告', color: 'bg-amber-100 dark:bg-amber-700 text-amber-600 dark:text-amber-300' },
-  { value: 'ERROR', label: '错误', color: 'bg-red-100 dark:bg-red-700 text-red-600 dark:text-red-300' },
-  { value: 'CRITICAL', label: '严重', color: 'bg-purple-100 dark:bg-purple-700 text-purple-600 dark:text-purple-300' },
-]
-
-const autoRefreshIntervals = [
-  { value: 0, label: '关闭' },
-  { value: 1000, label: '1 秒' },
-  { value: 3000, label: '3 秒' },
-  { value: 5000, label: '5 秒' },
-  { value: 10000, label: '10 秒' },
+/**
+ * 日期范围选择器快捷选项
+ */
+const dateRangeOptions = [
+  { key: 'today', ...DateRangePresets.today() },
+  { key: 'yesterday', ...DateRangePresets.yesterday() },
+  { key: 'last7Days', ...DateRangePresets.last7Days() },
+  { key: 'last30Days', ...DateRangePresets.last30Days() },
+  { key: 'thisWeek', ...DateRangePresets.thisWeek() },
+  { key: 'lastWeek', ...DateRangePresets.lastWeek() },
+  { key: 'thisMonth', ...DateRangePresets.thisMonth() },
+  { key: 'lastMonth', ...DateRangePresets.lastMonth() }
 ]
 
 export function About() {
   const { addToast } = useUIStore()
   const [loading, setLoading] = useState(true)
-  const [logs, setLogs] = useState<RealtimeLogEntry[]>([])
-  const [stats, setStats] = useState<{ total_logs: number; level_counts: Record<string, number>; source_counts: Record<string, number>; max_capacity: number; log_file: string } | null>(null)
-  const [levelFilter, setLevelFilter] = useState('')
-  const [sourceFilter, setSourceFilter] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [limit, setLimit] = useState(200)
-  const [autoRefresh, setAutoRefresh] = useState(3000)
-  const [isPaused, setIsPaused] = useState(false)
-  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set())
+  const [analytics, setAnalytics] = useState<OrderAnalytics | null>(null)
+  const [validOrders, setValidOrders] = useState<ValidOrder[]>([])
+  const [showOrders, setShowOrders] = useState(false)
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [selectedRange, setSelectedRange] = useState('last30Days')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [showCustomDate, setShowCustomDate] = useState(false)
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
 
-  // 滚动到底部
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [autoScroll, setAutoScroll] = useState(true)
-
-  // 加载日志数据
-  const loadLogs = useCallback(async () => {
-    if (isPaused) return
+  // 加载分析数据
+  const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true)
-      const [logsResult, statsResult] = await Promise.all([
-        getRealtimeLogs({ lines: limit, level: levelFilter || undefined, source: sourceFilter || undefined }),
-        getLogStats()
-      ])
 
-      if (logsResult.success) {
-        setLogs(logsResult.data || [])
+      let start_date, end_date
+
+      if (showCustomDate && customStartDate && customEndDate) {
+        start_date = customStartDate
+        end_date = customEndDate
+      } else if (selectedRange !== 'custom') {
+        const preset = dateRangeOptions.find(opt => opt.key === selectedRange)
+        if (preset) {
+          start_date = preset.start_date
+          end_date = preset.end_date
+        }
       }
-      if (statsResult.success && statsResult.data) {
-        setStats(statsResult.data)
+
+      const result = await getOrderAnalytics({ start_date, end_date })
+
+      if (result.success && result.data) {
+        setAnalytics(result.data)
+      } else {
+        addToast({ type: 'error', message: '加载数据失败' })
       }
     } catch (error) {
-      console.error('加载日志失败:', error)
+      console.error('加载订单分析失败:', error)
+      addToast({ type: 'error', message: '加载数据失败' })
     } finally {
       setLoading(false)
     }
-  }, [limit, levelFilter, sourceFilter, isPaused])
+  }, [selectedRange, showCustomDate, customStartDate, customEndDate, addToast])
 
-  // 自动刷新
-  useEffect(() => {
-    if (autoRefresh === 0) return
+  // 加载有效订单列表
+  const loadValidOrders = useCallback(async () => {
+    try {
+      setOrdersLoading(true)
 
-    const interval = setInterval(() => {
-      if (!isPaused) {
-        loadLogs()
+      let start_date, end_date
+
+      if (showCustomDate && customStartDate && customEndDate) {
+        start_date = customStartDate
+        end_date = customEndDate
+      } else if (selectedRange !== 'custom') {
+        const preset = dateRangeOptions.find(opt => opt.key === selectedRange)
+        if (preset) {
+          start_date = preset.start_date
+          end_date = preset.end_date
+        }
       }
-    }, autoRefresh)
 
-    return () => clearInterval(interval)
-  }, [autoRefresh, isPaused, loadLogs])
+      const result = await getValidOrders({ start_date, end_date })
+
+      if (result.success && result.data) {
+        setValidOrders(result.data)
+      }
+    } catch (error) {
+      console.error('加载有效订单失败:', error)
+    } finally {
+      setOrdersLoading(false)
+    }
+  }, [selectedRange, showCustomDate, customStartDate, customEndDate])
 
   // 初始加载
   useEffect(() => {
-    loadLogs()
-  }, [loadLogs])
+    loadAnalytics()
+  }, [loadAnalytics])
 
-  // 自动滚动到底部
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [logs, autoScroll])
+  // 当前选择的日期范围
+  const currentRange = dateRangeOptions.find(opt => opt.key === selectedRange)
 
-  // 过滤日志
-  const filteredLogs = logs.filter(log => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
+  // 格式化货币
+  const formatCurrency = (amount: number | string) => {
+    const num = typeof amount === 'string' ? parseFloat(amount.replace(/[¥,]/g, '')) : amount
+    return `¥${num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  // SVG饼状图组件
+  const PieChartSVG = ({ data }: { data: Array<{ label: string; value: number; color: string }> }) => {
+    const total = data.reduce((sum, item) => sum + item.value, 0)
+    let currentAngle = 0
+
+    const slices = data.map((item, index) => {
+      if (total === 0) return null
+      const angle = (item.value / total) * 360
+
+      const x1 = 50 + 50 * Math.cos((Math.PI * currentAngle) / 180)
+      const y1 = 50 + 50 * Math.sin((Math.PI * currentAngle) / 180)
+      const x2 = 50 + 50 * Math.cos((Math.PI * (currentAngle + angle)) / 180)
+      const y2 = 50 + 50 * Math.sin((Math.PI * (currentAngle + angle)) / 180)
+
+      const largeArcFlag = angle > 180 ? 1 : 0
+
+      const pathData = `M 50 50 L ${x1} ${y1} A 50 50 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
+
+      currentAngle += angle
+
       return (
-        log.message.toLowerCase().includes(query) ||
-        log.source.toLowerCase().includes(query) ||
-        log.function.toLowerCase().includes(query)
+        <g key={index} style={{ transformOrigin: 'center', transition: 'transform 0.3s ease' }}>
+          <path
+            d={pathData}
+            fill={item.color}
+            stroke="white"
+            strokeWidth="1"
+            className="hover:opacity-80 transition-opacity cursor-pointer"
+          />
+        </g>
       )
-    }
-    return true
-  })
+    })
 
-  // 清空日志
-  const handleClear = async () => {
-    if (!confirm('确定要清空所有日志吗？此操作不可恢复！')) return
-    try {
-      await clearRealtimeLogs()
-      addToast({ type: 'success', message: '日志已清空' })
-      loadLogs()
-    } catch {
-      addToast({ type: 'error', message: '清空失败' })
-    }
+    return (
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg">
+        {slices}
+        {total === 0 && (
+          <circle cx="50" cy="50" r="50" fill="#e2e8f0" />
+        )}
+      </svg>
+    )
   }
 
-  // 导出日志
-  const handleExport = () => {
-    const logContent = logs.map(log => {
-      const timestamp = new Date(log.timestamp).toLocaleString()
-      return `[${timestamp}] [${log.level}] [${log.source}:${log.function}:${log.line}] ${log.message}`
-    }).join('\n')
+  // SVG曲线图组件
+  const LineChartSVG = ({ data }: { data: Array<{ label: string; value: number }> }) => {
+    if (data.length === 0) return null
 
-    const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `goofish_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.log`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    addToast({ type: 'success', message: '日志已导出' })
-  }
+    const max = Math.max(...data.map(d => d.value), 1)
+    const padding = 10
+    const width = 300
+    const height = 100
+    const chartWidth = width - padding * 2
+    const chartHeight = height - padding * 2
 
-  // 获取日志级别图标
-  const getLevelIcon = (level: string) => {
-    switch (level) {
-      case 'ERROR':
-      case 'CRITICAL':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
-      case 'WARNING':
-        return <AlertTriangle className="w-4 h-4 text-amber-500" />
-      case 'DEBUG':
-        return <Bug className="w-4 h-4 text-gray-500" />
-      default:
-        return <Info className="w-4 h-4 text-sky-500" />
-    }
-  }
+    const points = data.map((d, i) => {
+      const x = padding + (i / (data.length - 1)) * chartWidth
+      const y = padding + chartHeight - (d.value / max) * chartHeight
+      return { x, y, value: d.value, label: d.label }
+    })
 
-  // 获取日志级别徽章
-  const getLevelBadge = (level: string) => {
-    const option = levelOptions.find(opt => opt.value === level)
-    if (!option) return null
-    return <span className={cn('px-2 py-0.5 rounded text-xs font-medium', option.color)}>{option.label}</span>
-  }
+    const pathD = points.map((p, i) => {
+      if (i === 0) return `M ${p.x} ${p.y}`
+      const prev = points[i - 1]
+      const cp1x = prev.x + (p.x - prev.x) / 2
+      const cp1y = prev.y
+      const cp2x = prev.x + (p.x - prev.x) / 2
+      const cp2y = p.y
+      return `C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p.x} ${p.y}`
+    }).join(' ')
 
-  // 切换日志展开
-  const toggleExpand = (timestamp: string) => {
-    const newExpanded = new Set(expandedLogs)
-    if (newExpanded.has(timestamp)) {
-      newExpanded.delete(timestamp)
-    } else {
-      newExpanded.add(timestamp)
-    }
-    setExpandedLogs(newExpanded)
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+        {[0, 25, 50, 75, 100].map((percent, i) => (
+          <line
+            key={i}
+            x1={padding}
+            y1={padding + (chartHeight * percent) / 100}
+            x2={width - padding}
+            y2={padding + (chartHeight * percent) / 100}
+            stroke="#e2e8f0"
+            strokeWidth="0.5"
+          />
+        ))}
+
+        <path
+          d={`${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`}
+          fill="rgba(245, 158, 11, 0.1)"
+          className="animate-pulse"
+        />
+
+        <path d={pathD} fill="none" stroke="#f59e0b" strokeWidth="2" className="drop-shadow-md" />
+
+        {points.map((p, i) => (
+          <circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r="3"
+            fill="#f59e0b"
+            className="hover:r-5 transition-all duration-200 cursor-pointer"
+          />
+        ))}
+      </svg>
+    )
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-4">
+    <div className="max-w-[1800px] mx-auto space-y-6">
       {/* Header */}
       <div className="page-header flex-between flex-wrap gap-4">
         <div>
           <h1 className="page-title flex items-center gap-2">
-            <Activity className="w-6 h-6 text-amber-500" />
-            Goofish 网络数据日志
+            <BarChart3 className="w-6 h-6 text-amber-500" />
+            订单数据报表
           </h1>
-          <p className="page-description">实时查看来自 Goofish (闲鱼) 网络的统一信息交互数据</p>
+          <p className="page-description">BI数据大屏 - 订单分析与收益统计</p>
         </div>
         <div className="flex gap-2">
+          <div className="relative">
+            <button
+              className={cn(
+                'btn-ios-secondary flex items-center gap-2',
+                showCustomDate && 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+              )}
+              onClick={() => {
+                const dropdown = document.getElementById('date-range-dropdown')
+                dropdown?.classList.toggle('hidden')
+              }}
+            >
+              <Calendar className="w-4 h-4" />
+              {showCustomDate ? '自定义' : (currentRange?.label || '选择时间范围')}
+              <ChevronDown className="w-4 h-4" />
+            </button>
+
+            <div
+              id="date-range-dropdown"
+              className="hidden absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-50"
+            >
+              <div className="p-2 space-y-1">
+                {dateRangeOptions.map(option => (
+                  <button
+                    key={option.key}
+                    onClick={() => {
+                      setSelectedRange(option.key)
+                      setShowCustomDate(false)
+                      document.getElementById('date-range-dropdown')?.classList.add('hidden')
+                    }}
+                    className={cn(
+                      'w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200',
+                      selectedRange === option.key && !showCustomDate
+                        ? 'bg-amber-500 text-white scale-105'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                <div className="border-t border-slate-200 dark:border-slate-700 my-1" />
+                <button
+                  onClick={() => {
+                    setShowCustomDate(true)
+                    setSelectedRange('custom')
+                    document.getElementById('date-range-dropdown')?.classList.add('hidden')
+                  }}
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
+                    showCustomDate
+                      ? 'bg-amber-500 text-white'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  )}
+                >
+                  自定义日期
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {showCustomDate && (
+            <>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="input-ios w-40"
+              />
+              <span className="text-slate-500 dark:text-slate-400">至</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="input-ios w-40"
+              />
+            </>
+          )}
+
           <button
-            onClick={handleExport}
+            onClick={loadAnalytics}
             className="btn-ios-primary"
-            title="导出日志到本地文件"
+            disabled={loading}
           >
-            <Download className="w-4 h-4" />
-            导出
-          </button>
-          <button onClick={handleClear} className="btn-ios-danger" title="清空所有日志">
-            <Trash2 className="w-4 h-4" />
-            清空
-          </button>
-          <button
-            onClick={() => {
-              setIsPaused(!isPaused)
-              addToast({ type: 'info', message: isPaused ? '已恢复自动刷新' : '已暂停自动刷新' })
-            }}
-            className={cn('btn-ios-secondary', isPaused && 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300')}
-            title={isPaused ? '恢复自动刷新' : '暂停自动刷新'}
-          >
-            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-            {isPaused ? '恢复' : '暂停'}
-          </button>
-          <button onClick={loadLogs} className="btn-ios-secondary" title="立即刷新">
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
             刷新
           </button>
         </div>
       </div>
 
-      {/* 统计信息卡片 */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <div className="vben-card">
-            <div className="vben-card-body">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                  <Database className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">总日志数</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{stats.total_logs.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {Object.entries(stats.level_counts).slice(0, 4).map(([level, count]) => {
-            const option = levelOptions.find(opt => opt.value === level)
-            return (
-              <div key={level} className="vben-card">
-                <div className="vben-card-body">
-                  <div className="flex items-center gap-2">
-                    <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', option?.color)}>
-                      {getLevelIcon(level)}
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{option?.label || level}</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{count.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          <div className="vben-card">
-            <div className="vben-card-body">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                  <Server className="w-5 h-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">日志源</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{Object.keys(stats.source_counts || {}).length}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 过滤器和控制 */}
-      <div className="vben-card">
-        <div className="vben-card-body">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* 搜索框 */}
-            <div className="flex-1 min-w-[200px] relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="搜索日志内容、来源、函数..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* 日志级别过滤 */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select
-                value={levelFilter}
-                onChange={(e) => setLevelFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
-              >
-                {levelOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 来源过滤 */}
-            <div className="flex items-center gap-2">
-              <Code className="w-4 h-4 text-slate-400" />
-              <select
-                value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
-              >
-                <option value="">全部来源</option>
-                {stats && Object.keys(stats.source_counts || {}).map(source => (
-                  <option key={source} value={source}>{source} ({stats.source_counts[source]})</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 显示条数 */}
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
-              <select
-                value={limit}
-                onChange={(e) => setLimit(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
-              >
-                {limitOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 自动刷新间隔 */}
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-400" />
-              <select
-                value={autoRefresh}
-                onChange={(e) => setAutoRefresh(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-0 focus:ring-2 focus:ring-amber-500"
-              >
-                {autoRefreshIntervals.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* 自动滚动 */}
-            <button
-              onClick={() => setAutoScroll(!autoScroll)}
-              className={cn(
-                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                autoScroll
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-              )}
-              title={autoScroll ? '自动滚动已启用' : '自动滚动已禁用'}
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* 过滤结果统计 */}
-          <div className="mt-3 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-            <span>显示 {filteredLogs.length} 条 / 共 {logs.length} 条</span>
-            {searchQuery && (
-              <span className="text-amber-500">搜索: "{searchQuery}"</span>
-            )}
-            {levelFilter && (
-              <span className="text-amber-500">级别: {levelOptions.find(opt => opt.value === levelFilter)?.label}</span>
-            )}
-            {sourceFilter && (
-              <span className="text-amber-500">来源: {sourceFilter}</span>
-            )}
-            {isPaused && (
-              <span className="flex items-center gap-1 text-amber-500">
-                <Pause className="w-3 h-3" />
-                已暂停
-              </span>
-            )}
-            {autoRefresh > 0 && !isPaused && (
-              <span className="flex items-center gap-1 text-green-500">
-                <Zap className="w-3 h-3" />
-                {autoRefresh / 1000}秒刷新
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 日志列表 */}
-      <div className="vben-card">
-        <div className="vben-card-header">
-          <h2 className="vben-card-title flex items-center gap-2">
-            <Activity className="w-4 h-4" />
-            日志流
-          </h2>
-          <span className="badge-primary">{filteredLogs.length} 条记录</span>
-        </div>
-        <div
-          ref={scrollRef}
-          className="divide-y divide-slate-100 dark:divide-slate-700 max-h-[600px] overflow-y-auto font-mono text-xs"
-        >
-          {filteredLogs.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 dark:text-slate-400">
-              <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-              <p>暂无日志记录</p>
-              {loading && <Loader2 className="w-6 h-6 animate-spin mx-auto mt-4" />}
-            </div>
-          ) : (
-            filteredLogs.map((log, index) => {
-              const timestamp = log.timestamp
-              const isExpanded = expandedLogs.has(timestamp)
-              const needsTruncation = log.message.length > 200
-
-              return (
-                <div
-                  key={`${timestamp}-${index}`}
-                  className={cn(
-                    'px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer',
-                    log.level === 'ERROR' && 'bg-red-50/50 dark:bg-red-900/10',
-                    log.level === 'WARNING' && 'bg-amber-50/50 dark:bg-amber-900/10'
-                  )}
-                  onClick={() => needsTruncation && toggleExpand(timestamp)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex-shrink-0">{getLevelIcon(log.level)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        {getLevelBadge(log.level)}
-                        <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
-                          {log.source}
-                        </span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
-                          {log.function}:{log.line}
-                        </span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
-                          {new Date(timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <p
-                        className={cn(
-                          'text-sm text-slate-700 dark:text-slate-300 break-all whitespace-pre-wrap',
-                          !isExpanded && needsTruncation && 'line-clamp-2'
-                        )}
-                      >
-                        {log.message}
-                      </p>
-                      {needsTruncation && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleExpand(timestamp)
-                          }}
-                          className="mt-1 flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600"
-                        >
-                          {isExpanded ? (
-                            <>
-                              <ChevronUp className="w-3 h-3" />
-                              收起
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-3 h-3" />
-                              展开 ({log.message.length} 字符)
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </div>
-
-      {/* 日志来源统计 */}
-      {stats && stats.source_counts && Object.keys(stats.source_counts).length > 0 && (
+      {loading && !analytics ? (
         <div className="vben-card">
-          <div className="vben-card-header">
-            <h2 className="vben-card-title flex items-center gap-2">
-              <Server className="w-4 h-4" />
-              日志来源统计
-            </h2>
-          </div>
-          <div className="vben-card-body">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {Object.entries(stats.source_counts)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 12)
-                .map(([source, count]) => (
-                  <div
-                    key={source}
-                    className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                    onClick={() => setSourceFilter(source === sourceFilter ? '' : source)}
-                  >
-                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate" title={source}>
-                      {source}
-                    </span>
-                    <span className={cn(
-                      'px-2 py-1 rounded text-xs font-medium',
-                      sourceFilter === source
-                        ? 'bg-amber-500 text-white'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                    )}>
-                      {count}
-                    </span>
-                  </div>
-                ))}
+          <div className="vben-card-body flex items-center justify-center py-12">
+            <div className="text-center">
+              <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto mb-4" />
+              <p className="text-slate-600 dark:text-slate-400">加载数据中...</p>
             </div>
+          </div>
+        </div>
+      ) : analytics ? (
+        <>
+          {/* 核心收益指标 - 突出显示 */}
+          <div className="vben-card bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
+            <div className="vben-card-header">
+              <div className="flex items-center justify-between">
+                <h2 className="vben-card-title flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <DollarSign className="w-5 h-5" />
+                  收益总览（估值）
+                </h2>
+                <button
+                  onClick={() => {
+                    if (!showOrders) {
+                      loadValidOrders()
+                    }
+                    setShowOrders(!showOrders)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  {showOrders ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <span className="text-sm font-medium">
+                    {showOrders ? '隐藏' : '查看'}有效订单明细
+                  </span>
+                  <ChevronRight className={cn(
+                    'w-4 h-4 transition-transform duration-200',
+                    showOrders && 'rotate-90'
+                  )} />
+                </button>
+              </div>
+              <span className="text-xs text-amber-600 dark:text-amber-500 bg-amber-100 dark:bg-amber-900/30 px-2 py-1 rounded mt-2 inline-block">
+                * 实际收益会扣除平台费用、税费等
+              </span>
+            </div>
+            <div className="vben-card-body">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div
+                  className="text-center p-6 bg-white dark:bg-slate-800 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105 cursor-default"
+                  onMouseEnter={() => setHoveredCard('total')}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">期间总收益</p>
+                  <p className="text-4xl lg:text-5xl font-bold text-amber-600 dark:text-amber-400 mb-2 transition-transform duration-300"
+                     style={{ transform: hoveredCard === 'total' ? 'scale(1.1)' : 'scale(1)' }}>
+                    {formatCurrency(analytics.revenue_stats.total_amount)}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    共 {analytics.revenue_stats.total_orders.toLocaleString()} 个有效订单
+                  </p>
+                </div>
+
+                <div
+                  className="text-center p-4 bg-white dark:bg-slate-800 rounded-lg transition-all duration-300 hover:shadow-lg cursor-default"
+                  onMouseEnter={() => setHoveredCard('avg')}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">平均客单价</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {formatCurrency(analytics.revenue_stats.avg_amount)}
+                  </p>
+                </div>
+
+                <div
+                  className="text-center p-4 bg-white dark:bg-slate-800 rounded-lg transition-all duration-300 hover:shadow-lg cursor-default"
+                  onMouseEnter={() => setHoveredCard('buyers')}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">独立买家</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {analytics.revenue_stats.unique_buyers.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    人均 {(analytics.revenue_stats.total_amount / Math.max(analytics.revenue_stats.unique_buyers, 1)).toFixed(2)}
+                  </p>
+                </div>
+
+                <div
+                  className="text-center p-4 bg-white dark:bg-slate-800 rounded-lg transition-all duration-300 hover:shadow-lg cursor-default"
+                  onMouseEnter={() => setHoveredCard('items')}
+                  onMouseLeave={() => setHoveredCard(null)}
+                >
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">独立商品</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {analytics.revenue_stats.unique_items.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 有效订单明细 - 折叠面板 */}
+          {showOrders && (
+            <div className="vben-card overflow-hidden">
+              <div className="vben-card-header">
+                <h2 className="vben-card-title flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  有效订单明细（已排除退货、取消等无效订单）
+                </h2>
+              </div>
+              <div className="vben-card-body">
+                {ordersLoading ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="w-6 h-6 text-amber-500 animate-spin mx-auto mb-2" />
+                    <p className="text-slate-500 dark:text-slate-400">加载中...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* 统计信息 */}
+                    <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+                      <span>共 <strong className="text-amber-600 dark:text-amber-400">{validOrders.length}</strong> 个有效订单</span>
+                      <span>•</span>
+                      <span>已排除状态: {INVALID_ORDER_STATUSES.join('、')}</span>
+                    </div>
+
+                    {/* 订单列表 */}
+                    <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                      <table className="w-full">
+                        <thead className="sticky top-0 bg-white dark:bg-slate-800 shadow-sm">
+                          <tr className="border-b border-slate-200 dark:border-slate-700">
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">订单ID</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">商品ID</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">金额</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">状态</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">规格</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">数量</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">城市</th>
+                            <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400">创建时间</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {validOrders.map((order, index) => (
+                            <tr
+                              key={index}
+                              className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                            >
+                              <td className="py-3 px-4 text-sm font-mono text-slate-700 dark:text-slate-300">
+                                {order.order_id}
+                              </td>
+                              <td className="py-3 px-4 text-sm font-mono text-slate-600 dark:text-slate-400">
+                                {order.item_id || '-'}
+                              </td>
+                              <td className="py-3 px-4 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                                {formatCurrency(order.amount)}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={cn('text-xs px-2 py-1 rounded', getStatusColor(order.order_status))}>
+                                  {getStatusName(order.order_status)}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-xs text-slate-600 dark:text-slate-400">
+                                {order.spec_name && order.spec_value ? `${order.spec_name}: ${order.spec_value}` : '-'}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300">
+                                {order.quantity || '-'}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
+                                {order.receiver_city || '-'}
+                              </td>
+                              <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400">
+                                {order.created_at}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 收益趋势曲线图 */}
+            <div className="vben-card">
+              <div className="vben-card-header">
+                <h2 className="vben-card-title flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  收益趋势（最近30天）
+                </h2>
+              </div>
+              <div className="vben-card-body">
+                {analytics.daily_stats.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="h-48">
+                      <LineChartSVG
+                        data={analytics.daily_stats.slice(0, 30).reverse().map(d => ({
+                          label: d.date,
+                          value: d.amount
+                        }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {analytics.daily_stats.slice(0, 10).reverse().map((day, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between text-sm p-2 bg-slate-50 dark:bg-slate-800 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-default"
+                        >
+                          <span className="text-slate-600 dark:text-slate-400">{day.date}</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-slate-700 dark:text-slate-300">{day.order_count}单</span>
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">
+                              {formatCurrency(day.amount)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400">暂无数据</div>
+                )}
+              </div>
+            </div>
+
+            {/* 订单状态分布饼状图 */}
+            <div className="vben-card">
+              <div className="vben-card-header">
+                <h2 className="vben-card-title flex items-center gap-2">
+                  <PieChart className="w-4 h-4" />
+                  订单状态分布
+                </h2>
+              </div>
+              <div className="vben-card-body">
+                {analytics.status_stats.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="aspect-square max-w-[200px] mx-auto">
+                      <PieChartSVG
+                        data={analytics.status_stats.map((stat, index) => ({
+                          label: stat.status,
+                          value: stat.count,
+                          color: [
+                            '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6',
+                            '#ec4899', '#06b6d4', '#84cc16', '#f97316'
+                          ][index % 8]
+                        }))}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      {analytics.status_stats.map((stat, index) => {
+                        const percentage = analytics.revenue_stats.total_orders > 0
+                          ? (stat.count / analytics.revenue_stats.total_orders * 100).toFixed(1)
+                          : 0
+
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-default"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full transition-transform hover:scale-125"
+                                style={{
+                                  backgroundColor: [
+                                    '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6',
+                                    '#ec4899', '#06b6d4', '#84cc16', '#f97316'
+                                  ][index % 8]
+                                }}
+                              />
+                              <span className={cn('text-sm px-2 py-1 rounded', getStatusColor(stat.status))}>
+                                {getStatusName(stat.status)}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {stat.count}单 ({percentage}%)
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {formatCurrency(stat.amount)}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400">暂无数据</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 地区分布 */}
+            <div className="vben-card">
+              <div className="vben-card-header">
+                <h2 className="vben-card-title flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  地区分布 TOP 10
+                </h2>
+              </div>
+              <div className="vben-card-body">
+                {analytics.city_stats.length > 0 ? (
+                  <div className="space-y-3">
+                    {analytics.city_stats.slice(0, 10).map((stat, index) => {
+                      const maxCount = Math.max(...analytics.city_stats.map(s => s.order_count), 1)
+                      const percentage = (stat.order_count / maxCount) * 100
+
+                      return (
+                        <div
+                          key={index}
+                          className="space-y-1 group"
+                        >
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white transition-transform group-hover:scale-110',
+                                  index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-slate-400' : index === 2 ? 'bg-orange-400' : 'bg-slate-300'
+                                )}
+                              >
+                                {index + 1}
+                              </span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {stat.city || '未知城市'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 dark:text-slate-400">{stat.order_count}单</span>
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                {formatCurrency(stat.total_amount)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500 ease-out',
+                                index === 0 ? 'bg-amber-500' : 'bg-amber-300 dark:bg-amber-700'
+                              )}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                    <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>暂无地区数据</p>
+                    <p className="text-xs mt-1">需要刷新订单状态以获取收货地址</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 商品排行 */}
+            <div className="vben-card">
+              <div className="vben-card-header">
+                <h2 className="vben-card-title flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  商品排行 TOP 10
+                </h2>
+              </div>
+              <div className="vben-card-body">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-700">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-slate-600 dark:text-slate-400">排名</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-slate-600 dark:text-slate-400">商品ID</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-slate-600 dark:text-slate-400">订单数</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-slate-600 dark:text-slate-400">总金额</th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-slate-600 dark:text-slate-400">平均金额</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.item_stats.slice(0, 10).map((item, index) => (
+                        <tr
+                          key={index}
+                          className={cn(
+                            'border-b border-slate-100 dark:border-slate-800 transition-colors',
+                            index === 0 && 'bg-amber-50/50 dark:bg-amber-900/10'
+                          )}
+                        >
+                          <td className="py-3 px-4">
+                            <span
+                              className={cn(
+                                'inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-transform hover:scale-110',
+                                index === 0
+                                  ? 'bg-amber-500 text-white'
+                                  : index === 1
+                                  ? 'bg-slate-400 text-white'
+                                  : index === 2
+                                  ? 'bg-orange-400 text-white'
+                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                              )}
+                            >
+                              {index + 1}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm font-mono text-slate-700 dark:text-slate-300">
+                            {item.item_id}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-right text-slate-900 dark:text-slate-100">
+                            {item.order_count}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-right font-medium text-amber-600 dark:text-amber-400">
+                            {formatCurrency(item.total_amount)}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-right text-slate-600 dark:text-slate-400">
+                            {formatCurrency(item.avg_amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="vben-card">
+          <div className="vben-card-body text-center py-12 text-slate-500 dark:text-slate-400">
+            <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>暂无数据</p>
           </div>
         </div>
       )}

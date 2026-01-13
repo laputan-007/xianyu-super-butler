@@ -5290,6 +5290,98 @@ def get_system_stats(admin_user: Dict[str, Any] = Depends(require_admin)):
         log_with_user('error', f"获取系统统计信息失败: {str(e)}", admin_user)
         raise HTTPException(status_code=500, detail=str(e))
 
+# ------------------------- BI报表分析接口 -------------------------
+
+@app.get('/analytics/orders')
+def get_order_analytics(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    获取订单分析数据（BI报表）
+
+    Args:
+        start_date: 开始日期 (格式: YYYY-MM-DD)
+        end_date: 结束日期 (格式: YYYY-MM-DD)
+    """
+    from db_manager import db_manager
+    try:
+        log_with_user('info', f"查询订单分析数据: {start_date} - {end_date}", current_user)
+
+        # 获取当前用户的ID
+        user_id = current_user['user_id']
+
+        # 定义无效订单状态（小写形式，与数据库存储格式一致）
+        invalid_statuses = [
+            'returned', 'cancelled', 'refunded', 'return_processing',
+            'cancel_buyer', 'cancel_seller', 'cancel_platform',
+            'return_requested', 'return_approved', 'return_rejected'
+        ]
+
+        # 调用数据库分析函数，传入排除状态
+        analytics_data = db_manager.get_order_analytics(
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user_id,
+            exclude_statuses=invalid_statuses
+        )
+
+        if 'error' in analytics_data:
+            log_with_user('error', f"获取订单分析数据失败: {analytics_data['error']}", current_user)
+            raise HTTPException(status_code=500, detail=analytics_data['error'])
+
+        log_with_user('info', "订单分析数据查询成功", current_user)
+        return analytics_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"获取订单分析数据失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get('/analytics/orders/valid')
+def get_valid_orders(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    获取有效订单详情列表（用于统计中的订单明细）
+
+    Args:
+        start_date: 开始日期 (格式: YYYY-MM-DD)
+        end_date: 结束日期 (格式: YYYY-MM-DD)
+    """
+    from db_manager import db_manager
+    try:
+        log_with_user('info', f"查询有效订单列表: {start_date} - {end_date}", current_user)
+
+        # 获取当前用户的ID
+        user_id = current_user['user_id']
+
+        # 定义无效订单状态（小写形式，与数据库存储格式一致）
+        invalid_statuses = [
+            'returned', 'cancelled', 'refunded', 'return_processing',
+            'cancel_buyer', 'cancel_seller', 'cancel_platform',
+            'return_requested', 'return_approved', 'return_rejected'
+        ]
+
+        # 调用数据库函数获取有效订单
+        orders = db_manager.get_orders_for_analytics(
+            start_date=start_date,
+            end_date=end_date,
+            user_id=user_id,
+            exclude_statuses=invalid_statuses
+        )
+
+        log_with_user('info', f"查询到 {len(orders)} 个有效订单", current_user)
+        return {"orders": orders}
+
+    except Exception as e:
+        log_with_user('error', f"获取有效订单列表失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ------------------------- 指定商品回复接口 -------------------------
 
 @app.get("/itemReplays")
@@ -5959,11 +6051,11 @@ async def refresh_orders_status(
                 amount = order.get('amount', '')
 
                 # 判断是否需要刷新：
-                # 1. 非稳定状态订单（非已发货、非交易成功）
+                # 1. 非稳定状态订单（非已发货、非交易成功、非已关闭）
                 # 2. 买家ID为空或unknown_user
                 # 3. 金额为空
                 needs_refresh = (
-                    order_status not in ['shipped', 'completed'] or
+                    order_status not in ['shipped', 'completed', 'cancelled'] or
                     not buyer_id or buyer_id == 'unknown_user' or
                     not amount
                 )
