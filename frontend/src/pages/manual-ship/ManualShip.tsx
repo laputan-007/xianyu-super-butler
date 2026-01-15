@@ -27,7 +27,6 @@ export function ManualShip() {
   const [shipping, setShipping] = useState(false)
   const [customContent, setCustomContent] = useState('')
   const [showCustomModal, setShowCustomModal] = useState(false)
-  const [batchMode, setBatchMode] = useState<'auto' | 'custom' | null>(null)
 
   const loadPendingOrders = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -50,10 +49,8 @@ export function ManualShip() {
   const loadAccounts = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) return
     try {
-      const result = await getAccounts()
-      if (result.success) {
-        setAccounts(result.data || [])
-      }
+      const accounts = await getAccounts()
+      setAccounts(accounts || [])
     } catch {
       // 静默失败
     }
@@ -131,7 +128,6 @@ export function ManualShip() {
 
   const handleCustomShipSingle = (orderId: string) => {
     setSelectedOrders(new Set([orderId]))
-    setBatchMode('custom')
     setShowCustomModal(true)
   }
 
@@ -167,7 +163,6 @@ export function ManualShip() {
       addToast({ type: 'warning', message: '请先选择订单' })
       return
     }
-    setBatchMode('custom')
     setShowCustomModal(true)
   }
 
