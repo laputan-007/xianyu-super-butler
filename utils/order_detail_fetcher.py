@@ -395,7 +395,7 @@ class OrderDetailFetcher:
             return {}
 
     async def _get_sku_content(self) -> Optional[Dict[str, str]]:
-        """获取并解析SKU内容，包括规格、数量和金额"""
+        """获取并解析SKU内容，包括规格、数量、金额、收货信息和订单时间"""
         try:
             # 检查浏览器状态
             if not await self._check_browser_status():
@@ -425,6 +425,12 @@ class OrderDetailFetcher:
             else:
                 logger.warning("未找到金额元素")
                 print("⚠️ 未找到金额信息")
+
+            # 获取订单创建时间
+            await self._get_order_time(result)
+
+            # 获取收货人信息（姓名、手机号、地址）
+            await self._get_receiver_info(result)
 
             # 处理 sku--u_ddZval 元素
             if len(sku_elements) == 2:
@@ -552,6 +558,161 @@ class OrderDetailFetcher:
         except Exception as e:
             logger.error(f"获取SKU内容失败: {e}")
             return {}
+
+    async def _get_order_time(self, result: Dict[str, str]) -> None:
+        """获取订单创建时间"""
+        try:
+            # 尝试多种可能的选择器获取订单时间
+            # 选择器1: 包含"订单创建"或"下单时间"的元素
+            time_selectors = [
+                'text=/下单时间/',
+                'text=/订单创建时间/',
+                'text=/创建时间/',
+                '.order-time',
+                '[class*="time"]',
+                '[class*="created"]'
+            ]
+
+            for selector in time_selectors:
+                try:
+                    time_element = await self.page.query_selector(selector)
+                    if time_element:
+                        time_text = await time_element.text_content()
+                        if time_text:
+                            time_text = time_text.strip()
+                            # 尝试提取时间格式 (YYYY-MM-DD HH:MM:SS)
+                            import re
+                            time_match = re.search(r'(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}:\d{2})', time_text)
+                            if not time_match:
+                                # 尝试另一种格式 (YYYY-MM-DD HH:MM)
+                                time_match = re.search(r'(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})', time_text)
+
+                            if time_match:
+                                order_time = time_match.group(1).replace('/', '-')
+                                result['order_time'] = order_time
+                                logger.info(f"找到订单时间: {order_time}")
+                                print(f"⏰ 订单时间: {order_time}")
+                                return
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 获取时间失败: {e}")
+                    continue
+
+            # 如果上述方法都失败，尝试在整个页面源码中查找时间
+            page_content = await self.page.content()
+            import re
+            time_match = re.search(r'(?:下单时间|订单创建时间|创建时间).*?(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?)', page_content)
+            if time_match:
+                order_time = time_match.group(1).replace('/', '-')
+                result['order_time'] = order_time
+                logger.info(f"从页面源码中找到订单时间: {order_time}")
+                print(f"⏰ 订单时间: {order_time}")
+            else:
+                logger.warning("未能找到订单时间")
+                print("⚠️ 未找到订单时间")
+
+        except Exception as e:
+            logger.error(f"获取订单时间失败: {e}")
+            print(f"❌ 获取订单时间失败: {e}")
+
+    async def _get_receiver_info(self, result: Dict[str, str]) -> None:
+        """获取收货人信息（姓名、手机号、地址）"""
+        try:
+            # 尝试获取收货人信息区域
+            # 常见的选择器
+            receiver_selectors = [
+                '.receiver-info',
+                '[class*="receiver"]',
+                '[class*="address"]',
+                '.logistics-info',
+                '[class*="logistics"]'
+            ]
+
+            # 先尝试从结构化的元素中获取
+            for selector in receiver_selectors:
+                try:
+                    receiver_element = await self.page.query_selector(selector)
+                    if receiver_element:
+                        receiver_text = await receiver_element.text_content()
+                        if receiver_text:
+                            # 解析收货人信息
+                            import re
+
+                            # 提取姓名（通常在收货人或联系人后面）
+                            name_match = re.search(r'(?:收货人|联系人|姓名)[:：\s]*([^\s\d]+)', receiver_text)
+                            if name_match:
+                                result['receiver_name'] = name_match.group(1).strip()
+                                logger.info(f"找到收货人姓名: {result['receiver_name']}")
+                                print(f"👤 收货人: {result['receiver_name']}")
+
+                            # 提取手机号
+                            phone_match = re.search(r'1[3-9]\d{9}', receiver_text)
+                            if phone_match:
+                                result['receiver_phone'] = phone_match.group(0)
+                                logger.info(f"找到手机号: {result['receiver_phone']}")
+                                print(f"📱 手机号: {result['receiver_phone']}")
+
+                            # 提取地址
+                            # 地址通常较长，包含省市区街道等信息
+                            address_match = re.search(r'(?:收货地址|地址)[:：\s]*(.+?)(?:$|\n|收货人|联系人|手机)', receiver_text, re.DOTALL)
+                            if address_match:
+                                address = address_match.group(1).strip()
+                                # 清理地址中的多余空白
+                                address = re.sub(r'\s+', ' ', address)
+                                result['receiver_address'] = address
+                                logger.info(f"找到收货地址: {address}")
+                                print(f"📍 收货地址: {address}")
+
+                            # 如果找到了任何信息，就返回
+                            if any(key in result for key in ['receiver_name', 'receiver_phone', 'receiver_address']):
+                                return
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 获取收货人信息失败: {e}")
+                    continue
+
+            # 如果结构化方法失败，尝试从页面源码中查找
+            page_content = await self.page.content()
+            import re
+
+            # 提取姓名
+            if 'receiver_name' not in result:
+                name_match = re.search(r'(?:收货人|联系人|姓名)[:：\s]*([^\s\d<>]+?)(?:<|$|\s)', page_content)
+                if name_match:
+                    result['receiver_name'] = name_match.group(1).strip()
+                    logger.info(f"从页面源码找到收货人姓名: {result['receiver_name']}")
+                    print(f"👤 收货人: {result['receiver_name']}")
+
+            # 提取手机号
+            if 'receiver_phone' not in result:
+                phone_match = re.search(r'1[3-9]\d{9}', page_content)
+                if phone_match:
+                    result['receiver_phone'] = phone_match.group(0)
+                    logger.info(f"从页面源码找到手机号: {result['receiver_phone']}")
+                    print(f"📱 手机号: {result['receiver_phone']}")
+
+            # 提取地址
+            if 'receiver_address' not in result:
+                address_match = re.search(r'(?:收货地址|地址)[:：\s]*([^<>]+?)(?:<|$)', page_content)
+                if address_match:
+                    address = address_match.group(1).strip()
+                    address = re.sub(r'\s+', ' ', address)
+                    result['receiver_address'] = address
+                    logger.info(f"从页面源码找到收货地址: {address}")
+                    print(f"📍 收货地址: {address}")
+
+            # 记录未找到的信息
+            if 'receiver_name' not in result:
+                logger.warning("未能找到收货人姓名")
+                print("⚠️ 未找到收货人姓名")
+            if 'receiver_phone' not in result:
+                logger.warning("未能找到手机号")
+                print("⚠️ 未找到手机号")
+            if 'receiver_address' not in result:
+                logger.warning("未能找到收货地址")
+                print("⚠️ 未找到收货地址")
+
+        except Exception as e:
+            logger.error(f"获取收货人信息失败: {e}")
+            print(f"❌ 获取收货人信息失败: {e}")
 
     async def _check_browser_status(self) -> bool:
         """检查浏览器状态是否正常"""

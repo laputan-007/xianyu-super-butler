@@ -105,6 +105,10 @@ export interface Order {
   amount: string
   status: OrderStatus
   is_bargain?: boolean
+  system_shipped?: boolean  // 系统是否已发货
+  receiver_name?: string    // 收货人姓名
+  receiver_phone?: string   // 收货人手机号
+  receiver_address?: string // 收货地址
   created_at?: string
   updated_at?: string
 }

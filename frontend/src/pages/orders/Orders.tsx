@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
-import { getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus, type OrderDetail } from '@/api/orders'
+import { ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight, Sparkles, Edit } from 'lucide-react'
+import { getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus, updateOrder, type OrderDetail } from '@/api/orders'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
@@ -53,6 +53,11 @@ export function Orders() {
       status_text: string
     }>
   } | null>(null)
+  // 订单编辑
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null)
+  const [editFormData, setEditFormData] = useState<Partial<Order>>({})
+  const [submittingEdit, setSubmittingEdit] = useState(false)
 
   const loadOrders = async (page: number = currentPage) => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -125,6 +130,44 @@ export function Orders() {
       setDetailModalOpen(false)
     } finally {
       setLoadingDetail(false)
+    }
+  }
+
+  const handleEditOrder = (order: Order) => {
+    setEditingOrder(order)
+    setEditFormData({
+      item_id: order.item_id,
+      buyer_id: order.buyer_id,
+      spec_name: order.spec_name,
+      spec_value: order.spec_value,
+      quantity: order.quantity,
+      amount: order.amount,
+      status: order.status,
+      receiver_name: order.receiver_name,
+      receiver_phone: order.receiver_phone,
+      receiver_address: order.receiver_address,
+      system_shipped: order.system_shipped
+    })
+    setEditModalOpen(true)
+  }
+
+  const handleSubmitEdit = async () => {
+    if (!editingOrder) return
+
+    setSubmittingEdit(true)
+    try {
+      const result = await updateOrder(editingOrder.order_id, editFormData)
+      if (result.success) {
+        addToast({ type: 'success', message: '订单更新成功' })
+        setEditModalOpen(false)
+        loadOrders()
+      } else {
+        addToast({ type: 'error', message: result.message || '更新失败' })
+      }
+    } catch {
+      addToast({ type: 'error', message: '更新订单失败' })
+    } finally {
+      setSubmittingEdit(false)
     }
   }
 
@@ -293,6 +336,7 @@ export function Orders() {
                 <th>金额</th>
                 <th>状态</th>
                 <th>小刀</th>
+                <th>系统发货</th>
                 <th>账号ID</th>
                 <th>创建时间</th>
                 <th>操作</th>
@@ -301,7 +345,7 @@ export function Orders() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-8 text-gray-500">
+                  <td colSpan={11} className="text-center py-8 text-gray-500">
                     <div className="flex flex-col items-center gap-2">
                       <ShoppingCart className="w-12 h-12 text-gray-300" />
                       <p>暂无订单数据</p>
@@ -328,6 +372,13 @@ export function Orders() {
                           <span className="badge-gray">否</span>
                         )}
                       </td>
+                      <td>
+                        {order.system_shipped ? (
+                          <span className="badge-success">已发货</span>
+                        ) : (
+                          <span className="badge-gray">未发货</span>
+                        )}
+                      </td>
                       <td className="font-medium text-amber-600 dark:text-amber-400">{order.cookie_id}</td>
                       <td className="text-sm text-gray-500">
                         {order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '-'}
@@ -340,6 +391,13 @@ export function Orders() {
                             title="查看详情"
                           >
                             <Eye className="w-4 h-4 text-amber-500" />
+                          </button>
+                          <button
+                            onClick={() => handleEditOrder(order)}
+                            className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                            title="编辑"
+                          >
+                            <Edit className="w-4 h-4 text-blue-500" />
                           </button>
                           <button
                             onClick={() => handleDelete(order.id)}
@@ -616,6 +674,193 @@ export function Orders() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Edit Order Modal */}
+      {editModalOpen && editingOrder && (
+        <div className="modal-overlay" onClick={() => !submittingEdit && setEditModalOpen(false)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="modal-container max-w-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 className="modal-title">编辑订单</h3>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                disabled={submittingEdit}
+                className="modal-close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="modal-body max-h-[70vh] overflow-y-auto">
+              <div className="space-y-4">
+                {/* 订单ID（只读） */}
+                <div className="input-group">
+                  <label className="input-label">订单ID</label>
+                  <input
+                    type="text"
+                    value={editingOrder.order_id}
+                    disabled
+                    className="input-ios bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* 商品ID */}
+                <div className="input-group">
+                  <label className="input-label">商品ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.item_id || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, item_id: e.target.value })}
+                    className="input-ios"
+                  />
+                </div>
+
+                {/* 买家ID */}
+                <div className="input-group">
+                  <label className="input-label">买家ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.buyer_id || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, buyer_id: e.target.value })}
+                    className="input-ios"
+                  />
+                </div>
+
+                {/* 规格名称和值 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="input-group">
+                    <label className="input-label">规格名称</label>
+                    <input
+                      type="text"
+                      value={editFormData.spec_name || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, spec_name: e.target.value })}
+                      className="input-ios"
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">规格值</label>
+                    <input
+                      type="text"
+                      value={editFormData.spec_value || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, spec_value: e.target.value })}
+                      className="input-ios"
+                    />
+                  </div>
+                </div>
+
+                {/* 数量和金额 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="input-group">
+                    <label className="input-label">数量</label>
+                    <input
+                      type="number"
+                      value={editFormData.quantity || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, quantity: Number(e.target.value) })}
+                      className="input-ios"
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">金额</label>
+                    <input
+                      type="text"
+                      value={editFormData.amount || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                      className="input-ios"
+                      placeholder="¥99.99"
+                    />
+                  </div>
+                </div>
+
+                {/* 订单状态 */}
+                <div className="input-group">
+                  <label className="input-label">订单状态</label>
+                  <Select
+                    value={editFormData.status || ''}
+                    onChange={(value) => setEditFormData({ ...editFormData, status: value as any })}
+                    options={[
+                      { value: 'processing', label: '处理中' },
+                      { value: 'pending_ship', label: '待发货' },
+                      { value: 'shipped', label: '已发货' },
+                      { value: 'completed', label: '已完成' },
+                      { value: 'refunding', label: '退款中' },
+                      { value: 'cancelled', label: '已关闭' },
+                    ]}
+                  />
+                </div>
+
+                {/* 系统发货状态 */}
+                <div className="input-group">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editFormData.system_shipped || false}
+                      onChange={(e) => setEditFormData({ ...editFormData, system_shipped: e.target.checked })}
+                      className="w-4 h-4 text-amber-500 rounded"
+                    />
+                    <span className="input-label mb-0">系统已发货</span>
+                  </label>
+                </div>
+
+                {/* 收货人信息 */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">收货人信息</h4>
+
+                  <div className="input-group">
+                    <label className="input-label">收货人姓名</label>
+                    <input
+                      type="text"
+                      value={editFormData.receiver_name || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, receiver_name: e.target.value })}
+                      className="input-ios"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label">收货人手机号</label>
+                    <input
+                      type="text"
+                      value={editFormData.receiver_phone || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, receiver_phone: e.target.value })}
+                      className="input-ios"
+                      placeholder="13800138000"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label">收货地址</label>
+                    <textarea
+                      value={editFormData.receiver_address || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, receiver_address: e.target.value })}
+                      className="input-ios min-h-[80px] resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                onClick={() => setEditModalOpen(false)}
+                disabled={submittingEdit}
+                className="btn-ios-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSubmitEdit}
+                disabled={submittingEdit}
+                className="btn-ios-primary"
+              >
+                {submittingEdit ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

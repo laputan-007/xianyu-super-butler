@@ -4438,6 +4438,12 @@ class XianyuLive:
                     quantity = result.get('quantity', '')
                     amount = result.get('amount', '')
 
+                    # 获取订单时间和收货人信息
+                    order_time = result.get('order_time', None)
+                    receiver_name = result.get('receiver_name', None)
+                    receiver_phone = result.get('receiver_phone', None)
+                    receiver_address = result.get('receiver_address', None)
+
                     if spec_name and spec_value:
                         logger.info(f"【{self.cookie_id}】📋 规格名称: {spec_name}")
                         logger.info(f"【{self.cookie_id}】📝 规格值: {spec_value}")
@@ -4446,6 +4452,16 @@ class XianyuLive:
                         logger.warning(f"【{self.cookie_id}】未获取到有效的规格信息")
                         print(f"⚠️ 【{self.cookie_id}】订单 {order_id} 规格信息获取失败")
 
+                    # 记录订单时间和收货人信息
+                    if order_time:
+                        logger.info(f"【{self.cookie_id}】⏰ 订单时间: {order_time}")
+                    if receiver_name:
+                        logger.info(f"【{self.cookie_id}】👤 收货人: {receiver_name}")
+                    if receiver_phone:
+                        logger.info(f"【{self.cookie_id}】📱 手机号: {receiver_phone}")
+                    if receiver_address:
+                        logger.info(f"【{self.cookie_id}】📍 收货地址: {receiver_address}")
+
                     # 插入或更新订单信息到数据库
                     try:
                         # 检查cookie_id是否在cookies表中存在
@@ -4453,7 +4469,7 @@ class XianyuLive:
                         if not cookie_info:
                             logger.warning(f"Cookie ID {self.cookie_id} 不存在于cookies表中，丢弃订单 {order_id}")
                         else:
-                            # 先保存订单基本信息
+                            # 先保存订单基本信息（包含时间和收货人信息）
                             success = db_manager.insert_or_update_order(
                                 order_id=order_id,
                                 item_id=item_id,
@@ -4462,7 +4478,11 @@ class XianyuLive:
                                 spec_value=spec_value,
                                 quantity=quantity,
                                 amount=amount,
-                                cookie_id=self.cookie_id
+                                cookie_id=self.cookie_id,
+                                created_at=order_time,
+                                receiver_name=receiver_name,
+                                receiver_phone=receiver_phone,
+                                receiver_address=receiver_address
                             )
                             
                             # 使用订单状态处理器设置状态

@@ -5987,7 +5987,7 @@ def delete_order(order_id: str, current_user: Dict[str, Any] = Depends(get_curre
         order = db_manager.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="订单不存在")
-        
+
         if order.get('cookie_id') not in user_cookies:
             raise HTTPException(status_code=403, detail="无权删除此订单")
 
@@ -6004,6 +6004,65 @@ def delete_order(order_id: str, current_user: Dict[str, Any] = Depends(get_curre
     except Exception as e:
         log_with_user('error', f"删除订单失败: {str(e)}", current_user)
         raise HTTPException(status_code=500, detail=f"删除订单失败: {str(e)}")
+
+
+@app.put('/api/orders/{order_id}')
+def update_order(
+    order_id: str,
+    update_data: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """更新订单信息"""
+    try:
+        from db_manager import db_manager
+
+        user_id = current_user['user_id']
+        log_with_user('info', f"更新订单: {order_id}, 数据: {update_data}", current_user)
+
+        # 获取用户的所有Cookie
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        # 验证订单属于当前用户
+        order = db_manager.get_order_by_id(order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+
+        if order.get('cookie_id') not in user_cookies:
+            raise HTTPException(status_code=403, detail="无权修改此订单")
+
+        # 提取可更新的字段
+        allowed_fields = {
+            'item_id', 'buyer_id', 'spec_name', 'spec_value',
+            'quantity', 'amount', 'order_status',
+            'receiver_name', 'receiver_phone', 'receiver_address',
+            'system_shipped', 'created_at'
+        }
+
+        # 只保留允许更新的字段
+        filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
+
+        if not filtered_data:
+            raise HTTPException(status_code=400, detail="没有可更新的字段")
+
+        # 更新订单
+        success = db_manager.insert_or_update_order(
+            order_id=order_id,
+            **filtered_data
+        )
+
+        if success:
+            log_with_user('info', f"订单更新成功: {order_id}", current_user)
+            # 返回更新后的订单
+            updated_order = db_manager.get_order_by_id(order_id)
+            return {"success": True, "message": "更新成功", "data": updated_order}
+        else:
+            raise HTTPException(status_code=500, detail="更新失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"更新订单失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"更新订单失败: {str(e)}")
 
 
 @app.post('/api/orders/refresh')

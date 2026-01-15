@@ -760,6 +760,30 @@ class DBManager:
                     self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN is_bargain INTEGER DEFAULT 0")
                     logger.info("为orders表添加is_bargain字段")
 
+                # 检查orders表是否有receiver_name字段
+                try:
+                    self._execute_sql(cursor, "SELECT receiver_name FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    # receiver_name字段不存在，需要添加
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_name TEXT")
+                    logger.info("为orders表添加receiver_name字段")
+
+                # 检查orders表是否有receiver_phone字段
+                try:
+                    self._execute_sql(cursor, "SELECT receiver_phone FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    # receiver_phone字段不存在，需要添加
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_phone TEXT")
+                    logger.info("为orders表添加receiver_phone字段")
+
+                # 检查orders表是否有system_shipped字段（系统是否已发货）
+                try:
+                    self._execute_sql(cursor, "SELECT system_shipped FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    # system_shipped字段不存在，需要添加
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN system_shipped INTEGER DEFAULT 0")
+                    logger.info("为orders表添加system_shipped字段")
+
                 # 处理keywords表的唯一约束问题
                 # 由于SQLite不支持直接修改约束，我们需要重建表
                 self._migrate_keywords_table_constraints(cursor)
@@ -4492,7 +4516,9 @@ class DBManager:
     def insert_or_update_order(self, order_id: str, item_id: str = None, buyer_id: str = None,
                               spec_name: str = None, spec_value: str = None, quantity: str = None,
                               amount: str = None, order_status: str = None, cookie_id: str = None,
-                              is_bargain: bool = None, created_at: str = None):
+                              is_bargain: bool = None, created_at: str = None, receiver_name: str = None,
+                              receiver_phone: str = None, receiver_address: str = None,
+                              system_shipped: bool = None):
         """插入或更新订单信息"""
         with self.lock:
             try:
@@ -4546,6 +4572,18 @@ class DBManager:
                         # 更新创建时间（仅当明确提供时）
                         update_fields.append("created_at = ?")
                         update_values.append(created_at)
+                    if receiver_name is not None:
+                        update_fields.append("receiver_name = ?")
+                        update_values.append(receiver_name)
+                    if receiver_phone is not None:
+                        update_fields.append("receiver_phone = ?")
+                        update_values.append(receiver_phone)
+                    if receiver_address is not None:
+                        update_fields.append("receiver_address = ?")
+                        update_values.append(receiver_address)
+                    if system_shipped is not None:
+                        update_fields.append("system_shipped = ?")
+                        update_values.append(1 if system_shipped else 0)
 
                     if update_fields:
                         update_fields.append("updated_at = CURRENT_TIMESTAMP")
@@ -4560,20 +4598,26 @@ class DBManager:
                         # 使用提供的创建时间
                         cursor.execute('''
                         INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
-                                          quantity, amount, order_status, cookie_id, is_bargain, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          quantity, amount, order_status, cookie_id, is_bargain, created_at,
+                                          receiver_name, receiver_phone, receiver_address, system_shipped)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (order_id, item_id, buyer_id, spec_name, spec_value,
                               quantity, amount, order_status or 'unknown', cookie_id,
-                              1 if is_bargain else 0, created_at))
+                              1 if is_bargain else 0, created_at,
+                              receiver_name, receiver_phone, receiver_address,
+                              1 if system_shipped else 0))
                     else:
                         # 使用默认的创建时间（CURRENT_TIMESTAMP，UTC时间）
                         cursor.execute('''
                         INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
-                                          quantity, amount, order_status, cookie_id, is_bargain)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          quantity, amount, order_status, cookie_id, is_bargain,
+                                          receiver_name, receiver_phone, receiver_address, system_shipped)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (order_id, item_id, buyer_id, spec_name, spec_value,
                               quantity, amount, order_status or 'unknown', cookie_id,
-                              1 if is_bargain else 0))
+                              1 if is_bargain else 0,
+                              receiver_name, receiver_phone, receiver_address,
+                              1 if system_shipped else 0))
                     logger.info(f"插入新订单: {order_id}")
 
                 self.conn.commit()

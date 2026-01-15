@@ -1,4 +1,4 @@
-import { get, del } from '@/utils/request'
+import { get, del, put } from '@/utils/request'
 import type { Order, ApiResponse } from '@/types'
 
 // 订单详情类型
@@ -58,14 +58,29 @@ export const deleteOrder = async (id: string): Promise<ApiResponse> => {
   }
 }
 
+// 更新订单信息
+export const updateOrder = async (orderId: string, data: Partial<Order>): Promise<{success: boolean; message?: string; data?: Order}> => {
+  try {
+    const result = await put<{success: boolean; message?: string; data?: Order}>(`/api/orders/${orderId}`, data)
+    return {
+      success: result.success !== false,
+      message: result.message || '更新成功',
+      data: result.data
+    }
+  } catch (error) {
+    console.error('更新订单失败:', error)
+    return { success: false, message: '更新订单失败' }
+  }
+}
+
 // 批量删除订单
 export const batchDeleteOrders = async (_ids: string[]): Promise<ApiResponse> => {
   return { success: false, message: '后端暂未实现批量删除订单接口' }
 }
 
 // 更新订单状态
-export const updateOrderStatus = async (_id: string, _status: string): Promise<ApiResponse> => {
-  return { success: false, message: '后端暂未实现订单状态更新接口' }
+export const updateOrderStatus = async (id: string, status: string): Promise<ApiResponse> => {
+  return await updateOrder(id, { status: status as any })
 }
 
 // 刷新订单状态
