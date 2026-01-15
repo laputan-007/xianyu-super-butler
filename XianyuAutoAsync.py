@@ -1224,6 +1224,18 @@ class XianyuLive:
                         # 标记已发货（防重复）- 基于订单ID
                         self.mark_delivery_sent(order_id)
 
+                        # 更新订单数据库，标记系统已发货
+                        if order_id:
+                            try:
+                                from db_manager import db_manager
+                                db_manager.insert_or_update_order(
+                                    order_id=order_id,
+                                    system_shipped=True
+                                )
+                                logger.info(f'【{self.cookie_id}】✅ 订单 {order_id} 已标记为系统已发货 (system_shipped=1)')
+                            except Exception as db_e:
+                                logger.error(f'【{self.cookie_id}】❌ 更新订单system_shipped状态失败: {self._safe_str(db_e)}')
+
                         # 标记锁为持有状态，并启动延迟释放任务
                         self._lock_hold_info[lock_key] = {
                             'locked': True,

@@ -6300,6 +6300,232 @@ async def refresh_orders_status(
         raise HTTPException(status_code=500, detail=f"刷新订单状态失败: {str(e)}")
 
 
+@app.post('/api/orders/verify-all')
+async def verify_all_orders(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    全量核对所有订单数据
+    通过 Playwright 访问每个订单的详情页，更新时间、收货人信息等
+    """
+    try:
+        from db_manager import db_manager
+
+        user_id = current_user['user_id']
+        log_with_user('info', "开始全量核对订单数据", current_user)
+
+        # 获取用户的所有订单
+        user_cookies = db_manager.get_all_cookies(user_id)
+        all_orders = []
+        for cookie_id in user_cookies.keys():
+            orders = db_manager.get_orders_by_cookie(cookie_id, limit=10000)
+            all_orders.extend(orders)
+
+        total_count = len(all_orders)
+        success_count = 0
+        failed_count = 0
+
+        log_with_user('info', f"共有 {total_count} 个订单需要核对", current_user)
+
+        # 逐个核对订单
+        for order in all_orders:
+            order_id = order['order_id']
+            cookie_id = order.get('cookie_id')
+
+            try:
+                # 获取Cookie字符串
+                cookie_info = user_cookies.get(cookie_id)
+                if not cookie_info or 'cookies' not in cookie_info:
+                    log_with_user('warning', f"订单 {order_id} 的Cookie不存在，跳过", current_user)
+                    failed_count += 1
+                    continue
+
+                cookie_string = cookie_info['cookies']
+
+                # 使用 order_detail_fetcher 获取订单详情
+                from utils.order_detail_fetcher import fetch_order_detail_simple
+                result = await fetch_order_detail_simple(order_id, cookie_string, headless=True)
+
+                if result:
+                    # 提取所有信息
+                    update_data = {
+                        'order_id': order_id,
+                        'spec_name': result.get('spec_name') or None,
+                        'spec_value': result.get('spec_value') or None,
+                        'quantity': result.get('quantity') or None,
+                        'amount': result.get('amount') or None,
+                        'created_at': result.get('order_time') or None,
+                        'receiver_name': result.get('receiver_name') or None,
+                        'receiver_phone': result.get('receiver_phone') or None,
+                        'receiver_address': result.get('receiver_address') or None
+                    }
+
+                    # 更新订单
+                    success = db_manager.insert_or_update_order(**update_data)
+                    if success:
+                        success_count += 1
+                        log_with_user('debug', f"订单 {order_id} 核对并更新成功", current_user)
+                    else:
+                        failed_count += 1
+                        log_with_user('warning', f"订单 {order_id} 更新失败", current_user)
+                else:
+                    failed_count += 1
+                    log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
+
+            except Exception as e:
+                failed_count += 1
+                log_with_user('error', f"核对订单 {order_id} 时发生异常: {str(e)}", current_user)
+
+        log_with_user('info', f"订单核对完成: 成功{success_count}个, 失败{failed_count}个", current_user)
+
+        return {
+            "success": True,
+            "message": f"核对完成: 成功{success_count}个, 失败{failed_count}个",
+            "total": total_count,
+            "success": success_count,
+            "failed": failed_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"全量核对订单数据失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"全量核对订单数据失败: {str(e)}")
+
+
+@app.post('/api/orders/manual-ship')
+async def manual_ship_orders(
+    order_ids: List[str] = Body(..., description="订单ID列表"),
+    ship_mode: str = Body(..., description="发货模式: auto_match（自动匹配）或 custom（自定义文字）"),
+    custom_content: Optional[str] = Body(None, description="自定义发货内容（仅ship_mode=custom时需要）"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    手动补发货
+    支持单个或批量订单发货
+
+    发货模式：
+    - auto_match: 根据商品ID自动匹配发货规则
+    - custom: 使用自定义文字内容发货
+    """
+    try:
+        from db_manager import db_manager
+        import asyncio
+
+        user_id = current_user['user_id']
+        log_with_user('info', f"开始手动发货: 订单数量={len(order_ids)}, 模式={ship_mode}", current_user)
+
+        # 验证发货模式
+        if ship_mode not in ['auto_match', 'custom']:
+            raise HTTPException(status_code=400, detail="发货模式必须是 auto_match 或 custom")
+
+        if ship_mode == 'custom' and not custom_content:
+            raise HTTPException(status_code=400, detail="自定义模式下必须提供发货内容")
+
+        # 获取用户的所有Cookie
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        success_count = 0
+        failed_count = 0
+        results = []
+
+        # 遍历每个订单
+        for order_id in order_ids:
+            try:
+                # 获取订单信息
+                order = db_manager.get_order_by_id(order_id)
+                if not order:
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '订单不存在'
+                    })
+                    failed_count += 1
+                    continue
+
+                # 验证订单属于当前用户
+                cookie_id = order.get('cookie_id')
+                if cookie_id not in user_cookies:
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '无权操作此订单'
+                    })
+                    failed_count += 1
+                    continue
+
+                # 获取买家ID（用于发送消息）
+                buyer_id = order.get('buyer_id')
+                if not buyer_id:
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '订单缺少买家ID'
+                    })
+                    failed_count += 1
+                    continue
+
+                # 根据发货模式处理
+                if ship_mode == 'auto_match':
+                    # 自动匹配发货规则
+                    item_id = order.get('item_id')
+                    if not item_id:
+                        results.append({
+                            'order_id': order_id,
+                            'success': False,
+                            'message': '订单缺少商品ID，无法自动匹配'
+                        })
+                        failed_count += 1
+                        continue
+
+                    # TODO: 这里需要调用 XianyuAutoAsync 中的自动发货逻辑
+                    # 由于需要 WebSocket 连接，暂时返回提示
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '自动匹配发货功能需要WebSocket连接，请使用自定义发货或等待系统自动发货'
+                    })
+                    failed_count += 1
+
+                elif ship_mode == 'custom':
+                    # 自定义文字发货
+                    # TODO: 需要通过 WebSocket 发送消息
+                    # 这里需要获取对应的 XianyuAutoAsync 实例并发送消息
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '自定义发货功能需要WebSocket连接，暂未实现'
+                    })
+                    failed_count += 1
+
+                # 如果发货成功，更新 system_shipped 状态
+                # db_manager.insert_or_update_order(order_id=order_id, system_shipped=True)
+
+            except Exception as e:
+                results.append({
+                    'order_id': order_id,
+                    'success': False,
+                    'message': str(e)
+                })
+                failed_count += 1
+                log_with_user('error', f"发货订单 {order_id} 时发生异常: {str(e)}", current_user)
+
+        log_with_user('info', f"手动发货完成: 成功{success_count}个, 失败{failed_count}个", current_user)
+
+        return {
+            "success": True,
+            "message": f"发货完成: 成功{success_count}个, 失败{failed_count}个",
+            "total": len(order_ids),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "results": results
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"手动发货失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"手动发货失败: {str(e)}")
+
+
 # ==================== 前端 SPA Catch-All 路由 ====================
 # 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问
 # 这样用户直接访问 /dashboard、/accounts 等前端路由时，会返回 index.html

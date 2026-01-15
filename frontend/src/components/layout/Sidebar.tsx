@@ -22,6 +22,7 @@ import {
   PanelLeft,
   AlertTriangle,
   Activity,
+  PackageCheck,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -39,6 +40,7 @@ const mainNavItems: NavItem[] = [
   { icon: Users, label: '账号管理', path: '/accounts' },
   { icon: Package, label: '商品管理', path: '/items' },
   { icon: ShoppingCart, label: '订单管理', path: '/orders' },
+  { icon: PackageCheck, label: '补发货', path: '/manual-ship' },
   { icon: MessageSquare, label: '自动回复', path: '/keywords' },
   { icon: MessageCircle, label: '指定商品回复', path: '/item-replies' },
   { icon: CreditCard, label: '卡券管理', path: '/cards' },
