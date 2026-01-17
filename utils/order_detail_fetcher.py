@@ -648,6 +648,20 @@ class OrderDetailFetcher:
         try:
             import re
 
+            # 调试：打印页面文本，看看有没有收货地址
+            body_text = await self.page.inner_text('body')
+            has_address = '收货地址' in body_text
+            print(f"[DEBUG] 页面中是否包含'收货地址': {has_address}")
+            if has_address:
+                # 找到包含收货地址的行
+                lines = body_text.split('\n')
+                for i, line in enumerate(lines):
+                    if '收货地址' in line:
+                        print(f"[DEBUG] 找到收货地址行: {line}")
+                        if i + 1 < len(lines):
+                            print(f"[DEBUG] 下一行: {lines[i + 1]}")
+                        break
+
             # 方法1: 使用正确的选择器获取收货地址
             # 闲鱼订单详情页面的收货地址格式：姓名 手机号 地址（都在一个元素里）
             try:

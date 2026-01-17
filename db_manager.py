@@ -244,6 +244,17 @@ class DBManager:
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN is_bargain INTEGER DEFAULT 0")
                 logger.info("orders 表 is_bargain 列添加完成")
 
+            # 检查并添加收货人信息列
+            try:
+                self._execute_sql(cursor, "SELECT receiver_name FROM orders LIMIT 1")
+            except sqlite3.OperationalError:
+                # receiver_name 列不存在，需要添加
+                logger.info("正在为 orders 表添加收货人信息列...")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_name TEXT DEFAULT ''")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_phone TEXT DEFAULT ''")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT DEFAULT ''")
+                logger.info("orders 表收货人信息列添加完成")
+
             # 检查并添加 user_id 列（用于数据库迁移）
             try:
                 self._execute_sql(cursor, "SELECT user_id FROM cards LIMIT 1")
@@ -775,6 +786,14 @@ class DBManager:
                     # receiver_phone字段不存在，需要添加
                     self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_phone TEXT")
                     logger.info("为orders表添加receiver_phone字段")
+
+                # 检查orders表是否有receiver_address字段
+                try:
+                    self._execute_sql(cursor, "SELECT receiver_address FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    # receiver_address字段不存在，需要添加
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT")
+                    logger.info("为orders表添加receiver_address字段")
 
                 # 检查orders表是否有system_shipped字段（系统是否已发货）
                 try:
@@ -4685,7 +4704,8 @@ class DBManager:
                 cursor = self.conn.cursor()
                 cursor.execute('''
                 SELECT order_id, item_id, buyer_id, spec_name, spec_value,
-                       quantity, amount, order_status, is_bargain, created_at, updated_at
+                       quantity, amount, order_status, is_bargain, created_at, updated_at,
+                       receiver_name, receiver_phone, receiver_address
                 FROM orders WHERE cookie_id = ?
                 ORDER BY created_at DESC LIMIT ?
                 ''', (cookie_id, limit))
@@ -4704,7 +4724,10 @@ class DBManager:
                         'status': row[7],
                         'is_bargain': bool(row[8]) if row[8] is not None else False,
                         'created_at': row[9],
-                        'updated_at': row[10]
+                        'updated_at': row[10],
+                        'receiver_name': row[11],
+                        'receiver_phone': row[12],
+                        'receiver_address': row[13]
                     })
 
                 return orders

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight, Sparkles, Edit } from 'lucide-react'
-import { getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus, updateOrder, type OrderDetail } from '@/api/orders'
+import { getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus, updateOrder, refreshSingleOrder, type OrderDetail } from '@/api/orders'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
@@ -58,6 +58,8 @@ export function Orders() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [editFormData, setEditFormData] = useState<Partial<Order>>({})
   const [submittingEdit, setSubmittingEdit] = useState(false)
+  // 单个订单刷新状态
+  const [refreshingOrders, setRefreshingOrders] = useState<Set<string>>(new Set())
 
   const loadOrders = async (page: number = currentPage) => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -168,6 +170,35 @@ export function Orders() {
       addToast({ type: 'error', message: '更新订单失败' })
     } finally {
       setSubmittingEdit(false)
+    }
+  }
+
+  const handleRefreshSingle = async (orderId: string) => {
+    if (refreshingOrders.has(orderId)) return
+
+    setRefreshingOrders(prev => new Set(prev).add(orderId))
+
+    try {
+      const result = await refreshSingleOrder(orderId)
+
+      if (result.success) {
+        addToast({
+          type: 'success',
+          message: result.message || (result.refreshed ? '订单已刷新完整数据' : '订单更新成功')
+        })
+        // 刷新订单列表
+        await loadOrders(currentPage)
+      } else {
+        addToast({ type: 'error', message: result.message || '刷新失败' })
+      }
+    } catch {
+      addToast({ type: 'error', message: '刷新订单失败' })
+    } finally {
+      setRefreshingOrders(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(orderId)
+        return newSet
+      })
     }
   }
 
@@ -391,6 +422,14 @@ export function Orders() {
                             title="查看详情"
                           >
                             <Eye className="w-4 h-4 text-amber-500" />
+                          </button>
+                          <button
+                            onClick={() => handleRefreshSingle(order.order_id)}
+                            disabled={refreshingOrders.has(order.order_id)}
+                            className="p-2 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="刷新订单"
+                          >
+                            <RefreshCw className={`w-4 h-4 text-green-500 ${refreshingOrders.has(order.order_id) ? 'animate-spin' : ''}`} />
                           </button>
                           <button
                             onClick={() => handleEditOrder(order)}

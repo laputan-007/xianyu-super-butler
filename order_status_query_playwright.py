@@ -134,9 +134,13 @@ class OrderStatusQueryPlaywright:
 
                                 # 提取收货地址信息
                                 address_info = component.get('data', {}).get('addressInfo', {})
+                                print(f"[DEBUG] address_info: {address_info}")
+                                receiver_name = None
+                                receiver_phone = None
                                 if address_info:
                                     # 构建完整地址
                                     receiver_name = address_info.get('receiverName', '')
+                                    receiver_phone = address_info.get('receiverMobile', '')
                                     province = address_info.get('province', '')
                                     city = address_info.get('city', '')
                                     district = address_info.get('district', '')
@@ -182,6 +186,8 @@ class OrderStatusQueryPlaywright:
                             'item_title': item_title,
                             'price': price,
                             'can_rate': can_rate,
+                            'receiver_name': receiver_name,
+                            'receiver_phone': receiver_phone,
                             'receiver_address': receiver_address,
                             'receiver_city': receiver_city,
                             'raw_data': order_data

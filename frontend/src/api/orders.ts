@@ -126,3 +126,14 @@ export const refreshOrdersStatus = async (
     return { success: false, message: '刷新订单状态失败' }
   }
 }
+
+// 刷新单个订单（自动获取完整数据）
+export const refreshSingleOrder = async (orderId: string): Promise<{ success: boolean; message?: string; data?: Order; refreshed?: boolean }> => {
+  try {
+    const result = await put<{ success: boolean; message?: string; data?: Order; refreshed?: boolean }>(`/api/orders/${orderId}`, {})
+    return result
+  } catch (error) {
+    console.error('刷新订单失败:', error)
+    return { success: false, message: '刷新订单失败' }
+  }
+}
