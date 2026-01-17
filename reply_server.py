@@ -6073,74 +6073,67 @@ async def update_order(
             if cookie_string:
 
                 try:
-                    # 使用OrderStatusQueryPlaywright获取订单状态、买家ID、商品ID、收货人信息
-                    status_query = OrderStatusQueryPlaywright(cookie_string, cookie_id, headless=True)
-                    status_result = await status_query.query_order_status(order_id)
-
-                    # 初始化变量
-                    new_status = None
-                    buyer_id = None
-                    item_id = None
-                    receiver_name_from_api = None
-                    receiver_phone_from_api = None
-                    receiver_address_from_api = None
-
-                    if status_result.get('success'):
-                        raw_data = status_result.get('raw_data', {})
-
-                        # 提取订单状态和买家ID
-                        new_status_code = status_result.get('order_status')
-                        new_status_text = status_result.get('status_text', '')
-
-                        # 状态码映射
-                        status_mapping = {
-                            1: 'processing',
-                            2: 'pending_ship',
-                            3: 'shipped',
-                            4: 'completed',
-                            5: 'refunding',
-                            6: 'cancelled',
-                            7: 'refunding',
-                            8: 'cancelled',
-                            9: 'refunding',
-                            10: 'cancelled',
-                        }
-                        new_status = status_mapping.get(new_status_code, 'unknown')
-
-                        # 根据状态文本智能识别
-                        if new_status == 'unknown':
-                            if '退款' in new_status_text and '成功' in new_status_text:
-                                new_status = 'cancelled'
-                            elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
-                                new_status = 'cancelled'
-                            elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
-                                new_status = 'completed'
-                            elif '退款' in new_status_text:
-                                new_status = 'refunding'
-
-                        # 提取买家ID和商品ID
-                        buyer_id = str(raw_data.get('peerUserId', ''))
-                        item_id = str(raw_data.get('itemId', ''))
-
-                        # 提取收货人信息（从API响应中）
-                        receiver_name_from_api = status_result.get('receiver_name')
-                        receiver_phone_from_api = status_result.get('receiver_phone')
-                        receiver_address_from_api = status_result.get('receiver_address')
-
-                        log_with_user('info', f"订单 {order_id} 状态: {new_status}, 买家: {buyer_id}, 商品: {item_id}, 收货人: {receiver_name_from_api}", current_user)
-
-                    # 使用fetch_order_detail_simple获取规格、数量、金额
+                    # 先使用fetch_order_detail_simple获取完整数据（包括收货人信息）
+                    # 这样可以减少一次浏览器启动
                     detail_result = await fetch_order_detail_simple(
                         order_id=order_id,
                         cookie_string=cookie_string,
                         headless=True
                     )
 
+                    # 初始化变量
+                    new_status = None
+                    buyer_id = None
+                    item_id = None
+
                     if detail_result:
-                        log_with_user('info', f"成功获取订单 {order_id} 的完整数据", current_user)
+                        log_with_user('info', f"成功获取订单 {order_id} 的基础数据（收货人信息等）", current_user)
+
+                        # 只使用OrderStatusQueryPlaywright获取订单状态和买家ID、商品ID（API能更准确获取）
+                        status_query = OrderStatusQueryPlaywright(cookie_string, cookie_id, headless=True)
+                        status_result = await status_query.query_order_status(order_id)
+
+                        if status_result.get('success'):
+                            raw_data = status_result.get('raw_data', {})
+
+                            # 提取订单状态和买家ID
+                            new_status_code = status_result.get('order_status')
+                            new_status_text = status_result.get('status_text', '')
+
+                            # 状态码映射
+                            status_mapping = {
+                                1: 'processing',
+                                2: 'pending_ship',
+                                3: 'shipped',
+                                4: 'completed',
+                                5: 'refunding',
+                                6: 'cancelled',
+                                7: 'refunding',
+                                8: 'cancelled',
+                                9: 'refunding',
+                                10: 'cancelled',
+                            }
+                            new_status = status_mapping.get(new_status_code, 'unknown')
+
+                            # 根据状态文本智能识别
+                            if new_status == 'unknown':
+                                if '退款' in new_status_text and '成功' in new_status_text:
+                                    new_status = 'cancelled'
+                                elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
+                                    new_status = 'cancelled'
+                                elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
+                                    new_status = 'completed'
+                                elif '退款' in new_status_text:
+                                    new_status = 'refunding'
+
+                            # 提取买家ID和商品ID
+                            buyer_id = str(raw_data.get('peerUserId', ''))
+                            item_id = str(raw_data.get('itemId', ''))
+
+                            log_with_user('info', f"订单 {order_id} 状态: {new_status}, 买家: {buyer_id}, 商品: {item_id}", current_user)
 
                         # 构建要更新的完整数据
-                        # 优先使用API拦截的收货人信息，如果API没有则使用DOM解析的
+                        # 收货人信息优先使用DOM解析的（更可靠），API中通常为空
                         refresh_data = {
                             'order_id': order_id,
                             'item_id': item_id or order.get('item_id'),
@@ -6151,32 +6144,17 @@ async def update_order(
                             'quantity': detail_result.get('quantity') or None,
                             'amount': detail_result.get('amount') or None,
                             'created_at': detail_result.get('order_time') or None,
-                            # 优先使用API拦截获取的收货人信息
-                            'receiver_name': receiver_name_from_api or detail_result.get('receiver_name') or None,
-                            'receiver_phone': receiver_phone_from_api or detail_result.get('receiver_phone') or None,
-                            'receiver_address': receiver_address_from_api or detail_result.get('receiver_address') or None
+                            # 使用DOM解析获取的收货人信息（API中通常为空）
+                            'receiver_name': detail_result.get('receiver_name') or None,
+                            'receiver_phone': detail_result.get('receiver_phone') or None,
+                            'receiver_address': detail_result.get('receiver_address') or None
                         }
 
                         # 先更新从playwright获取的完整数据
                         db_manager.insert_or_update_order(**refresh_data)
                         log_with_user('info', f"订单 {order_id} 完整数据已更新到数据库", current_user)
                     else:
-                        # 即使DOM解析失败，也尝试更新API拦截获取的数据
-                        if receiver_name_from_api or receiver_phone_from_api or receiver_address_from_api:
-                            log_with_user('info', f"订单 {order_id} DOM解析失败，但API拦截获取了收货人信息", current_user)
-                            api_data = {
-                                'order_id': order_id,
-                                'item_id': item_id or order.get('item_id'),
-                                'buyer_id': buyer_id or order.get('buyer_id'),
-                                'order_status': new_status or order.get('order_status'),
-                                'receiver_name': receiver_name_from_api or None,
-                                'receiver_phone': receiver_phone_from_api or None,
-                                'receiver_address': receiver_address_from_api or None
-                            }
-                            db_manager.insert_or_update_order(**api_data)
-                            log_with_user('info', f"订单 {order_id} API数据已更新到数据库", current_user)
-                        else:
-                            log_with_user('warning', f"订单 {order_id} 详情获取失败，继续使用现有数据", current_user)
+                        log_with_user('warning', f"订单 {order_id} 详情获取失败，继续使用现有数据", current_user)
 
                 except Exception as e:
                     log_with_user('error', f"获取订单 {order_id} 详情时出错: {str(e)}", current_user)
@@ -6335,7 +6313,8 @@ async def refresh_orders_status(
                     failed_count += 1
                     continue
 
-                # 使用订单详情获取器获取完整信息（包括买家ID、金额等）
+                # 使用订单详情获取器获取完整信息（包括买家ID、金额、收货人信息）
+                # 注意：fetch_order_detail_simple 已经能获取所有需要的数据，无需再调用 OrderStatusQueryPlaywright
                 order_detail = await fetch_order_detail_simple(order_id, cookies_str, headless=True)
 
                 if order_detail:
@@ -6344,8 +6323,11 @@ async def refresh_orders_status(
                     spec_value = order_detail.get('spec_value', '')
                     quantity = order_detail.get('quantity', '')
                     amount = order_detail.get('amount', '')
+                    receiver_name = order_detail.get('receiver_name', '')
+                    receiver_phone = order_detail.get('receiver_phone', '')
+                    receiver_address = order_detail.get('receiver_address', '')
 
-                    # 同时使用状态查询获取订单状态和完整信息
+                    # 只使用状态查询获取订单状态和买家ID（因为DOM解析无法获取这些）
                     query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
                     status_result = await query.query_order_status(order_id)
 
@@ -6450,7 +6432,10 @@ async def refresh_orders_status(
                         order_status=new_status if new_status != current_status else None,
                         is_bargain=is_bargain if is_bargain is not None else None,
                         cookie_id=cookie_id,
-                        created_at=created_at  # 添加创建时间（从API提取的北京时间）
+                        created_at=created_at,  # 添加创建时间（从API提取的北京时间）
+                        receiver_name=receiver_name if receiver_name else None,
+                        receiver_phone=receiver_phone if receiver_phone else None,
+                        receiver_address=receiver_address if receiver_address else None
                     )
 
                     if success:
