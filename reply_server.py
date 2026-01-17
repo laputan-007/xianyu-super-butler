@@ -6043,8 +6043,7 @@ async def update_order(
     """
     try:
         from db_manager import db_manager
-        from utils.order_detail_fetcher import fetch_order_detail_simple
-        from order_status_query_playwright import OrderStatusQueryPlaywright
+        from utils.order_fetcher_optimized import fetch_order_complete
 
         user_id = current_user['user_id']
         log_with_user('info', f"更新订单: {order_id}, 数据: {update_data}", current_user)
@@ -6073,84 +6072,55 @@ async def update_order(
             if cookie_string:
 
                 try:
-                    # 先使用fetch_order_detail_simple获取完整数据（包括收货人信息）
-                    # 这样可以减少一次浏览器启动
-                    detail_result = await fetch_order_detail_simple(
+                    # 使用优化后的合并函数：一次浏览器访问获取所有数据
+                    log_with_user('info', f"使用优化方法获取订单 {order_id} 的完整数据", current_user)
+
+                    complete_result = await fetch_order_complete(
                         order_id=order_id,
+                        cookie_id=cookie_id,
                         cookie_string=cookie_string,
-                        headless=True
+                        timeout=30,
+                        headless=True,
+                        use_pool=True  # 使用浏览器池
                     )
 
-                    # 初始化变量
-                    new_status = None
-                    buyer_id = None
-                    item_id = None
+                    if complete_result:
+                        log_with_user('info', f"成功获取订单 {order_id} 的完整数据（一次浏览器调用）", current_user)
 
-                    if detail_result:
-                        log_with_user('info', f"成功获取订单 {order_id} 的基础数据（收货人信息等）", current_user)
-
-                        # 只使用OrderStatusQueryPlaywright获取订单状态和买家ID、商品ID（API能更准确获取）
-                        status_query = OrderStatusQueryPlaywright(cookie_string, cookie_id, headless=True)
-                        status_result = await status_query.query_order_status(order_id)
-
-                        if status_result.get('success'):
-                            raw_data = status_result.get('raw_data', {})
-
-                            # 提取订单状态和买家ID
-                            new_status_code = status_result.get('order_status')
-                            new_status_text = status_result.get('status_text', '')
-
-                            # 状态码映射
+                        # 状态码映射（如果需要转换）
+                        order_status = complete_result.get('order_status', 'unknown')
+                        if order_status and order_status.isdigit():
                             status_mapping = {
-                                1: 'processing',
-                                2: 'pending_ship',
-                                3: 'shipped',
-                                4: 'completed',
-                                5: 'refunding',
-                                6: 'cancelled',
-                                7: 'refunding',
-                                8: 'cancelled',
-                                9: 'refunding',
-                                10: 'cancelled',
+                                '1': 'processing',
+                                '2': 'pending_ship',
+                                '3': 'shipped',
+                                '4': 'completed',
+                                '5': 'refunding',
+                                '6': 'cancelled',
+                                '7': 'refunding',
+                                '8': 'cancelled',
+                                '9': 'refunding',
+                                '10': 'cancelled',
                             }
-                            new_status = status_mapping.get(new_status_code, 'unknown')
-
-                            # 根据状态文本智能识别
-                            if new_status == 'unknown':
-                                if '退款' in new_status_text and '成功' in new_status_text:
-                                    new_status = 'cancelled'
-                                elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
-                                    new_status = 'cancelled'
-                                elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
-                                    new_status = 'completed'
-                                elif '退款' in new_status_text:
-                                    new_status = 'refunding'
-
-                            # 提取买家ID和商品ID
-                            buyer_id = str(raw_data.get('peerUserId', ''))
-                            item_id = str(raw_data.get('itemId', ''))
-
-                            log_with_user('info', f"订单 {order_id} 状态: {new_status}, 买家: {buyer_id}, 商品: {item_id}", current_user)
+                            order_status = status_mapping.get(order_status, order_status)
 
                         # 构建要更新的完整数据
-                        # 收货人信息优先使用DOM解析的（更可靠），API中通常为空
                         refresh_data = {
                             'order_id': order_id,
-                            'item_id': item_id or order.get('item_id'),
-                            'buyer_id': buyer_id or order.get('buyer_id'),
-                            'order_status': new_status or order.get('order_status'),
-                            'spec_name': detail_result.get('spec_name') or None,
-                            'spec_value': detail_result.get('spec_value') or None,
-                            'quantity': detail_result.get('quantity') or None,
-                            'amount': detail_result.get('amount') or None,
-                            'created_at': detail_result.get('order_time') or None,
-                            # 使用DOM解析获取的收货人信息（API中通常为空）
-                            'receiver_name': detail_result.get('receiver_name') or None,
-                            'receiver_phone': detail_result.get('receiver_phone') or None,
-                            'receiver_address': detail_result.get('receiver_address') or None
+                            'item_id': complete_result.get('item_id') or order.get('item_id'),
+                            'buyer_id': complete_result.get('buyer_id') or order.get('buyer_id'),
+                            'order_status': order_status or order.get('order_status'),
+                            'spec_name': complete_result.get('spec_name') or None,
+                            'spec_value': complete_result.get('spec_value') or None,
+                            'quantity': complete_result.get('quantity') or None,
+                            'amount': complete_result.get('amount') or None,
+                            'created_at': complete_result.get('order_time') or None,
+                            'receiver_name': complete_result.get('receiver_name') or None,
+                            'receiver_phone': complete_result.get('receiver_phone') or None,
+                            'receiver_address': complete_result.get('receiver_address') or None
                         }
 
-                        # 先更新从playwright获取的完整数据
+                        # 更新数据库
                         db_manager.insert_or_update_order(**refresh_data)
                         log_with_user('info', f"订单 {order_id} 完整数据已更新到数据库", current_user)
                     else:
@@ -6234,10 +6204,10 @@ async def refresh_orders_status(
     """
     try:
         from db_manager import db_manager
-        from order_status_query_playwright import OrderStatusQueryPlaywright
+        from utils.order_fetcher_optimized import process_orders_batch
 
         user_id = current_user['user_id']
-        log_with_user('info', f"开始智能刷新订单状态 (cookie_id={cookie_id}, status={status})", current_user)
+        log_with_user('info', f"开始智能刷新订单状态（优化版：并发处理） (cookie_id={cookie_id}, status={status})", current_user)
 
         # 获取用户的所有Cookie
         user_cookies = db_manager.get_all_cookies(user_id)
@@ -6290,16 +6260,128 @@ async def refresh_orders_status(
 
         log_with_user('info', f"找到 {len(orders_to_refresh)} 个需要刷新的订单", current_user)
 
+        if not orders_to_refresh:
+            return JSONResponse({
+                "success": True,
+                "message": "没有需要刷新的订单",
+                "summary": {
+                    "total": 0,
+                    "updated": 0,
+                    "no_change": 0,
+                    "failed": 0
+                },
+                "results": []
+            })
+
         # 刷新订单信息（包括状态、买家ID、金额等）
         updated_count = 0
         failed_count = 0
         no_change_count = 0
         refresh_results = []
 
-        # 导入订单详情获取器
-        from utils.order_detail_fetcher import fetch_order_detail_simple
-
+        # 按cookie_id分组订单（因为每个cookie需要单独的浏览器实例）
+        orders_by_cookie = {}
         for order_info in orders_to_refresh:
+            cid = order_info['cookie_id']
+            if cid not in orders_by_cookie:
+                orders_by_cookie[cid] = []
+            orders_by_cookie[cid].append(order_info)
+
+        # 对每个cookie的订单进行并发批量处理
+        for cid, cookie_orders in orders_by_cookie.items():
+            cookies_str = user_cookies[cid]
+            if not cookies_str:
+                log_with_user('warning', f"Cookie {cid} 的值为空，跳过", current_user)
+                failed_count += len(cookie_orders)
+                continue
+
+            # 提取订单ID列表
+            order_ids = [o['order_id'] for o in cookie_orders]
+            log_with_user('info', f"使用并发处理Cookie {cid} 的 {len(order_ids)} 个订单", current_user)
+
+            # 并发批量处理（一次浏览器调用获取所有数据）
+            batch_results = await process_orders_batch(
+                order_ids=order_ids,
+                cookie_id=cid,
+                cookie_string=cookies_str,
+                max_concurrent=5,  # 并发5个
+                timeout=30,
+                headless=True,
+                use_pool=True  # 使用浏览器池
+            )
+
+            # 处理结果并更新数据库
+            for i, result in enumerate(batch_results):
+                order_info = cookie_orders[i]
+                order_id = order_info['order_id']
+                current_status = order_info['current_status']
+
+                if result and not result.get('error'):
+                    # 状态码映射
+                    order_status = result.get('order_status', 'unknown')
+                    if order_status and str(order_status).isdigit():
+                        status_mapping = {
+                            '1': 'processing',
+                            '2': 'pending_ship',
+                            '3': 'shipped',
+                            '4': 'completed',
+                            '5': 'refunding',
+                            '6': 'cancelled',
+                            '7': 'refunding',
+                            '8': 'cancelled',
+                            '9': 'refunding',
+                            '10': 'cancelled',
+                        }
+                        order_status = status_mapping.get(str(order_status), order_status)
+
+                    # 更新数据库
+                    success = db_manager.insert_or_update_order(
+                        order_id=order_id,
+                        item_id=result.get('item_id') or None,
+                        buyer_id=result.get('buyer_id') or None,
+                        spec_name=result.get('spec_name') or None,
+                        spec_value=result.get('spec_value') or None,
+                        quantity=result.get('quantity') or None,
+                        amount=result.get('amount') or None,
+                        order_status=order_status if order_status != current_status else None,
+                        cookie_id=cid,
+                        created_at=result.get('order_time') or None,
+                        receiver_name=result.get('receiver_name') or None,
+                        receiver_phone=result.get('receiver_phone') or None,
+                        receiver_address=result.get('receiver_address') or None
+                    )
+
+                    if success:
+                        # 检查是否有更新
+                        has_changes = (
+                            order_status != current_status or
+                            result.get('buyer_id') or
+                            result.get('amount')
+                        )
+
+                        if has_changes:
+                            updated_count += 1
+                            refresh_results.append({
+                                'order_id': order_id,
+                                'old_status': current_status,
+                                'new_status': order_status,
+                                'status_text': result.get('status_text', '')
+                            })
+                            log_with_user('info', f"订单 {order_id} 已更新 | {current_status} -> {order_status}", current_user)
+                        else:
+                            no_change_count += 1
+                    else:
+                        failed_count += 1
+                        log_with_user('error', f"订单 {order_id} 更新失败", current_user)
+                else:
+                    failed_count += 1
+                    error_msg = result.get('error', '未知错误') if result else '未知错误'
+                    log_with_user('warning', f"订单 {order_id} 获取失败: {error_msg}", current_user)
+
+        # 由于我们已经处理完所有订单，跳过原来的循环
+        # 下面的代码需要删除，所以我们需要找到循环结束的位置
+        if False:  # 这个if永远不会执行，只是为了保持代码结构
+            for order_info in orders_to_refresh:
             order_id = order_info['order_id']
             cookie_id = order_info['cookie_id']
             current_status = order_info['current_status']
