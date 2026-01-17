@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Package, RefreshCw, Send, MessageSquare, CheckSquare, Square } from 'lucide-react'
 import { getOrders } from '@/api/orders'
-import { verifyAllOrders, manualShipOrders } from '@/api/manual-ship'
+import { manualShipOrders } from '@/api/manual-ship'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
@@ -23,7 +23,6 @@ export function ManualShip() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState('')
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
-  const [verifying, setVerifying] = useState(false)
   const [shipping, setShipping] = useState(false)
   const [customContent, setCustomContent] = useState('')
   const [showCustomModal, setShowCustomModal] = useState(false)
@@ -83,28 +82,6 @@ export function ManualShip() {
       newSelected.add(orderId)
     }
     setSelectedOrders(newSelected)
-  }
-
-  const handleVerifyAll = async () => {
-    if (!confirm('确定要核对所有订单数据吗？这可能需要较长时间。')) return
-
-    setVerifying(true)
-    try {
-      const result = await verifyAllOrders()
-      if (result.success) {
-        addToast({
-          type: 'success',
-          message: `核对完成：成功${result.success_count}个，失败${result.failed_count}个`
-        })
-        loadPendingOrders()
-      } else {
-        addToast({ type: 'error', message: result.message || '核对失败' })
-      }
-    } catch {
-      addToast({ type: 'error', message: '核对订单数据失败' })
-    } finally {
-      setVerifying(false)
-    }
   }
 
   const handleAutoShipSingle = async (orderId: string) => {
@@ -227,14 +204,6 @@ export function ManualShip() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             刷新列表
-          </button>
-          <button
-            onClick={handleVerifyAll}
-            disabled={verifying}
-            className="btn-ios-primary w-full sm:w-auto"
-          >
-            <RefreshCw className={`w-4 h-4 ${verifying ? 'animate-spin' : ''}`} />
-            {verifying ? '核对中...' : '全量核对订单数据'}
           </button>
         </div>
       </div>

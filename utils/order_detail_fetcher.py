@@ -233,8 +233,20 @@ class OrderDetailFetcher:
                         except (ValueError, TypeError):
                             amount_valid = False
 
-                    if amount_valid:
-                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
+                    # 检查收货人信息是否完整
+                    receiver_name = existing_order.get('receiver_name', '')
+                    receiver_phone = existing_order.get('receiver_phone', '')
+                    receiver_address = existing_order.get('receiver_address', '')
+
+                    receiver_info_complete = (
+                        receiver_name and receiver_name != 'unknown' and
+                        receiver_phone and receiver_phone != 'unknown' and
+                        receiver_address and receiver_address != 'unknown'
+                    )
+
+                    # 只有金额有效且收货人信息完整时才使用缓存
+                    if amount_valid and receiver_info_complete:
+                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且数据完整（金额:{amount}, 收货人:{receiver_name}），直接返回缓存数据")
                         print(f"✅ 订单 {order_id} 使用缓存数据，跳过浏览器获取")
 
                         # 构建返回格式，与浏览器获取的格式保持一致
@@ -246,19 +258,31 @@ class OrderDetailFetcher:
                                 'spec_name': existing_order.get('spec_name', ''),
                                 'spec_value': existing_order.get('spec_value', ''),
                                 'quantity': existing_order.get('quantity', ''),
-                                'amount': existing_order.get('amount', '')
+                                'amount': existing_order.get('amount', ''),
+                                'order_time': existing_order.get('created_at', ''),
+                                'receiver_name': receiver_name,
+                                'receiver_phone': receiver_phone,
+                                'receiver_address': receiver_address,
                             },
                             'spec_name': existing_order.get('spec_name', ''),
                             'spec_value': existing_order.get('spec_value', ''),
                             'quantity': existing_order.get('quantity', ''),
                             'amount': existing_order.get('amount', ''),
+                            'order_time': existing_order.get('created_at', ''),
+                            'receiver_name': receiver_name,
+                            'receiver_phone': receiver_phone,
+                            'receiver_address': receiver_address,
                             'timestamp': time.time(),
                             'from_cache': True  # 标记数据来源
                         }
                         return result
                     else:
-                        logger.info(f"📋 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
-                        print(f"⚠️ 订单 {order_id} 金额无效，重新获取详情...")
+                        if not amount_valid:
+                            logger.info(f"📋 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
+                            print(f"⚠️ 订单 {order_id} 金额无效，重新获取详情...")
+                        if not receiver_info_complete:
+                            logger.info(f"📋 订单 {order_id} 收货人信息不完整（姓名:{receiver_name}, 电话:{receiver_phone}），需要重新获取")
+                            print(f"⚠️ 订单 {order_id} 收货人信息不完整，重新获取详情...")
 
                 # 只有在数据库中没有有效数据时才初始化浏览器
                 logger.info(f"🌐 订单 {order_id} 需要浏览器获取，开始初始化浏览器...")
@@ -340,6 +364,10 @@ class OrderDetailFetcher:
                     'spec_value': sku_info.get('spec_value', '') if sku_info else '',
                     'quantity': sku_info.get('quantity', '') if sku_info else '',  # 数量
                     'amount': sku_info.get('amount', '') if sku_info else '',      # 金额
+                    'order_time': sku_info.get('order_time', '') if sku_info else '',  # 订单时间
+                    'receiver_name': sku_info.get('receiver_name', '') if sku_info else '',  # 收货人姓名
+                    'receiver_phone': sku_info.get('receiver_phone', '') if sku_info else '',  # 收货人电话
+                    'receiver_address': sku_info.get('receiver_address', '') if sku_info else '',  # 收货地址
                     'timestamp': time.time(),
                     'from_cache': False  # 标记数据来源
                 }
@@ -348,6 +376,7 @@ class OrderDetailFetcher:
                 if sku_info:
                     logger.info(f"规格信息 - 名称: {result['spec_name']}, 值: {result['spec_value']}")
                     logger.info(f"数量: {result['quantity']}, 金额: {result['amount']}")
+                    logger.info(f"收货人: {result['receiver_name']}, 电话: {result['receiver_phone']}")
                 return result
 
             except Exception as e:
@@ -617,102 +646,118 @@ class OrderDetailFetcher:
     async def _get_receiver_info(self, result: Dict[str, str]) -> None:
         """获取收货人信息（姓名、手机号、地址）"""
         try:
-            # 尝试获取收货人信息区域
-            # 常见的选择器
-            receiver_selectors = [
-                '.receiver-info',
-                '[class*="receiver"]',
-                '[class*="address"]',
-                '.logistics-info',
-                '[class*="logistics"]'
-            ]
-
-            # 先尝试从结构化的元素中获取
-            for selector in receiver_selectors:
-                try:
-                    receiver_element = await self.page.query_selector(selector)
-                    if receiver_element:
-                        receiver_text = await receiver_element.text_content()
-                        if receiver_text:
-                            # 解析收货人信息
-                            import re
-
-                            # 提取姓名（通常在收货人或联系人后面）
-                            name_match = re.search(r'(?:收货人|联系人|姓名)[:：\s]*([^\s\d]+)', receiver_text)
-                            if name_match:
-                                result['receiver_name'] = name_match.group(1).strip()
-                                logger.info(f"找到收货人姓名: {result['receiver_name']}")
-                                print(f"👤 收货人: {result['receiver_name']}")
-
-                            # 提取手机号
-                            phone_match = re.search(r'1[3-9]\d{9}', receiver_text)
-                            if phone_match:
-                                result['receiver_phone'] = phone_match.group(0)
-                                logger.info(f"找到手机号: {result['receiver_phone']}")
-                                print(f"📱 手机号: {result['receiver_phone']}")
-
-                            # 提取地址
-                            # 地址通常较长，包含省市区街道等信息
-                            address_match = re.search(r'(?:收货地址|地址)[:：\s]*(.+?)(?:$|\n|收货人|联系人|手机)', receiver_text, re.DOTALL)
-                            if address_match:
-                                address = address_match.group(1).strip()
-                                # 清理地址中的多余空白
-                                address = re.sub(r'\s+', ' ', address)
-                                result['receiver_address'] = address
-                                logger.info(f"找到收货地址: {address}")
-                                print(f"📍 收货地址: {address}")
-
-                            # 如果找到了任何信息，就返回
-                            if any(key in result for key in ['receiver_name', 'receiver_phone', 'receiver_address']):
-                                return
-                except Exception as e:
-                    logger.debug(f"选择器 {selector} 获取收货人信息失败: {e}")
-                    continue
-
-            # 如果结构化方法失败，尝试从页面源码中查找
-            page_content = await self.page.content()
             import re
 
-            # 提取姓名
-            if 'receiver_name' not in result:
-                name_match = re.search(r'(?:收货人|联系人|姓名)[:：\s]*([^\s\d<>]+?)(?:<|$|\s)', page_content)
-                if name_match:
-                    result['receiver_name'] = name_match.group(1).strip()
-                    logger.info(f"从页面源码找到收货人姓名: {result['receiver_name']}")
-                    print(f"👤 收货人: {result['receiver_name']}")
+            # 方法1: 使用正确的选择器获取收货地址
+            # 闲鱼订单详情页面的收货地址格式：姓名 手机号 地址（都在一个元素里）
+            try:
+                # 查找包含"收货地址"文本的元素
+                address_label = await self.page.query_selector('text=/收货地址/')
+                if address_label:
+                    # 获取父元素（li标签）
+                    parent_li = await address_label.evaluate_handle('el => el.closest("li")')
+                    if parent_li:
+                        # 在li中查找包含实际地址信息的span元素
+                        address_span = await parent_li.query_selector('span.textItemValue--w9qCWO1o')
+                        if not address_span:
+                            # 尝试其他可能的class名
+                            address_span = await parent_li.query_selector('[class*="textItemValue"]')
 
-            # 提取手机号
-            if 'receiver_phone' not in result:
-                phone_match = re.search(r'1[3-9]\d{9}', page_content)
-                if phone_match:
-                    result['receiver_phone'] = phone_match.group(0)
-                    logger.info(f"从页面源码找到手机号: {result['receiver_phone']}")
-                    print(f"📱 手机号: {result['receiver_phone']}")
+                        if address_span:
+                            address_text = await address_span.text_content()
+                            if address_text:
+                                address_text = address_text.strip()
+                                logger.info(f"找到收货地址文本: {address_text}")
+                                print(f"[INFO] 收货地址文本: {address_text}")
 
-            # 提取地址
-            if 'receiver_address' not in result:
-                address_match = re.search(r'(?:收货地址|地址)[:：\s]*([^<>]+?)(?:<|$)', page_content)
-                if address_match:
-                    address = address_match.group(1).strip()
-                    address = re.sub(r'\s+', ' ', address)
-                    result['receiver_address'] = address
-                    logger.info(f"从页面源码找到收货地址: {address}")
-                    print(f"📍 收货地址: {address}")
+                                # 解析地址文本
+                                # 格式：姓名 手机号 地址
+                                # 例如：泡** 189****9805 福建省福州市仓山区******
+
+                                # 提取手机号（完整或部分隐藏）
+                                phone_match = re.search(r'1[3-9]\d[\d\*]{8}', address_text)
+                                if phone_match:
+                                    result['receiver_phone'] = phone_match.group(0)
+                                    logger.info(f"提取手机号: {result['receiver_phone']}")
+                                    print(f"[OK] 手机号: {result['receiver_phone']}")
+
+                                # 提取姓名（在手机号前面的部分，可能包含*号）
+                                if phone_match:
+                                    name_part = address_text[:phone_match.start()].strip()
+                                    if name_part:
+                                        result['receiver_name'] = name_part
+                                        logger.info(f"提取姓名: {result['receiver_name']}")
+                                        print(f"[OK] 姓名: {result['receiver_name']}")
+
+                                    # 提取地址（在手机号后面的部分）
+                                    address_part = address_text[phone_match.end():].strip()
+                                    if address_part:
+                                        result['receiver_address'] = address_part
+                                        logger.info(f"提取地址: {result['receiver_address']}")
+                                        print(f"[OK] 地址: {result['receiver_address']}")
+
+                                # 如果找到了信息就返回
+                                if any(key in result for key in ['receiver_name', 'receiver_phone', 'receiver_address']):
+                                    return
+            except Exception as e:
+                logger.warning(f"方法1获取收货地址失败: {e}")
+                print(f"[WARN] 方法1失败: {e}")
+
+            # 方法2: 从页面文本中查找（备用方法）
+            try:
+                body_text = await self.page.inner_text('body')
+
+                # 查找包含"收货地址"的行
+                lines = body_text.split('\n')
+                for i, line in enumerate(lines):
+                    if '收货地址' in line:
+                        # 检查下一行是否包含地址信息
+                        if i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+
+                            # 提取手机号
+                            phone_match = re.search(r'1[3-9]\d[\d\*]{8}', next_line)
+                            if phone_match and 'receiver_phone' not in result:
+                                result['receiver_phone'] = phone_match.group(0)
+                                logger.info(f"从文本提取手机号: {result['receiver_phone']}")
+                                print(f"[OK] 手机号(文本): {result['receiver_phone']}")
+
+                                # 提取姓名
+                                if 'receiver_name' not in result:
+                                    name_part = next_line[:phone_match.start()].strip()
+                                    if name_part:
+                                        result['receiver_name'] = name_part
+                                        logger.info(f"从文本提取姓名: {result['receiver_name']}")
+                                        print(f"[OK] 姓名(文本): {result['receiver_name']}")
+
+                                # 提取地址
+                                if 'receiver_address' not in result:
+                                    address_part = next_line[phone_match.end():].strip()
+                                    # 移除可能的"复制"按钮文本
+                                    address_part = re.sub(r'复制$', '', address_part).strip()
+                                    if address_part:
+                                        result['receiver_address'] = address_part
+                                        logger.info(f"从文本提取地址: {result['receiver_address']}")
+                                        print(f"[OK] 地址(文本): {result['receiver_address']}")
+                        break
+            except Exception as e:
+                logger.warning(f"方法2获取收货地址失败: {e}")
+                print(f"[WARN] 方法2失败: {e}")
 
             # 记录未找到的信息
             if 'receiver_name' not in result:
                 logger.warning("未能找到收货人姓名")
-                print("⚠️ 未找到收货人姓名")
+                print("[WARN] 未找到收货人姓名")
             if 'receiver_phone' not in result:
                 logger.warning("未能找到手机号")
-                print("⚠️ 未找到手机号")
+                print("[WARN] 未找到手机号")
             if 'receiver_address' not in result:
                 logger.warning("未能找到收货地址")
-                print("⚠️ 未找到收货地址")
+                print("[WARN] 未找到收货地址")
 
         except Exception as e:
             logger.error(f"获取收货人信息失败: {e}")
-            print(f"❌ 获取收货人信息失败: {e}")
+            print(f"[ERROR] 获取收货人信息失败: {e}")
 
     async def _check_browser_status(self) -> bool:
         """检查浏览器状态是否正常"""
@@ -855,11 +900,22 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
                 except (ValueError, TypeError):
                     amount_valid = False
 
-            if amount_valid:
-                logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
-                print(f"✅ 订单 {order_id} 使用缓存数据，跳过浏览器获取")
+            # 检查收货人信息是否完整
+            receiver_name = existing_order.get('receiver_name', '')
+            receiver_phone = existing_order.get('receiver_phone', '')
+            receiver_address = existing_order.get('receiver_address', '')
+            receiver_info_complete = (
+                receiver_name and receiver_name != 'unknown' and
+                receiver_phone and receiver_phone != 'unknown' and
+                receiver_address and receiver_address != 'unknown'
+            )
 
-                # 构建返回格式
+            # 只有金额有效且收货人信息完整时才使用缓存
+            if amount_valid and receiver_info_complete:
+                logger.info(f"📋 订单 {order_id} 已存在于数据库中且数据完整，直接返回缓存数据")
+                print(f"[OK] 订单 {order_id} 使用缓存数据（金额:{amount}, 收货人:{receiver_name}）")
+
+                # 构建返回格式（包含收货人信息）
                 result = {
                     'order_id': existing_order['order_id'],
                     'url': f"https://www.goofish.com/order-detail?orderId={order_id}&role=seller",
@@ -874,14 +930,22 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
                     'spec_value': existing_order.get('spec_value', ''),
                     'quantity': existing_order.get('quantity', ''),
                     'amount': existing_order.get('amount', ''),
-                    'order_status': existing_order.get('order_status', 'unknown'),  # 添加订单状态
+                    'order_status': existing_order.get('order_status', 'unknown'),
+                    'order_time': existing_order.get('created_at', ''),
+                    'receiver_name': receiver_name,
+                    'receiver_phone': receiver_phone,
+                    'receiver_address': receiver_address,
                     'timestamp': time.time(),
                     'from_cache': True
                 }
                 return result
             else:
-                logger.info(f"📋 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
-                print(f"⚠️ 订单 {order_id} 金额无效，重新获取详情...")
+                if not amount_valid:
+                    logger.info(f"📋 订单 {order_id} 金额无效({amount})，需要重新获取")
+                    print(f"[WARN] 订单 {order_id} 金额无效，重新获取详情...")
+                if not receiver_info_complete:
+                    logger.info(f"📋 订单 {order_id} 收货人信息不完整（姓名:{receiver_name}, 电话:{receiver_phone}），需要重新获取")
+                    print(f"[WARN] 订单 {order_id} 收货人信息不完整，重新获取详情...")
     except Exception as e:
         logger.warning(f"检查数据库缓存失败: {e}")
 

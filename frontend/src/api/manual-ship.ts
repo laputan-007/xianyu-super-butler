@@ -1,13 +1,5 @@
 import { post } from '@/utils/request'
 
-export interface VerifyAllOrdersResponse {
-  success: boolean
-  message?: string
-  total: number
-  success_count: number
-  failed_count: number
-}
-
 export interface ManualShipResponse {
   success: boolean
   message?: string
@@ -19,23 +11,6 @@ export interface ManualShipResponse {
     success: boolean
     message: string
   }>
-}
-
-// 全量核对所有订单数据
-export const verifyAllOrders = async (): Promise<VerifyAllOrdersResponse> => {
-  try {
-    const result = await post<VerifyAllOrdersResponse>('/api/orders/verify-all', {})
-    return result
-  } catch (error) {
-    console.error('核对订单数据失败:', error)
-    return {
-      success: false,
-      message: '核对订单数据失败',
-      total: 0,
-      success_count: 0,
-      failed_count: 0
-    }
-  }
 }
 
 // 手动补发货

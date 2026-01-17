@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, F
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Tuple, Optional, Dict, Any
 from pathlib import Path
 from urllib.parse import unquote
@@ -809,8 +809,10 @@ class GeetestRegisterResponse(BaseModel):
 class GeetestValidateRequest(BaseModel):
     """极验二次验证请求"""
     challenge: str
-    validate: str
+    validate_str: str = Field(..., alias='validate')
     seccode: str
+
+    model_config = {'populate_by_name': True}
 
 
 class GeetestValidateResponse(BaseModel):
@@ -904,13 +906,13 @@ async def geetest_validate(request: GeetestValidateRequest):
         if is_normal_mode:
             result = await gt_lib.success_validate(
                 request.challenge,
-                request.validate,
+                request.validate_str,
                 request.seccode
             )
         else:
             result = gt_lib.fail_validate(
                 request.challenge,
-                request.validate,
+                request.validate_str,
                 request.seccode
             )
         
@@ -6006,15 +6008,41 @@ def delete_order(order_id: str, current_user: Dict[str, Any] = Depends(get_curre
         raise HTTPException(status_code=500, detail=f"删除订单失败: {str(e)}")
 
 
+def check_order_data_completeness(order: Dict[str, Any]) -> bool:
+    """
+    检查订单数据是否完整
+
+    Args:
+        order: 订单数据字典
+
+    Returns:
+        True表示数据完整，False表示需要刷新
+    """
+    # 检查关键字段是否为空或为'unknown'
+    incomplete_conditions = [
+        not order.get('receiver_name') or order.get('receiver_name') == 'unknown',
+        not order.get('receiver_phone') or order.get('receiver_phone') == 'unknown',
+        not order.get('receiver_address') or order.get('receiver_address') == 'unknown',
+        order.get('order_status') == 'unknown',
+        not order.get('buyer_id') or order.get('buyer_id') == 'unknown',
+    ]
+
+    return not any(incomplete_conditions)
+
+
 @app.put('/api/orders/{order_id}')
-def update_order(
+async def update_order(
     order_id: str,
     update_data: dict,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """更新订单信息"""
+    """
+    更新订单信息
+    自动检查订单数据完整性，如数据不完整则通过 Playwright 从订单详情页获取最新完整数据
+    """
     try:
         from db_manager import db_manager
+        from utils.order_detail_fetcher import fetch_order_detail_simple
 
         user_id = current_user['user_id']
         log_with_user('info', f"更新订单: {order_id}, 数据: {update_data}", current_user)
@@ -6030,6 +6058,55 @@ def update_order(
         if order.get('cookie_id') not in user_cookies:
             raise HTTPException(status_code=403, detail="无权修改此订单")
 
+        # 检查订单数据完整性
+        is_complete = check_order_data_completeness(order)
+
+        if not is_complete:
+            log_with_user('info', f"订单 {order_id} 数据不完整，开始使用Playwright获取完整数据", current_user)
+
+            # 获取该订单对应的Cookie字符串
+            cookie_id = order.get('cookie_id')
+            cookie_info = user_cookies.get(cookie_id)
+
+            if cookie_info and 'cookies' in cookie_info:
+                cookie_string = cookie_info['cookies']
+
+                try:
+                    # 使用playwright从订单详情页面获取完整数据
+                    detail_result = await fetch_order_detail_simple(
+                        order_id=order_id,
+                        cookie_string=cookie_string,
+                        headless=True
+                    )
+
+                    if detail_result:
+                        log_with_user('info', f"成功获取订单 {order_id} 的完整数据", current_user)
+
+                        # 构建要更新的完整数据
+                        refresh_data = {
+                            'order_id': order_id,
+                            'spec_name': detail_result.get('spec_name') or None,
+                            'spec_value': detail_result.get('spec_value') or None,
+                            'quantity': detail_result.get('quantity') or None,
+                            'amount': detail_result.get('amount') or None,
+                            'created_at': detail_result.get('order_time') or None,
+                            'receiver_name': detail_result.get('receiver_name') or None,
+                            'receiver_phone': detail_result.get('receiver_phone') or None,
+                            'receiver_address': detail_result.get('receiver_address') or None
+                        }
+
+                        # 先更新从playwright获取的完整数据
+                        db_manager.insert_or_update_order(**refresh_data)
+                        log_with_user('info', f"订单 {order_id} 完整数据已更新到数据库", current_user)
+                    else:
+                        log_with_user('warning', f"订单 {order_id} 详情获取失败，继续使用现有数据", current_user)
+
+                except Exception as e:
+                    log_with_user('error', f"获取订单 {order_id} 详情时出错: {str(e)}", current_user)
+                    # 继续执行，即使刷新失败也允许用户手动更新
+            else:
+                log_with_user('warning', f"订单 {order_id} 的Cookie信息不完整，无法刷新", current_user)
+
         # 提取可更新的字段
         allowed_fields = {
             'item_id', 'buyer_id', 'spec_name', 'spec_value',
@@ -6042,9 +6119,19 @@ def update_order(
         filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
 
         if not filtered_data:
-            raise HTTPException(status_code=400, detail="没有可更新的字段")
+            # 如果没有用户提供的更新数据，但进行了自动刷新，返回刷新后的订单
+            if not is_complete:
+                updated_order = db_manager.get_order_by_id(order_id)
+                return {
+                    "success": True,
+                    "message": "订单数据已自动刷新",
+                    "data": updated_order,
+                    "refreshed": True
+                }
+            else:
+                raise HTTPException(status_code=400, detail="没有可更新的字段")
 
-        # 更新订单
+        # 应用用户提供的更新
         success = db_manager.insert_or_update_order(
             order_id=order_id,
             **filtered_data
@@ -6054,7 +6141,12 @@ def update_order(
             log_with_user('info', f"订单更新成功: {order_id}", current_user)
             # 返回更新后的订单
             updated_order = db_manager.get_order_by_id(order_id)
-            return {"success": True, "message": "更新成功", "data": updated_order}
+            return {
+                "success": True,
+                "message": "更新成功",
+                "data": updated_order,
+                "refreshed": not is_complete  # 标记是否进行了自动刷新
+            }
         else:
             raise HTTPException(status_code=500, detail="更新失败")
 
@@ -6108,15 +6200,22 @@ async def refresh_orders_status(
                 order_status = order.get('status', 'unknown')
                 buyer_id = order.get('buyer_id', '')
                 amount = order.get('amount', '')
+                receiver_name = order.get('receiver_name', '')
+                receiver_phone = order.get('receiver_phone', '')
+                receiver_address = order.get('receiver_address', '')
 
                 # 判断是否需要刷新：
                 # 1. 非稳定状态订单（非已发货、非交易成功、非已关闭）
                 # 2. 买家ID为空或unknown_user
                 # 3. 金额为空
+                # 4. 收货人信息不完整（姓名、电话、地址任一为空或unknown）
                 needs_refresh = (
                     order_status not in ['shipped', 'completed', 'cancelled'] or
                     not buyer_id or buyer_id == 'unknown_user' or
-                    not amount
+                    not amount or
+                    not receiver_name or receiver_name == 'unknown' or
+                    not receiver_phone or receiver_phone == 'unknown' or
+                    not receiver_address or receiver_address == 'unknown'
                 )
 
                 if needs_refresh:
@@ -6176,15 +6275,37 @@ async def refresh_orders_status(
                         new_status_text = status_result.get('status_text', '')
 
                         # 将状态码转换为数据库状态
+                        # 完整的订单状态码映射（基于闲鱼API）
                         status_mapping = {
-                            1: 'processing',
-                            2: 'pending_ship',
-                            3: 'shipped',
-                            4: 'completed',
-                            5: 'refunding',
-                            6: 'cancelled',
+                            1: 'processing',      # 处理中
+                            2: 'pending_ship',    # 待发货
+                            3: 'shipped',         # 已发货
+                            4: 'completed',       # 已完成/交易成功
+                            5: 'refunding',       # 退款中
+                            6: 'cancelled',       # 已取消/已关闭
+                            7: 'refunding',       # 退款申请中
+                            8: 'cancelled',       # 退款成功（订单关闭）
+                            9: 'refunding',       # 退款协商中
+                            10: 'cancelled',      # 退款关闭
                         }
-                        new_status = status_mapping.get(new_status_code, current_status)
+                        new_status = status_mapping.get(new_status_code, 'unknown')
+
+                        # 特殊处理：根据状态文本智能识别（优先检查最终状态）
+                        if new_status == 'unknown':
+                            # 优先级1: 检查"退款成功"（最终状态）
+                            if '退款' in new_status_text and '成功' in new_status_text:
+                                new_status = 'cancelled'  # 退款成功=订单关闭
+                            # 优先级2: 检查"关闭"或"取消"（最终状态）
+                            elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
+                                new_status = 'cancelled'
+                            # 优先级3: 检查"完成"或"交易成功"（最终状态）
+                            elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
+                                new_status = 'completed'
+                            # 优先级4: 检查"退款"（中间状态）
+                            elif '退款' in new_status_text:
+                                new_status = 'refunding'
+
+                        log_with_user('debug', f"订单 {order_id}: 状态码={new_status_code}, 状态文本={new_status_text}, 映射结果={new_status}", current_user)
 
                         # 从 raw_data 中提取完整信息
                         raw_data = status_result.get('raw_data', {})
@@ -6300,95 +6421,15 @@ async def refresh_orders_status(
         raise HTTPException(status_code=500, detail=f"刷新订单状态失败: {str(e)}")
 
 
-@app.post('/api/orders/verify-all')
-async def verify_all_orders(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """
-    全量核对所有订单数据
-    通过 Playwright 访问每个订单的详情页，更新时间、收货人信息等
-    """
-    try:
-        from db_manager import db_manager
-
-        user_id = current_user['user_id']
-        log_with_user('info', "开始全量核对订单数据", current_user)
-
-        # 获取用户的所有订单
-        user_cookies = db_manager.get_all_cookies(user_id)
-        all_orders = []
-        for cookie_id in user_cookies.keys():
-            orders = db_manager.get_orders_by_cookie(cookie_id, limit=10000)
-            all_orders.extend(orders)
-
-        total_count = len(all_orders)
-        success_count = 0
-        failed_count = 0
-
-        log_with_user('info', f"共有 {total_count} 个订单需要核对", current_user)
-
-        # 逐个核对订单
-        for order in all_orders:
-            order_id = order['order_id']
-            cookie_id = order.get('cookie_id')
-
-            try:
-                # 获取Cookie字符串
-                cookie_info = user_cookies.get(cookie_id)
-                if not cookie_info or 'cookies' not in cookie_info:
-                    log_with_user('warning', f"订单 {order_id} 的Cookie不存在，跳过", current_user)
-                    failed_count += 1
-                    continue
-
-                cookie_string = cookie_info['cookies']
-
-                # 使用 order_detail_fetcher 获取订单详情
-                from utils.order_detail_fetcher import fetch_order_detail_simple
-                result = await fetch_order_detail_simple(order_id, cookie_string, headless=True)
-
-                if result:
-                    # 提取所有信息
-                    update_data = {
-                        'order_id': order_id,
-                        'spec_name': result.get('spec_name') or None,
-                        'spec_value': result.get('spec_value') or None,
-                        'quantity': result.get('quantity') or None,
-                        'amount': result.get('amount') or None,
-                        'created_at': result.get('order_time') or None,
-                        'receiver_name': result.get('receiver_name') or None,
-                        'receiver_phone': result.get('receiver_phone') or None,
-                        'receiver_address': result.get('receiver_address') or None
-                    }
-
-                    # 更新订单
-                    success = db_manager.insert_or_update_order(**update_data)
-                    if success:
-                        success_count += 1
-                        log_with_user('debug', f"订单 {order_id} 核对并更新成功", current_user)
-                    else:
-                        failed_count += 1
-                        log_with_user('warning', f"订单 {order_id} 更新失败", current_user)
-                else:
-                    failed_count += 1
-                    log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
-
-            except Exception as e:
-                failed_count += 1
-                log_with_user('error', f"核对订单 {order_id} 时发生异常: {str(e)}", current_user)
-
-        log_with_user('info', f"订单核对完成: 成功{success_count}个, 失败{failed_count}个", current_user)
-
-        return {
-            "success": True,
-            "message": f"核对完成: 成功{success_count}个, 失败{failed_count}个",
-            "total": total_count,
-            "success": success_count,
-            "failed": failed_count
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_with_user('error', f"全量核对订单数据失败: {str(e)}", current_user)
-        raise HTTPException(status_code=500, detail=f"全量核对订单数据失败: {str(e)}")
+# 已取消：全量核对订单数据功能
+# 现在使用更新订单状态接口进行单个订单的数据核查
+# @app.post('/api/orders/verify-all')
+# async def verify_all_orders(current_user: Dict[str, Any] = Depends(get_current_user)):
+#     """
+#     全量核对所有订单数据
+#     通过 Playwright 访问每个订单的详情页，更新时间、收货人信息等
+#     """
+#     pass
 
 
 @app.post('/api/orders/manual-ship')
