@@ -6382,172 +6382,172 @@ async def refresh_orders_status(
         # 下面的代码需要删除，所以我们需要找到循环结束的位置
         if False:  # 这个if永远不会执行，只是为了保持代码结构
             for order_info in orders_to_refresh:
-            order_id = order_info['order_id']
-            cookie_id = order_info['cookie_id']
-            current_status = order_info['current_status']
+                order_id = order_info['order_id']
+                cookie_id = order_info['cookie_id']
+                current_status = order_info['current_status']
 
-            try:
-                # 获取Cookie (get_all_cookies返回的是 {cookie_id: cookie_value} 格式)
-                cookies_str = user_cookies[cookie_id]
+                try:
+                    # 获取Cookie (get_all_cookies返回的是 {cookie_id: cookie_value} 格式)
+                    cookies_str = user_cookies[cookie_id]
 
-                if not cookies_str:
-                    log_with_user('warning', f"Cookie {cookie_id} 的值为空，跳过订单 {order_id}", current_user)
-                    failed_count += 1
-                    continue
+                    if not cookies_str:
+                        log_with_user('warning', f"Cookie {cookie_id} 的值为空，跳过订单 {order_id}", current_user)
+                        failed_count += 1
+                        continue
 
-                # 使用订单详情获取器获取完整信息（包括买家ID、金额、收货人信息）
-                # 注意：fetch_order_detail_simple 已经能获取所有需要的数据，无需再调用 OrderStatusQueryPlaywright
-                order_detail = await fetch_order_detail_simple(order_id, cookies_str, headless=True)
+                    # 使用订单详情获取器获取完整信息（包括买家ID、金额、收货人信息）
+                    # 注意：fetch_order_detail_simple 已经能获取所有需要的数据，无需再调用 OrderStatusQueryPlaywright
+                    order_detail = await fetch_order_detail_simple(order_id, cookies_str, headless=True)
 
-                if order_detail:
-                    # 提取订单详情（从页面获取）
-                    spec_name = order_detail.get('spec_name', '')
-                    spec_value = order_detail.get('spec_value', '')
-                    quantity = order_detail.get('quantity', '')
-                    amount = order_detail.get('amount', '')
-                    receiver_name = order_detail.get('receiver_name', '')
-                    receiver_phone = order_detail.get('receiver_phone', '')
-                    receiver_address = order_detail.get('receiver_address', '')
+                    if order_detail:
+                        # 提取订单详情（从页面获取）
+                        spec_name = order_detail.get('spec_name', '')
+                        spec_value = order_detail.get('spec_value', '')
+                        quantity = order_detail.get('quantity', '')
+                        amount = order_detail.get('amount', '')
+                        receiver_name = order_detail.get('receiver_name', '')
+                        receiver_phone = order_detail.get('receiver_phone', '')
+                        receiver_address = order_detail.get('receiver_address', '')
 
-                    # 只使用状态查询获取订单状态和买家ID（因为DOM解析无法获取这些）
-                    query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
-                    status_result = await query.query_order_status(order_id)
+                        # 只使用状态查询获取订单状态和买家ID（因为DOM解析无法获取这些）
+                        query = OrderStatusQueryPlaywright(cookies_str, cookie_id, headless=True)
+                        status_result = await query.query_order_status(order_id)
 
-                    new_status = current_status
-                    new_status_text = ''
-                    buyer_id = ''
-                    item_id = ''
-                    is_bargain = None
+                        new_status = current_status
+                        new_status_text = ''
+                        buyer_id = ''
+                        item_id = ''
+                        is_bargain = None
 
-                    if status_result.get('success'):
-                        new_status_code = status_result.get('order_status')
-                        new_status_text = status_result.get('status_text', '')
+                        if status_result.get('success'):
+                            new_status_code = status_result.get('order_status')
+                            new_status_text = status_result.get('status_text', '')
 
-                        # 将状态码转换为数据库状态
-                        # 完整的订单状态码映射（基于闲鱼API）
-                        status_mapping = {
-                            1: 'processing',      # 处理中
-                            2: 'pending_ship',    # 待发货
-                            3: 'shipped',         # 已发货
-                            4: 'completed',       # 已完成/交易成功
-                            5: 'refunding',       # 退款中
-                            6: 'cancelled',       # 已取消/已关闭
-                            7: 'refunding',       # 退款申请中
-                            8: 'cancelled',       # 退款成功（订单关闭）
-                            9: 'refunding',       # 退款协商中
-                            10: 'cancelled',      # 退款关闭
-                        }
-                        new_status = status_mapping.get(new_status_code, 'unknown')
+                            # 将状态码转换为数据库状态
+                            # 完整的订单状态码映射（基于闲鱼API）
+                            status_mapping = {
+                                1: 'processing',      # 处理中
+                                2: 'pending_ship',    # 待发货
+                                3: 'shipped',         # 已发货
+                                4: 'completed',       # 已完成/交易成功
+                                5: 'refunding',       # 退款中
+                                6: 'cancelled',       # 已取消/已关闭
+                                7: 'refunding',       # 退款申请中
+                                8: 'cancelled',       # 退款成功（订单关闭）
+                                9: 'refunding',       # 退款协商中
+                                10: 'cancelled',      # 退款关闭
+                            }
+                            new_status = status_mapping.get(new_status_code, 'unknown')
 
-                        # 特殊处理：根据状态文本智能识别（优先检查最终状态）
-                        if new_status == 'unknown':
-                            # 优先级1: 检查"退款成功"（最终状态）
-                            if '退款' in new_status_text and '成功' in new_status_text:
-                                new_status = 'cancelled'  # 退款成功=订单关闭
-                            # 优先级2: 检查"关闭"或"取消"（最终状态）
-                            elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
-                                new_status = 'cancelled'
-                            # 优先级3: 检查"完成"或"交易成功"（最终状态）
-                            elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
-                                new_status = 'completed'
-                            # 优先级4: 检查"退款"（中间状态）
-                            elif '退款' in new_status_text:
-                                new_status = 'refunding'
+                            # 特殊处理：根据状态文本智能识别（优先检查最终状态）
+                            if new_status == 'unknown':
+                                # 优先级1: 检查"退款成功"（最终状态）
+                                if '退款' in new_status_text and '成功' in new_status_text:
+                                    new_status = 'cancelled'  # 退款成功=订单关闭
+                                # 优先级2: 检查"关闭"或"取消"（最终状态）
+                                elif '关闭' in new_status_text or '取消' in new_status_text or '超时' in new_status_text:
+                                    new_status = 'cancelled'
+                                # 优先级3: 检查"完成"或"交易成功"（最终状态）
+                                elif '完成' in new_status_text or '交易成功' in new_status_text or '确认收货' in new_status_text:
+                                    new_status = 'completed'
+                                # 优先级4: 检查"退款"（中间状态）
+                                elif '退款' in new_status_text:
+                                    new_status = 'refunding'
 
-                        log_with_user('debug', f"订单 {order_id}: 状态码={new_status_code}, 状态文本={new_status_text}, 映射结果={new_status}", current_user)
+                            log_with_user('debug', f"订单 {order_id}: 状态码={new_status_code}, 状态文本={new_status_text}, 映射结果={new_status}", current_user)
 
-                        # 从 raw_data 中提取完整信息
-                        raw_data = status_result.get('raw_data', {})
+                            # 从 raw_data 中提取完整信息
+                            raw_data = status_result.get('raw_data', {})
 
-                        # 提取买家ID、商品ID、时间信息
-                        created_at = None
-                        try:
-                            # 方法1: 从根级别提取 peerUserId (买家ID)
-                            buyer_id = str(raw_data.get('peerUserId', ''))
+                            # 提取买家ID、商品ID、时间信息
+                            created_at = None
+                            try:
+                                # 方法1: 从根级别提取 peerUserId (买家ID)
+                                buyer_id = str(raw_data.get('peerUserId', ''))
 
-                            # 方法2: 从根级别提取 itemId (商品ID)
-                            item_id = str(raw_data.get('itemId', ''))
+                                # 方法2: 从根级别提取 itemId (商品ID)
+                                item_id = str(raw_data.get('itemId', ''))
 
-                            # 方法3: 从 orderStatusVO 组件中提取下单时间
-                            if 'components' in raw_data:
-                                for component in raw_data['components']:
-                                    if component.get('render') == 'orderStatusVO':
-                                        order_status_data = component.get('data', {})
-                                        # 从 orderStatusNodeList 中找到第一个时间节点（已拍下时间 = 创建时间）
-                                        node_list = order_status_data.get('orderStatusNodeList', [])
-                                        if node_list and len(node_list) > 0:
-                                            created_at = node_list[0].get('time')  # 第一个是"已拍下"时间
-                                        break
+                                # 方法3: 从 orderStatusVO 组件中提取下单时间
+                                if 'components' in raw_data:
+                                    for component in raw_data['components']:
+                                        if component.get('render') == 'orderStatusVO':
+                                            order_status_data = component.get('data', {})
+                                            # 从 orderStatusNodeList 中找到第一个时间节点（已拍下时间 = 创建时间）
+                                            node_list = order_status_data.get('orderStatusNodeList', [])
+                                            if node_list and len(node_list) > 0:
+                                                created_at = node_list[0].get('time')  # 第一个是"已拍下"时间
+                                            break
 
-                            # 方法4: 从 orderInfoVO 组件中提取是否小刀（如果有 bargainInfo）
-                            if 'components' in raw_data:
-                                for component in raw_data['components']:
-                                    if component.get('render') == 'orderInfoVO':
-                                        data = component.get('data', {})
-                                        # 检查是否有小刀信息
-                                        if 'bargainInfo' in data:
-                                            bargain_info = data.get('bargainInfo', {})
-                                            is_bargain = bargain_info.get('bargain', False)
-                                        # 如果前面没找到商品ID，尝试从 jumpUrl 中提取
-                                        if not item_id:
-                                            item_info = data.get('itemInfo', {})
-                                            jump_url = item_info.get('jumpUrl', '')
-                                            if 'id=' in jump_url:
-                                                item_id = jump_url.split('id=')[1].split('&')[0]
-                                        break
+                                # 方法4: 从 orderInfoVO 组件中提取是否小刀（如果有 bargainInfo）
+                                if 'components' in raw_data:
+                                    for component in raw_data['components']:
+                                        if component.get('render') == 'orderInfoVO':
+                                            data = component.get('data', {})
+                                            # 检查是否有小刀信息
+                                            if 'bargainInfo' in data:
+                                                bargain_info = data.get('bargainInfo', {})
+                                                is_bargain = bargain_info.get('bargain', False)
+                                            # 如果前面没找到商品ID，尝试从 jumpUrl 中提取
+                                            if not item_id:
+                                                item_info = data.get('itemInfo', {})
+                                                jump_url = item_info.get('jumpUrl', '')
+                                                if 'id=' in jump_url:
+                                                    item_id = jump_url.split('id=')[1].split('&')[0]
+                                            break
 
-                            if created_at:
-                                log_with_user('debug', f"提取到订单创建时间: {created_at}", current_user)
+                                if created_at:
+                                    log_with_user('debug', f"提取到订单创建时间: {created_at}", current_user)
 
-                        except Exception as e:
-                            log_with_user('warning', f"提取订单信息失败: {str(e)}", current_user)
+                            except Exception as e:
+                                log_with_user('warning', f"提取订单信息失败: {str(e)}", current_user)
 
-                    # 更新数据库（包含所有字段）
-                    success = db_manager.insert_or_update_order(
-                        order_id=order_id,
-                        item_id=item_id if item_id else None,
-                        buyer_id=buyer_id if buyer_id else None,
-                        spec_name=spec_name if spec_name else None,
-                        spec_value=spec_value if spec_value else None,
-                        quantity=quantity if quantity else None,
-                        amount=amount if amount else None,
-                        order_status=new_status if new_status != current_status else None,
-                        is_bargain=is_bargain if is_bargain is not None else None,
-                        cookie_id=cookie_id,
-                        created_at=created_at,  # 添加创建时间（从API提取的北京时间）
-                        receiver_name=receiver_name if receiver_name else None,
-                        receiver_phone=receiver_phone if receiver_phone else None,
-                        receiver_address=receiver_address if receiver_address else None
-                    )
-
-                    if success:
-                        # 检查是否有任何更新
-                        has_changes = (
-                            new_status != current_status or
-                            (buyer_id and buyer_id != 'unknown_user') or
-                            amount
+                        # 更新数据库（包含所有字段）
+                        success = db_manager.insert_or_update_order(
+                            order_id=order_id,
+                            item_id=item_id if item_id else None,
+                            buyer_id=buyer_id if buyer_id else None,
+                            spec_name=spec_name if spec_name else None,
+                            spec_value=spec_value if spec_value else None,
+                            quantity=quantity if quantity else None,
+                            amount=amount if amount else None,
+                            order_status=new_status if new_status != current_status else None,
+                            is_bargain=is_bargain if is_bargain is not None else None,
+                            cookie_id=cookie_id,
+                            created_at=created_at,  # 添加创建时间（从API提取的北京时间）
+                            receiver_name=receiver_name if receiver_name else None,
+                            receiver_phone=receiver_phone if receiver_phone else None,
+                            receiver_address=receiver_address if receiver_address else None
                         )
 
-                        if has_changes:
-                            updated_count += 1
-                            refresh_results.append({
-                                'order_id': order_id,
-                                'old_status': current_status,
-                                'new_status': new_status,
-                                'status_text': new_status_text
-                            })
-                            log_with_user('info', f"订单 {order_id} 信息已更新 | 状态: {current_status} -> {new_status} | 买家: {buyer_id} | 金额: {amount}", current_user)
+                        if success:
+                            # 检查是否有任何更新
+                            has_changes = (
+                                new_status != current_status or
+                                (buyer_id and buyer_id != 'unknown_user') or
+                                amount
+                            )
+
+                            if has_changes:
+                                updated_count += 1
+                                refresh_results.append({
+                                    'order_id': order_id,
+                                    'old_status': current_status,
+                                    'new_status': new_status,
+                                    'status_text': new_status_text
+                                })
+                                log_with_user('info', f"订单 {order_id} 信息已更新 | 状态: {current_status} -> {new_status} | 买家: {buyer_id} | 金额: {amount}", current_user)
+                            else:
+                                no_change_count += 1
+                                log_with_user('debug', f"订单 {order_id} 信息无变化", current_user)
                         else:
-                            no_change_count += 1
-                            log_with_user('debug', f"订单 {order_id} 信息无变化", current_user)
+                            failed_count += 1
+                            log_with_user('error', f"订单 {order_id} 信息更新失败", current_user)
                     else:
                         failed_count += 1
-                        log_with_user('error', f"订单 {order_id} 信息更新失败", current_user)
-                else:
-                    failed_count += 1
-                    log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
+                        log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
 
-            except Exception as e:
+                except Exception as e:
                 failed_count += 1
                 log_with_user('error', f"刷新订单 {order_id} 时发生异常: {str(e)}", current_user)
 
