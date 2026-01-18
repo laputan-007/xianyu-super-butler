@@ -6089,7 +6089,7 @@ async def update_order(
 
                         # 状态码映射（如果需要转换）
                         order_status = complete_result.get('order_status', 'unknown')
-                        if order_status and order_status.isdigit():
+                        if order_status and isinstance(order_status, str) and order_status.isdigit():
                             status_mapping = {
                                 '1': 'processing',
                                 '2': 'pending_ship',
