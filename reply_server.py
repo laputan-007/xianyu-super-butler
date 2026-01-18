@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -5913,31 +5913,57 @@ def update_item_multi_quantity_delivery(cookie_id: str, item_id: str, delivery_d
 # ==================== 订单管理接口 ====================
 
 @app.get('/api/orders')
-def get_user_orders(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """获取当前用户的订单信息"""
+def get_user_orders(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    cookie_id: Optional[str] = Query(None, description="筛选Cookie ID"),
+    status: Optional[str] = Query(None, description="筛选状态")
+):
+    """获取当前用户的订单信息（支持分页）"""
     try:
         from db_manager import db_manager
 
         user_id = current_user['user_id']
-        log_with_user('info', "查询用户订单信息", current_user)
+        log_with_user('info', f"查询用户订单信息 (page={page}, page_size={page_size})", current_user)
 
         # 获取用户的所有Cookie
         user_cookies = db_manager.get_all_cookies(user_id)
 
+        # 如果指定了cookie_id筛选
+        if cookie_id and cookie_id in user_cookies:
+            user_cookies = {cookie_id: user_cookies[cookie_id]}
+
         # 获取所有订单数据
         all_orders = []
-        for cookie_id in user_cookies.keys():
-            orders = db_manager.get_orders_by_cookie(cookie_id, limit=1000)  # 增加限制数量
-            # 为每个订单添加cookie_id信息
+        for cid in user_cookies.keys():
+            orders = db_manager.get_orders_by_cookie(cid, limit=1000)
             for order in orders:
-                order['cookie_id'] = cookie_id
+                order['cookie_id'] = cid
+                # 状态筛选
+                if status and order.get('order_status') != status:
+                    continue
                 all_orders.append(order)
 
         # 按创建时间倒序排列
         all_orders.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
-        log_with_user('info', f"用户订单查询成功，共 {len(all_orders)} 条记录", current_user)
-        return {"success": True, "data": all_orders, "total": len(all_orders)}
+        # 分页处理
+        total = len(all_orders)
+        total_pages = (total + page_size - 1) // page_size
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_orders = all_orders[start_idx:end_idx]
+
+        log_with_user('info', f"用户订单查询成功，共 {total} 条记录，第 {page}/{total_pages} 页", current_user)
+        return {
+            "success": True,
+            "data": paginated_orders,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
 
     except Exception as e:
         log_with_user('error', f"查询用户订单失败: {str(e)}", current_user)

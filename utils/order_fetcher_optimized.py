@@ -259,6 +259,15 @@ class OrderFetcherOptimized:
                 logger.error(f"获取订单完整信息失败: {e}")
                 print(f"❌ 获取订单 {order_id} 失败: {e}")
                 return None
+            finally:
+                # 清理：关闭页面（因为浏览器池为每个请求创建新页面）
+                if self.page and self.use_pool:
+                    try:
+                        await self.page.close()
+                        logger.debug(f"已关闭页面: {order_id}")
+                    except Exception as e:
+                        logger.debug(f"关闭页面失败: {e}")
+                    self.page = None
 
     def _parse_api_response(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
         """

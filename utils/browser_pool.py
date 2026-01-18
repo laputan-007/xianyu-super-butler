@@ -48,7 +48,8 @@ class BrowserPool:
         self,
         cookie_id: str,
         cookie_string: str,
-        headless: bool = True
+        headless: bool = True,
+        create_new_page: bool = True
     ) -> Optional[Tuple[Browser, BrowserContext, Page]]:
         """
         获取浏览器实例（如果不存在则创建）
@@ -57,6 +58,7 @@ class BrowserPool:
             cookie_id: Cookie ID
             cookie_string: Cookie字符串
             headless: 是否无头模式
+            create_new_page: 是否创建新页面（默认True，避免并发冲突）
 
         Returns:
             (browser, context, page) 元组，失败返回None
@@ -70,14 +72,22 @@ class BrowserPool:
                     # 检查浏览器是否仍然连接
                     if browser.is_connected():
                         try:
-                            # 验证页面是否可用
-                            await page.title()
+                            # 验证上下文是否可用
+                            pages = context.pages
+                            if not pages:
+                                raise Exception("上下文没有可用页面")
 
                             # 更新最后使用时间
-                            self.pool[cookie_id] = (playwright, browser, context, page, time.time())
+                            self.pool[cookie_id] = (playwright, browser, context, pages[0], time.time())
 
-                            logger.info(f"复用已存在的浏览器实例: {cookie_id}")
-                            return browser, context, page
+                            # 为每次请求创建新页面，避免并发导航冲突
+                            if create_new_page:
+                                new_page = await context.new_page()
+                                logger.info(f"复用浏览器实例并创建新页面: {cookie_id}")
+                                return browser, context, new_page
+                            else:
+                                logger.info(f"复用已存在的浏览器实例: {cookie_id}")
+                                return browser, context, pages[0]
                         except Exception as e:
                             logger.warning(f"浏览器实例 {cookie_id} 不可用: {e}，将重新创建")
                             await self._close_browser_unsafe(cookie_id)

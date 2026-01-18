@@ -73,7 +73,7 @@ export function OrdersV3() {
   // Single refresh
   const [refreshingOrders, setRefreshingOrders] = useState<Set<string>>(new Set())
 
-  const loadOrders = async (page: number = currentPage) => {
+  const loadOrders = async (page: number) => {
     if (!_hasHydrated || !isAuthenticated || !token) return
     try {
       setLoading(true)
@@ -138,7 +138,7 @@ export function OrdersV3() {
       const result = await deleteOrder(id)
       if (result.success) {
         addToast({ type: 'success', message: '删除成功' })
-        loadOrders()
+        loadOrders(currentPage)
         if (selectedOrder?.order_id === id) {
           setSelectedOrder(null)
         }
@@ -159,7 +159,7 @@ export function OrdersV3() {
       if (result.success) {
         addToast({ type: 'success', message: '订单更新成功' })
         setEditMode(false)
-        loadOrders()
+        loadOrders(currentPage)
         if (selectedOrder) {
           handleShowDetail({ ...selectedOrder, ...editFormData } as Order)
         }
@@ -216,7 +216,7 @@ export function OrdersV3() {
       if (result.success && result.summary) {
         setRefreshResult({ ...result.summary, updated_orders: result.updated_orders || [] })
         setRefreshModalOpen(true)
-        loadOrders()
+        loadOrders(currentPage)
       } else {
         addToast({ type: 'error', message: result.message || '刷新失败' })
       }
@@ -230,14 +230,14 @@ export function OrdersV3() {
   useEffect(() => {
     if (!_hasHydrated || !isAuthenticated || !token) return
     loadAccounts()
-    loadOrders(1)
+    loadOrders(currentPage)
   }, [_hasHydrated, isAuthenticated, token])
 
   useEffect(() => {
     if (!_hasHydrated || !isAuthenticated || !token) return
     setCurrentPage(1)
     loadOrders(1)
-  }, [selectedAccount, selectedStatus])
+  }, [selectedAccount, selectedStatus, token])
 
   const filteredOrders = orders.filter(order => {
     if (!searchKeyword) return true
@@ -391,7 +391,7 @@ export function OrdersV3() {
                     key={order.order_id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03 }}
+                    transition={{ delay: index * 0.01, duration: 0.3 }}
                     onClick={() => handleShowDetail(order)}
                     className={`group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all cursor-pointer overflow-hidden ${
                       isSelected ? 'ring-2 ring-orange-500' : ''
