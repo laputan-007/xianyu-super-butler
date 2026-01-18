@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Activity, MessageSquare, RefreshCw, Shield, ShoppingCart, Users,
-  TrendingUp, TrendingDown, Eye, Calendar, Filter, Download,
+  TrendingUp, TrendingDown, Filter, Download,
   MoreVertical, ArrowRight, Bell, Settings as SettingsIcon
 } from 'lucide-react'
 import { getAccountDetails } from '@/api/accounts'
@@ -507,7 +507,7 @@ export function DashboardV3() {
                   { label: 'API 服务', status: 'running', value: '99.9%' },
                   { label: '数据库', status: 'running', value: '正常' },
                   { label: '浏览器池', status: 'running', value: '3/3' },
-                ].map((item, index) => (
+                ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>

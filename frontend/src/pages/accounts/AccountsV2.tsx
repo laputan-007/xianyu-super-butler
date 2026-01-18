@@ -244,7 +244,7 @@ export function AccountsV2() {
     }
   }
 
-  const handleManualAdd = async (e: FormEvent) => {
+  const _handleManualAdd = async (e: FormEvent) => {
     e.preventDefault()
     if (!manualAccountId.trim() || !manualCookie.trim()) {
       addToast({ type: 'warning', message: '请输入账号ID和Cookie' })

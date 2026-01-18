@@ -10,6 +10,12 @@ export default defineConfig(({ command }) => ({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  esbuild: {
+    logOverride: { 'this-is-undefined-in-esm': 'silent' }
+  },
+  optimizeDeps: {
+    exclude: []
+  },
   server: {
     port: 3000,
     proxy: {
@@ -251,6 +257,6 @@ export default defineConfig(({ command }) => ({
     // 资源放在 assets 目录
     assetsDir: 'assets',
   },
-  // 生产构建使用 /static/ 作为 base，确保资源路径正确
+  // 生产环境使用 /static/ 作为 base，确保资源路径正确
   base: command === 'build' ? '/static/' : '/',
 }))

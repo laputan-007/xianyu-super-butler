@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Search, Trash2, X, ChevronLeft, ChevronRight,
   Sparkles, Edit, Package, User, MapPin, DollarSign,
-  Calendar, CheckCircle, XCircle, TrendingUp, Clock, Filter,
-  AlertCircle, Loader2, ChevronDown, Eye
+  Calendar, CheckCircle, XCircle, Filter,
+  Loader2
 } from 'lucide-react'
 import {
   getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus,
@@ -79,7 +79,7 @@ export function OrdersV3() {
       setLoading(true)
       const result = await getOrders(selectedAccount || undefined, selectedStatus || undefined, page, pageSize)
       if (result.success) {
-        setOrders(result.summary || [])
+        setOrders(result.data || [])
         setTotal(result.total || 0)
         setTotalPages(result.total_pages || 0)
         setCurrentPage(page)
@@ -108,7 +108,7 @@ export function OrdersV3() {
 
     try {
       const result = await getOrderDetail(order.order_id)
-      if (result.success && result.summary) {
+      if (result.success && result.data) {
         setEditFormData({
           item_id: order.item_id,
           buyer_id: order.buyer_id,

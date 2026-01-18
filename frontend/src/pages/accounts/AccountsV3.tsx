@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, RefreshCw, QrCode, Key, Edit2, Trash2, Power, PowerOff, X, Loader2,
   Clock, CheckCircle, MessageSquare, Bot, Eye, EyeOff, AlertTriangle, Search,
-  MoreVertical, TrendingUp, Zap, Settings, Shield, Activity, ChevronDown, ChevronUp
+  Zap, Settings, Shield, Activity, ChevronDown, ChevronUp, Users
 } from 'lucide-react'
 import {
   getAccountDetails, deleteAccount, updateAccountCookie, updateAccountStatus,
-  updateAccountRemark, addAccount, generateQRLogin, checkQRLoginStatus, passwordLogin,
+  updateAccountRemark, generateQRLogin, checkQRLoginStatus, passwordLogin,
   updateAccountAutoConfirm, updateAccountPauseDuration, getAllAIReplySettings,
   getAIReplySettings, updateAIReplySettings, updateAccountLoginInfo,
   type AIReplySettings

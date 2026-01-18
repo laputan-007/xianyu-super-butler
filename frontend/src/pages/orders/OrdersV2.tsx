@@ -83,7 +83,7 @@ export function OrdersV2() {
       setLoading(true)
       const result = await getOrders(selectedAccount || undefined, selectedStatus || undefined, page, pageSize)
       if (result.success) {
-        setOrders(result.summary || [])
+        setOrders(result.data || [])
         setTotal(result.total || 0)
         setTotalPages(result.total_pages || 0)
         setCurrentPage(page)
@@ -113,7 +113,7 @@ export function OrdersV2() {
 
     try {
       const result = await getOrderDetail(order.order_id)
-      if (result.success && result.summary) {
+      if (result.success && result.data) {
         // Order detail loaded
         setEditFormData({
           item_id: order.item_id,

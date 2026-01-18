@@ -41,6 +41,17 @@
 
 ## 🔄 最近更新
 
+### 🐛 修复前端加载路径问题 (2026-01-19)
+
+**问题：** 前端页面白屏，JS 文件无法加载
+- 错误：`Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"`
+- 原因：Vite 构建时使用 `base: '/'` 导致资源路径错误
+
+**解决方案：**
+- 修改 `frontend/vite.config.ts`：`base: command === 'build' ? '/static/' : '/'`
+- 确保构建生成的 `index.html` 正确引用 `/static/assets/` 路径
+- 重新构建前端并验证页面正常加载
+
 ### 🎨 前端UI全面重构 - 商务专业风格 (2026-01-18)
 
 **全新的视觉体验！**

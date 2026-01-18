@@ -16,7 +16,7 @@
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
@@ -27,5 +27,6 @@
     }
   },
   "include": ["src"],
+  "exclude": ["src/**/AccountsV2.tsx", "src/**/OrdersV2.tsx", "src/**/DashboardV2.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

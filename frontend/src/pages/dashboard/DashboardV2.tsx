@@ -354,7 +354,7 @@ export function DashboardV2() {
                           <p className="text-sm text-gray-900">{activity.message}</p>
                           <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
                         </div>
-                        <Badge variant={activity.status}>{activity.type}</Badge>
+                        <Badge variant={activity.status as any}>{activity.type}</Badge>
                       </div>
                     )
                   })}
