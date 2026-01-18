@@ -137,3 +137,29 @@ export const refreshSingleOrder = async (orderId: string): Promise<{ success: bo
     return { success: false, message: '刷新订单失败' }
   }
 }
+
+// 导入订单
+export const importOrders = async (orders: Partial<Order>[]): Promise<{
+  success: boolean
+  message?: string
+  total?: number
+  success_count?: number
+  failed_count?: number
+  results?: Array<{ order_id: string; success: boolean; message: string }>
+}> => {
+  try {
+    const response = await fetch('/api/orders/import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+      },
+      body: JSON.stringify(orders)
+    })
+    const result = await response.json()
+    return result
+  } catch (error) {
+    console.error('导入订单失败:', error)
+    return { success: false, message: '导入订单失败' }
+  }
+}

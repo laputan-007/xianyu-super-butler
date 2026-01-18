@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+// 导入订单表单模式
 import {
   RefreshCw, Search, Trash2, X, ChevronLeft, ChevronRight,
   Sparkles, Edit, Package, User, MapPin, DollarSign,
   Calendar, CheckCircle, XCircle, Filter,
-  Loader2
+  Loader2, Upload, Download
 } from 'lucide-react'
 import {
   getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus,
-  updateOrder, refreshSingleOrder
+  updateOrder, refreshSingleOrder, importOrders
 } from '@/api/orders'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
@@ -72,6 +73,26 @@ export function OrdersV3() {
 
   // Single refresh
   const [refreshingOrders, setRefreshingOrders] = useState<Set<string>>(new Set())
+
+  // Import orders
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{
+    success: boolean
+    message: string
+  } | null>(null)
+  const [importFormData, setImportFormData] = useState({
+    order_id: '',
+    cookie_id: '',
+    item_id: '',
+    buyer_id: '',
+    receiver_name: '',
+    receiver_phone: '',
+    receiver_address: '',
+    status: '',
+    quantity: '1',
+    amount: ''
+  })
 
   const loadOrders = async (page: number) => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -207,6 +228,75 @@ export function OrdersV3() {
     }
   }
 
+  const handleImportOrders = async () => {
+    // 验证必填字段
+    if (!importFormData.order_id.trim()) {
+      addToast({ type: 'error', message: '请输入订单号' })
+      return
+    }
+
+    if (!importFormData.cookie_id.trim()) {
+      addToast({ type: 'error', message: '请选择账号' })
+      return
+    }
+
+    setImporting(true)
+    try {
+      // 构建订单数据 - 只使用 Order 类型中存在的字段
+      const orderData: Partial<Order> = {
+        order_id: importFormData.order_id.trim(),
+        cookie_id: importFormData.cookie_id.trim(),
+      }
+
+      // 添加可选字段（只存在于 Order 类型中的）
+      if (importFormData.item_id.trim()) orderData.item_id = importFormData.item_id.trim()
+      if (importFormData.quantity.trim()) orderData.quantity = parseInt(importFormData.quantity)
+      if (importFormData.amount.trim()) orderData.amount = String(parseFloat(importFormData.amount))
+      if (importFormData.receiver_name.trim()) orderData.receiver_name = importFormData.receiver_name.trim()
+      if (importFormData.receiver_phone.trim()) orderData.receiver_phone = importFormData.receiver_phone.trim()
+      if (importFormData.receiver_address.trim()) orderData.receiver_address = importFormData.receiver_address.trim()
+      if (importFormData.status.trim()) orderData.status = importFormData.status.trim() as any
+
+      const result = await importOrders([orderData])
+
+      if (result.success) {
+        setImportResult({
+          success: true,
+          message: result.message || '导入成功'
+        })
+        addToast({
+          type: 'success',
+          message: result.message || '订单导入成功'
+        })
+        loadOrders(currentPage)
+
+        // 清空表单
+        setImportFormData({
+          order_id: '',
+          cookie_id: '',
+          item_id: '',
+          buyer_id: '',
+          receiver_name: '',
+          receiver_phone: '',
+          receiver_address: '',
+          status: '',
+          quantity: '1',
+          amount: ''
+        })
+      } else {
+        setImportResult({
+          success: false,
+          message: result.message || '导入失败'
+        })
+        addToast({ type: 'error', message: result.message || '导入失败' })
+      }
+    } catch (e) {
+      addToast({ type: 'error', message: '导入失败' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const handleRefreshAll = async () => {
     if (!confirm('确定要刷新所有订单状态吗？这可能需要一些时间。')) return
 
@@ -291,6 +381,13 @@ export function OrdersV3() {
                     批量刷新
                   </>
                 )}
+              </button>
+              <button
+                onClick={() => setImportModalOpen(true)}
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg shadow-sm transition-all flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                导入订单
               </button>
             </div>
           </div>
@@ -816,6 +913,245 @@ export function OrdersV3() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Import Orders Modal */}
+      <AnimatePresence>
+        {importModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setImportModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">导入订单</h3>
+                  <p className="text-sm text-white/80 mt-1">手动添加订单信息</p>
+                </div>
+                <button
+                  onClick={() => setImportModalOpen(false)}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                {/* Import Result */}
+                {importResult && (
+                  <div className={`mb-4 p-4 rounded-xl ${importResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                    <p className={`text-sm font-semibold ${importResult.success ? 'text-green-900' : 'text-red-900'}`}>
+                      {importResult.message}
+                    </p>
+                  </div>
+                )}
+
+                {/* Form */}
+                <div className="space-y-4">
+                  {/* 必填字段 */}
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                    <h4 className="text-sm font-semibold text-orange-900 mb-3">必填信息</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">
+                          订单号 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={importFormData.order_id}
+                          onChange={(e) => setImportFormData({ ...importFormData, order_id: e.target.value })}
+                          placeholder="请输入订单号"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">
+                          账号 <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={importFormData.cookie_id}
+                          onChange={(e) => setImportFormData({ ...importFormData, cookie_id: e.target.value })}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        >
+                          <option value="">请选择账号</option>
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.note || account.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 商品信息 */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-3">商品信息（选填）</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">商品ID</label>
+                        <input
+                          type="text"
+                          value={importFormData.item_id}
+                          onChange={(e) => setImportFormData({ ...importFormData, item_id: e.target.value })}
+                          placeholder="商品ID"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">买家ID</label>
+                        <input
+                          type="text"
+                          value={importFormData.buyer_id}
+                          onChange={(e) => setImportFormData({ ...importFormData, buyer_id: e.target.value })}
+                          placeholder="买家ID"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">订单金额</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={importFormData.amount}
+                          onChange={(e) => setImportFormData({ ...importFormData, amount: e.target.value })}
+                          placeholder="99.99"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">数量</label>
+                        <input
+                          type="number"
+                          value={importFormData.quantity}
+                          onChange={(e) => setImportFormData({ ...importFormData, quantity: e.target.value })}
+                          placeholder="1"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 收货信息 */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <h4 className="text-sm font-semibold text-slate-900 mb-3">收货信息（选填）</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">收件人</label>
+                        <input
+                          type="text"
+                          value={importFormData.receiver_name}
+                          onChange={(e) => setImportFormData({ ...importFormData, receiver_name: e.target.value })}
+                          placeholder="收件人姓名"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">联系电话</label>
+                        <input
+                          type="text"
+                          value={importFormData.receiver_phone}
+                          onChange={(e) => setImportFormData({ ...importFormData, receiver_phone: e.target.value })}
+                          placeholder="手机号码"
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">收货地址</label>
+                        <textarea
+                          value={importFormData.receiver_address}
+                          onChange={(e) => setImportFormData({ ...importFormData, receiver_address: e.target.value })}
+                          placeholder="详细地址"
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all resize-none"
+                          disabled={importing}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700">订单状态</label>
+                        <select
+                          value={importFormData.status}
+                          onChange={(e) => setImportFormData({ ...importFormData, status: e.target.value })}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          disabled={importing}
+                        >
+                          <option value="">请选择状态</option>
+                          <option value="processing">处理中</option>
+                          <option value="pending_ship">待发货</option>
+                          <option value="shipped">已发货</option>
+                          <option value="completed">已完成</option>
+                          <option value="cancelled">已关闭</option>
+                          <option value="refunding">退款中</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setImportModalOpen(false)
+                      setImportFormData({
+                        order_id: '',
+                        cookie_id: '',
+                        item_id: '',
+                        buyer_id: '',
+                        receiver_name: '',
+                        receiver_phone: '',
+                        receiver_address: '',
+                        status: '',
+                        quantity: '1',
+                        amount: ''
+                      })
+                      setImportResult(null)
+                    }}
+                    disabled={importing}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleImportOrders}
+                    disabled={importing || !importFormData.order_id.trim() || !importFormData.cookie_id.trim()}
+                    className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {importing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        导入中...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        导入订单
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
+

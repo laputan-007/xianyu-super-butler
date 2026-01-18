@@ -2672,27 +2672,27 @@ def clear_default_reply_records(cid: str, current_user: Dict[str, Any] = Depends
 
 
 # ------------------------- 默认回复管理接口（单数形式兼容路由） -------------------------
-# 兼容前端使用 /default-reply/ 单数形式的请求
+# 兼容前端使用 /api/default-reply/ 的请求
 
-@app.get('/default-reply/{cid}')
+@app.get('/api/default-reply/{cid}')
 def get_default_reply_compat(cid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """获取指定账号的默认回复设置（兼容路由）"""
     return get_default_reply(cid, current_user)
 
 
-@app.put('/default-reply/{cid}')
+@app.put('/api/default-reply/{cid}')
 def update_default_reply_compat(cid: str, reply_data: DefaultReplyIn, current_user: Dict[str, Any] = Depends(get_current_user)):
     """更新指定账号的默认回复设置（兼容路由）"""
     return update_default_reply(cid, reply_data, current_user)
 
 
-@app.delete('/default-reply/{cid}')
+@app.delete('/api/default-reply/{cid}')
 def delete_default_reply_compat(cid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """删除指定账号的默认回复设置（兼容路由）"""
     return delete_default_reply(cid, current_user)
 
 
-@app.post('/default-reply/{cid}/clear-records')
+@app.post('/api/default-reply/{cid}/clear-records')
 def clear_default_reply_records_compat(cid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """清空指定账号的默认回复记录（兼容路由）"""
     return clear_default_reply_records(cid, current_user)
@@ -6743,6 +6743,120 @@ async def manual_ship_orders(
     except Exception as e:
         log_with_user('error', f"手动发货失败: {str(e)}", current_user)
         raise HTTPException(status_code=500, detail=f"手动发货失败: {str(e)}")
+
+
+@app.post('/api/orders/import')
+async def import_orders(
+    orders: List[Dict[str, Any]] = Body(..., description="订单列表"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    导入订单
+    支持批量导入自定义订单数据
+    """
+    try:
+        from db_manager import db_manager
+
+        user_id = current_user['user_id']
+        log_with_user('info', f"开始导入订单: 订单数量={len(orders)}", current_user)
+
+        # 获取用户的所有Cookie
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        success_count = 0
+        failed_count = 0
+        results = []
+
+        # 必需字段验证
+        required_fields = ['order_id', 'cookie_id']
+        optional_fields = [
+            'item_id', 'item_title', 'item_price', 'item_image',
+            'receiver_name', 'receiver_phone', 'receiver_address', 'receiver_city',
+            'status', 'status_text', 'order_time', 'pay_time'
+        ]
+
+        for order_data in orders:
+            try:
+                # 验证必需字段
+                missing_fields = [f for f in required_fields if not order_data.get(f)]
+                if missing_fields:
+                    results.append({
+                        'order_id': order_data.get('order_id', 'unknown'),
+                        'success': False,
+                        'message': f'缺少必需字段: {", ".join(missing_fields)}'
+                    })
+                    failed_count += 1
+                    continue
+
+                order_id = order_data['order_id']
+                cookie_id = order_data['cookie_id']
+
+                # 验证Cookie属于当前用户
+                if cookie_id not in user_cookies:
+                    results.append({
+                        'order_id': order_id,
+                        'success': False,
+                        'message': '无权操作此账号的订单'
+                    })
+                    failed_count += 1
+                    continue
+
+                # 检查订单是否已存在
+                existing_order = db_manager.get_order_by_id(order_id)
+                if existing_order:
+                    # 更新现有订单
+                    update_data = {k: v for k, v in order_data.items() if k in optional_fields and v is not None}
+                    db_manager.update_order(order_id, **update_data)
+                    results.append({
+                        'order_id': order_id,
+                        'success': True,
+                        'message': '订单已更新'
+                    })
+                else:
+                    # 插入新订单
+                    insert_data = {
+                        'order_id': order_id,
+                        'cookie_id': cookie_id
+                    }
+                    # 添加可选字段
+                    for field in optional_fields:
+                        if field in order_data and order_data[field] is not None:
+                            insert_data[field] = order_data[field]
+
+                    db_manager.insert_or_update_order(**insert_data)
+                    results.append({
+                        'order_id': order_id,
+                        'success': True,
+                        'message': '订单已导入'
+                    })
+
+                success_count += 1
+
+            except Exception as e:
+                results.append({
+                    'order_id': order_data.get('order_id', 'unknown'),
+                    'success': False,
+                    'message': str(e)
+                })
+                failed_count += 1
+                log_with_user('error', f"导入订单时发生异常: {str(e)}", current_user)
+
+        log_with_user('info', f"导入订单完成: 成功{success_count}个, 失败{failed_count}个", current_user)
+
+        return {
+            "success": True,
+            "message": f"导入完成: 成功{success_count}个, 失败{failed_count}个",
+            "total": len(orders),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "results": results
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"导入订单失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"导入订单失败: {str(e)}")
 
 
 # ==================== 前端 SPA Catch-All 路由 ====================

@@ -20,7 +20,7 @@ import { useAuthStore } from '@/store/authStore'
 import { PageLoading } from '@/components/common/Loading'
 import type { AccountDetail } from '@/types'
 
-type ModalType = 'qrcode' | 'password' | 'manual' | 'edit' | 'ai-settings' | null
+type ModalType = 'qrcode' | 'password' | 'manual' | 'edit' | 'ai-settings' | 'default-reply' | null
 type ViewMode = 'grid' | 'list'
 
 interface AccountWithKeywordCount extends AccountDetail {
@@ -71,6 +71,13 @@ export function AccountsV3() {
   const [aiMaxDiscountAmount, setAiMaxDiscountAmount] = useState(100)
   const [aiMaxBargainRounds, setAiMaxBargainRounds] = useState(3)
   const [aiCustomPrompts, setAiCustomPrompts] = useState('')
+
+  // 默认回复状态
+  const [defaultReplyAccount, setDefaultReplyAccount] = useState<AccountWithKeywordCount | null>(null)
+  const [defaultReplyContent, setDefaultReplyContent] = useState('')
+  const [defaultReplyImageUrl, setDefaultReplyImageUrl] = useState('')
+  const [defaultReplySaving, setDefaultReplySaving] = useState(false)
+  const [uploadingDefaultReplyImage, setUploadingDefaultReplyImage] = useState(false)
   const [aiSettingsSaving, setAiSettingsSaving] = useState(false)
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
 
@@ -346,6 +353,107 @@ export function AccountsV3() {
     }
   }
 
+  // ==================== 默认回复管理 ====================
+  const handleOpenDefaultReply = async (account: AccountWithKeywordCount) => {
+    setDefaultReplyAccount(account)
+    setActiveModal('default-reply')
+    // 加载当前默认回复（如果后端有数据就使用）
+    try {
+      const response = await fetch(`/api/default-reply/${account.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        // 后端直接返回数据对象，不需要检查 success 和 data 包装
+        setDefaultReplyContent(data.reply_content || '')
+        setDefaultReplyImageUrl(data.reply_image_url || '')
+      } else {
+        // 请求失败，使用空值
+        setDefaultReplyContent('')
+        setDefaultReplyImageUrl('')
+      }
+    } catch {
+      // 忽略错误，使用空值
+      setDefaultReplyContent('')
+      setDefaultReplyImageUrl('')
+    }
+  }
+
+  const handleSaveDefaultReply = async () => {
+    if (!defaultReplyAccount) return
+    setDefaultReplySaving(true)
+    try {
+      const response = await fetch(`/api/default-reply/${defaultReplyAccount.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          enabled: true,
+          reply_content: defaultReplyContent,
+          reply_image_url: defaultReplyImageUrl,
+          reply_once: false
+        })
+      })
+      const data = await response.json()
+      if (response.ok) {
+        addToast({ type: 'success', message: '默认回复已保存' })
+        closeModal()
+      } else {
+        addToast({ type: 'error', message: data.detail || data.message || '保存失败' })
+      }
+    } catch {
+      addToast({ type: 'error', message: '保存失败' })
+    } finally {
+      setDefaultReplySaving(false)
+    }
+  }
+
+  const handleUploadDefaultReplyImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 验证文件类型
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      addToast({ type: 'error', message: '请选择图片文件' })
+      return
+    }
+
+    // 验证文件大小（2MB限制）
+    if (file.size > 2 * 1024 * 1024) {
+      addToast({ type: 'error', message: '图片大小不能超过2MB' })
+      return
+    }
+
+    setUploadingDefaultReplyImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const response = await fetch('/upload-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      const data = await response.json()
+      if (data.image_url) {
+        setDefaultReplyImageUrl(data.image_url)
+        addToast({ type: 'success', message: '图片上传成功' })
+      } else {
+        addToast({ type: 'error', message: data.message || '上传失败' })
+      }
+    } catch {
+      addToast({ type: 'error', message: '上传失败' })
+    } finally {
+      setUploadingDefaultReplyImage(false)
+    }
+  }
+
   if (loading) {
     return <PageLoading />
   }
@@ -600,6 +708,14 @@ export function AccountsV3() {
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                       编辑
+                    </button>
+                    <button
+                      onClick={() => handleOpenDefaultReply(account)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      title="默认回复"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      默认回复
                     </button>
                     <button
                       onClick={() => handleOpenAISettings(account)}
@@ -1276,6 +1392,147 @@ export function AccountsV3() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* Default Reply Modal */}
+        <AnimatePresence>
+          {activeModal === 'default-reply' && defaultReplyAccount && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              onClick={closeModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              >
+                {/* Header */}
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <MessageSquare className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">默认回复设置</h3>
+                      <p className="text-sm text-green-100">{defaultReplyAccount.note || defaultReplyAccount.id}</p>
+                    </div>
+                  </div>
+                  <button onClick={closeModal} className="text-white/80 hover:text-white transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Reply Content */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      默认回复内容
+                    </label>
+                    <textarea
+                      value={defaultReplyContent}
+                      onChange={(e) => setDefaultReplyContent(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:bg-white transition-all resize-none"
+                      rows={4}
+                      placeholder="输入默认回复内容，留空表示不使用默认回复"
+                    />
+                    <p className="text-xs text-slate-500">
+                      当没有匹配到任何关键词时，将使用此默认回复
+                    </p>
+                  </div>
+
+                  {/* Reply Image */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      回复图片（可选）
+                    </label>
+                    <div className="space-y-3">
+                      {defaultReplyImageUrl ? (
+                        <div className="relative group">
+                          <img
+                            src={defaultReplyImageUrl}
+                            alt="默认回复图片"
+                            className="w-full h-32 object-cover rounded-xl border border-slate-200"
+                          />
+                          <button
+                            onClick={() => {
+                              setDefaultReplyImageUrl('')
+                              addToast({ type: 'success', message: '已移除图片' })
+                            }}
+                            className="absolute top-2 right-2 p-1.5 bg-white/90 hover:bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-green-400 transition-colors">
+                          <label className="block">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleUploadDefaultReplyImage}
+                              disabled={uploadingDefaultReplyImage}
+                              className="hidden"
+                              id={`default-reply-image-${defaultReplyAccount.id}`}
+                            />
+                            <label
+                              htmlFor={`default-reply-image-${defaultReplyAccount.id}`}
+                              className="cursor-pointer"
+                            >
+                              <div className="mx-auto flex flex-col items-center gap-2">
+                                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                  <Plus className="w-6 h-6 text-green-600" />
+                                </div>
+                                <span className="text-sm text-green-600 font-medium">上传图片</span>
+                                <span className="text-xs text-slate-500">支持 jpg, png, gif, webp</span>
+                              </div>
+                              {uploadingDefaultReplyImage && (
+                                <div className="mt-2">
+                                  <Loader2 className="w-6 h-6 text-green-600 animate-spin mx-auto" />
+                                  <span className="text-xs text-slate-500">上传中...</span>
+                                </div>
+                              )}
+                            </label>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-slate-100 px-6 py-4 bg-slate-50">
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={closeModal}
+                      className="px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSaveDefaultReply}
+                      disabled={defaultReplySaving}
+                      className="px-4 py-2.5 text-sm font-medium bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {defaultReplySaving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          保存中...
+                        </>
+                      ) : (
+                        '保存'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
     </div>
   )
