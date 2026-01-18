@@ -6548,8 +6548,8 @@ async def refresh_orders_status(
                         log_with_user('warning', f"订单 {order_id} 详情获取失败", current_user)
 
                 except Exception as e:
-                failed_count += 1
-                log_with_user('error', f"刷新订单 {order_id} 时发生异常: {str(e)}", current_user)
+                    failed_count += 1
+                    log_with_user('error', f"刷新订单 {order_id} 时发生异常: {str(e)}", current_user)
 
         # 返回刷新结果
         log_with_user('info', f"订单刷新完成: 更新{updated_count}个, 无变化{no_change_count}个, 失败{failed_count}个", current_user)
