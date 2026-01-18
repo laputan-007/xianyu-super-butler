@@ -2,7 +2,7 @@ import React from 'react'
 import { cn } from '@/utils/cn'
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'gray'
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'gray' | 'secondary'
   size?: 'sm' | 'md'
   dot?: boolean
   children: React.ReactNode
@@ -25,6 +25,7 @@ export function Badge({
     danger: 'bg-danger-50 text-danger-700',
     info: 'bg-info-50 text-info-700',
     gray: 'bg-gray-100 text-gray-700',
+    secondary: 'bg-gray-100 text-gray-600',
   }
 
   const sizes = {
@@ -39,6 +40,7 @@ export function Badge({
     danger: 'bg-danger-500',
     info: 'bg-info-500',
     gray: 'bg-gray-500',
+    secondary: 'bg-gray-500',
   }
 
   return (

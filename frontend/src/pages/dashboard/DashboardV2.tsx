@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Activity, MessageSquare, RefreshCw, Shield, ShoppingCart, Users,
-  TrendingUp, Clock, CheckCircle, AlertCircle, Package, Settings,
+  Clock, CheckCircle, AlertCircle, Package, Settings,
   ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
 import { getAccountDetails } from '@/api/accounts'
@@ -401,7 +401,7 @@ export function DashboardV2() {
                   {accounts.slice(0, 10).map((account) => (
                     <tr key={account.id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4 text-sm text-gray-900 font-mono">{account.id}</td>
-                      <td className="py-3 px-4 text-sm text-gray-700">{account.remark || '-'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-700">{account.note || '-'}</td>
                       <td className="py-3 px-4 text-sm">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 text-primary-700 rounded-md text-xs font-medium">
                           <MessageSquare className="w-3 h-3" />

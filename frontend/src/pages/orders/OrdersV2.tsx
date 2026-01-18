@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ShoppingCart, RefreshCw, Search, Trash2, Eye, X, ChevronLeft, ChevronRight,
-  Sparkles, Edit, Filter, Download, Package, User, MapPin, Phone, DollarSign,
-  Calendar, CheckCircle, XCircle, Clock, AlertCircle
+  RefreshCw, Search, Trash2, X, ChevronLeft, ChevronRight,
+  Sparkles, Edit, Package, User, MapPin, DollarSign,
+  Calendar, CheckCircle, XCircle
 } from 'lucide-react'
 import {
   getOrders, deleteOrder, getOrderDetail, refreshOrdersStatus,
-  updateOrder, refreshSingleOrder, type OrderDetail
+  updateOrder, refreshSingleOrder
 } from '@/api/orders'
 import { getAccounts } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { PageLoading } from '@/components/common/Loading'
 import { Select } from '@/components/common/Select'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
+import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
@@ -45,7 +45,6 @@ export function OrdersV2() {
   // 侧边详情面板
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
   // 分页状态
@@ -84,7 +83,7 @@ export function OrdersV2() {
       setLoading(true)
       const result = await getOrders(selectedAccount || undefined, selectedStatus || undefined, page, pageSize)
       if (result.success) {
-        setOrders(result.data || [])
+        setOrders(result.summary || [])
         setTotal(result.total || 0)
         setTotalPages(result.total_pages || 0)
         setCurrentPage(page)
@@ -113,9 +112,9 @@ export function OrdersV2() {
     setLoadingDetail(true)
 
     try {
-      const result = await getOrderDetail(order.order_no)
-      if (result.success && result.data) {
-        setOrderDetail(result.data)
+      const result = await getOrderDetail(order.order_id)
+      if (result.success && result.summary) {
+        // Order detail loaded
         setEditFormData({
           item_id: order.item_id,
           buyer_id: order.buyer_id,
@@ -220,8 +219,8 @@ export function OrdersV2() {
     setRefreshing(true)
     try {
       const result = await refreshOrdersStatus()
-      if (result.success && result.data) {
-        setRefreshResult(result.data)
+      if (result.success && result.summary) {
+        setRefreshResult({ ...result.summary, updated_orders: result.updated_orders || [] })
         setRefreshModalOpen(true)
         loadOrders()
       } else {
@@ -252,7 +251,7 @@ export function OrdersV2() {
     const keyword = searchKeyword.toLowerCase()
     return (
       order.order_id.toLowerCase().includes(keyword) ||
-      order.order_no.toLowerCase().includes(keyword) ||
+      order.order_id.toLowerCase().includes(keyword) ||
       order.receiver_name?.toLowerCase().includes(keyword) ||
       order.receiver_phone?.toLowerCase().includes(keyword)
     )
@@ -301,19 +300,19 @@ export function OrdersV2() {
               />
             </div>
             <Select
-              value={selectedAccount}
+              value={selectedAccount || ""}
               onChange={(e) => setSelectedAccount(e.target.value)}
               className="w-full sm:w-48"
             >
               <option value="">所有账号</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.remark || account.id}
+                  {account.note || account.id}
                 </option>
               ))}
             </Select>
             <Select
-              value={selectedStatus}
+              value={selectedStatus || ""}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full sm:w-40"
             >
@@ -357,7 +356,7 @@ export function OrdersV2() {
                           onClick={() => handleShowDetail(order)}
                         >
                           <td className="py-3 px-4">
-                            <div className="text-sm font-mono text-gray-900">{order.order_no}</div>
+                            <div className="text-sm font-mono text-gray-900">{order.order_id}</div>
                             <div className="text-xs text-gray-500 mt-0.5">ID: {order.order_id}</div>
                           </td>
                           <td className="py-3 px-4">
@@ -366,7 +365,7 @@ export function OrdersV2() {
                           </td>
                           <td className="py-3 px-4">
                             <span className="text-sm font-semibold text-gray-900">
-                              ¥{(order.amount || 0).toFixed(2)}
+                              ¥{parseFloat(order.amount || "0").toFixed(2)}
                             </span>
                           </td>
                           <td className="py-3 px-4">
@@ -457,7 +456,7 @@ export function OrdersV2() {
               <div className="flex items-start justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">订单详情</h2>
-                  <p className="text-xs text-gray-500 mt-1 font-mono">{selectedOrder.order_no}</p>
+                  <p className="text-xs text-gray-500 mt-1 font-mono">{selectedOrder.order_id}</p>
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => setSidebarOpen(false)}>
                   <X className="w-4 h-4" />
@@ -597,7 +596,7 @@ export function OrdersV2() {
                       <div className="flex justify-between">
                         <span className="text-gray-600">金额</span>
                         <span className="text-lg font-semibold text-primary-600">
-                          ¥{(selectedOrder.amount || 0).toFixed(2)}
+                          ¥{parseFloat(selectedOrder.amount || "0").toFixed(2)}
                         </span>
                       </div>
                     </div>

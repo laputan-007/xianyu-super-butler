@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   Plus, RefreshCw, QrCode, Key, Edit2, Trash2, Power, PowerOff, X, Loader2,
-  Clock, CheckCircle, MessageSquare, Bot, Eye, EyeOff, AlertTriangle, Settings,
-  User, Cookie, ChevronRight
+  Clock, CheckCircle, MessageSquare, Bot, Eye, EyeOff, AlertTriangle
 } from 'lucide-react'
 import {
   getAccountDetails, deleteAccount, updateAccountCookie, updateAccountStatus,
@@ -12,7 +11,7 @@ import {
   getAIReplySettings, updateAIReplySettings, updateAccountLoginInfo,
   type AIReplySettings
 } from '@/api/accounts'
-import { getKeywords, getDefaultReply, updateDefaultReply } from '@/api/keywords'
+import { getKeywords } from '@/api/keywords'
 import { checkDefaultPassword } from '@/api/settings'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
@@ -33,20 +32,13 @@ interface AccountWithKeywordCount extends AccountDetail {
 
 export function AccountsV2() {
   const { addToast } = useUIStore()
-  const { isAuthenticated, token, _hasHydrated, user } = useAuthStore()
+  const { isAuthenticated, token, _hasHydrated } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [accounts, setAccounts] = useState<AccountWithKeywordCount[]>([])
   const [activeModal, setActiveModal] = useState<ModalType>(null)
 
   // 默认密码检查状态
-  const [usingDefaultPassword, setUsingDefaultPassword] = useState(false)
   const [showPasswordWarning, setShowPasswordWarning] = useState(false)
-
-  // 默认回复管理状态
-  const [defaultReplyAccount, setDefaultReplyAccount] = useState<AccountWithKeywordCount | null>(null)
-  const [defaultReplyContent, setDefaultReplyContent] = useState('')
-  const [defaultReplyImageUrl, setDefaultReplyImageUrl] = useState('')
-  const [defaultReplySaving, setDefaultReplySaving] = useState(false)
 
   // 扫码登录状态
   const [qrCodeUrl, setQrCodeUrl] = useState('')
@@ -63,7 +55,6 @@ export function AccountsV2() {
   // 手动输入状态
   const [manualAccountId, setManualAccountId] = useState('')
   const [manualCookie, setManualCookie] = useState('')
-  const [manualLoading, setManualLoading] = useState(false)
 
   // 编辑账号状态
   const [editingAccount, setEditingAccount] = useState<AccountDetail | null>(null)
@@ -122,8 +113,7 @@ export function AccountsV2() {
       // 检查默认密码
       try {
         const pwdCheck = await checkDefaultPassword()
-        setUsingDefaultPassword(pwdCheck.using_default_password ?? false)
-        setShowPasswordWarning(pwdCheck.using_default_password ?? false)
+        setShowPasswordWarning(pwdCheck.using_default ?? false)
       } catch {
         // ignore
       }
@@ -261,11 +251,10 @@ export function AccountsV2() {
       return
     }
 
-    setManualLoading(true)
     try {
       const result = await addAccount({
-        account_id: manualAccountId.trim(),
-        cookie_string: manualCookie.trim(),
+        id: manualAccountId.trim(),
+        cookie: manualCookie.trim(),
       })
       if (result.success) {
         addToast({ type: 'success', message: '账号添加成功' })
@@ -276,8 +265,6 @@ export function AccountsV2() {
       }
     } catch {
       addToast({ type: 'error', message: '添加账号失败' })
-    } finally {
-      setManualLoading(false)
     }
   }
 
@@ -313,7 +300,7 @@ export function AccountsV2() {
 
   const handleEdit = (account: AccountDetail) => {
     setEditingAccount(account)
-    setEditNote(account.remark || '')
+    setEditNote(account.note || '')
     setEditCookie(account.cookie || '')
     setEditAutoConfirm(account.auto_confirm ?? false)
     setEditPauseDuration(account.pause_duration || 0)
@@ -330,7 +317,7 @@ export function AccountsV2() {
     try {
       // Update various fields
       await Promise.all([
-        editNote !== editingAccount.remark && updateAccountRemark(editingAccount.id, editNote),
+        editNote !== editingAccount.note && updateAccountRemark(editingAccount.id, editNote),
         editCookie !== editingAccount.cookie && updateAccountCookie(editingAccount.id, editCookie),
         editAutoConfirm !== editingAccount.auto_confirm && updateAccountAutoConfirm(editingAccount.id, editAutoConfirm),
         editPauseDuration !== editingAccount.pause_duration && updateAccountPauseDuration(editingAccount.id, editPauseDuration),
@@ -359,12 +346,12 @@ export function AccountsV2() {
 
     try {
       const result = await getAIReplySettings(account.id)
-      if (result.success && result.settings) {
-        setAiEnabled(result.settings.ai_enabled ?? result.settings.enabled ?? false)
-        setAiMaxDiscountPercent(result.settings.max_discount_percent ?? 10)
-        setAiMaxDiscountAmount(result.settings.max_discount_amount ?? 100)
-        setAiMaxBargainRounds(result.settings.max_bargain_rounds ?? 3)
-        setAiCustomPrompts(result.settings.custom_prompts || '')
+      if (result.ai_enabled !== undefined) {
+        setAiEnabled(result.ai_enabled ?? result.enabled ?? false)
+        setAiMaxDiscountPercent(result.max_discount_percent ?? 10)
+        setAiMaxDiscountAmount(result.max_discount_amount ?? 100)
+        setAiMaxBargainRounds(result.max_bargain_rounds ?? 3)
+        setAiCustomPrompts(result.custom_prompts || '')
       }
     } catch {
       addToast({ type: 'error', message: '获取AI设置失败' })
@@ -459,7 +446,7 @@ export function AccountsV2() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-base truncate">{account.remark || account.id}</CardTitle>
+                    <CardTitle className="text-base truncate">{account.note || account.id}</CardTitle>
                     <CardDescription className="font-mono text-xs truncate">
                       {account.id}
                     </CardDescription>
