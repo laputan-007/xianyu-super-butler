@@ -34,14 +34,77 @@ const CardList: React.FC = () => {
 
   const handleEdit = (card: Card) => {
     setSelectedCard(card);
-    setEditForm({ ...card });
+    setEditForm({
+      id: card.id,
+      name: card.name || '',
+      type: card.type || 'text',
+      // API 配置
+      api_url: card.api_config?.url || '',
+      api_method: card.api_config?.method || 'GET',
+      api_timeout: card.api_config?.timeout || 10,
+      api_headers: card.api_config?.headers || '',
+      api_params: card.api_config?.params || '',
+      // 文本配置
+      text_content: card.text_content || '',
+      // 批量数据配置
+      data_content: card.data_content || '',
+      // 图片配置
+      image_url: card.image_url || '',
+      // 通用配置
+      delay_seconds: card.delay_seconds || 0,
+      description: card.description || '',
+      // 多规格配置
+      is_multi_spec: card.is_multi_spec || false,
+      spec_name: card.spec_name || '',
+      spec_value: card.spec_value || '',
+      enabled: card.enabled
+    });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
     if (!selectedCard) return;
+
+    // 验证必填字段
+    if (!editForm.name?.trim()) {
+      alert('请输入卡密名称');
+      return;
+    }
+    if (!editForm.type) {
+      alert('请选择卡密类型');
+      return;
+    }
+
     try {
-      await updateCard(selectedCard.id, editForm);
+      const updateData: Partial<Card> = {
+        name: editForm.name.trim(),
+        type: editForm.type as any,
+        description: editForm.description?.trim(),
+        delay_seconds: editForm.delay_seconds || 0,
+        enabled: editForm.enabled ?? true,
+        is_multi_spec: editForm.is_multi_spec,
+        spec_name: editForm.spec_name,
+        spec_value: editForm.spec_value
+      };
+
+      // 根据类型设置内容
+      if (editForm.type === 'api') {
+        updateData.api_config = {
+          url: editForm.api_url?.trim(),
+          method: editForm.api_method as 'GET' | 'POST',
+          timeout: editForm.api_timeout || 10,
+          headers: editForm.api_headers?.trim() || undefined,
+          params: editForm.api_params?.trim() || undefined
+        };
+      } else if (editForm.type === 'text') {
+        updateData.text_content = editForm.text_content?.trim() || '';
+      } else if (editForm.type === 'data') {
+        updateData.data_content = editForm.data_content?.trim() || '';
+      } else if (editForm.type === 'image') {
+        updateData.image_url = editForm.image_url?.trim() || '';
+      }
+
+      await updateCard(selectedCard.id, updateData);
       setShowEditModal(false);
       getCards().then(setCards);
     } catch (error) {
@@ -228,96 +291,231 @@ const CardList: React.FC = () => {
             </div>
 
             <div className="modal-body">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">卡密名称</label>
-                  <input
-                    type="text"
-                    value={editForm.name || ''}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">类型</label>
-                  <select
-                    value={editForm.type || 'text'}
-                    onChange={(e) => setEditForm({ ...editForm, type: e.target.value as any })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                    disabled
-                  >
-                    <option value="text">文本</option>
-                    <option value="image">图片</option>
-                    <option value="api">API</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">内容</label>
-                  {editForm.type === 'text' ? (
-                    <textarea
-                      value={editForm.content || ''}
-                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                      className="w-full ios-input px-4 py-3 rounded-xl h-32 resize-none font-mono text-sm"
-                      placeholder="输入卡密内容，一行一个"
-                    />
-                  ) : editForm.type === 'image' ? (
-                    <textarea
-                      value={editForm.content || ''}
-                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                      className="w-full ios-input px-4 py-3 rounded-xl h-32 resize-none font-mono text-sm"
-                      placeholder="输入图片URL，一行一个"
-                    />
-                  ) : (
+              <div className="space-y-5">
+                {/* 基本信息 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">卡密名称 <span className="text-red-500">*</span></label>
                     <input
                       type="text"
-                      value={editForm.content || ''}
-                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                      value={editForm.name || ''}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                       className="w-full ios-input px-4 py-3 rounded-xl"
-                      placeholder="API地址"
+                      placeholder="例如：游戏点卡、会员卡等"
                     />
-                  )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">卡券类型</label>
+                    <select
+                      value={editForm.type || 'text'}
+                      onChange={(e) => setEditForm({ ...editForm, type: e.target.value as any })}
+                      className="w-full ios-input px-4 py-3 rounded-xl"
+                    >
+                      <option value="">请选择类型</option>
+                      <option value="text">固定文字</option>
+                      <option value="data">批量数据</option>
+                      <option value="api">API接口</option>
+                      <option value="image">图片</option>
+                    </select>
+                  </div>
                 </div>
 
+                {/* API 配置 */}
+                {editForm.type === 'api' && (
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-4 bg-gray-50">
+                    <h3 className="font-bold text-gray-900">API 配置</h3>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">API 地址</label>
+                      <input
+                        type="url"
+                        value={editForm.api_url || ''}
+                        onChange={(e) => setEditForm({ ...editForm, api_url: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                        placeholder="https://api.example.com/get-card"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">请求方法</label>
+                        <select
+                          value={editForm.api_method || 'GET'}
+                          onChange={(e) => setEditForm({ ...editForm, api_method: e.target.value as 'GET' | 'POST' })}
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                        >
+                          <option value="GET">GET</option>
+                          <option value="POST">POST</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">超时时间（秒）</label>
+                        <input
+                          type="number"
+                          value={editForm.api_timeout || 10}
+                          onChange={(e) => setEditForm({ ...editForm, api_timeout: parseInt(e.target.value) || 10 })}
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                          min="1"
+                          max="60"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">请求头（JSON 格式）</label>
+                      <textarea
+                        value={editForm.api_headers || ''}
+                        onChange={(e) => setEditForm({ ...editForm, api_headers: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl h-20 resize-none font-mono text-sm"
+                        placeholder='{"Authorization": "Bearer token"}'
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">请求参数（JSON 格式）</label>
+                      <textarea
+                        value={editForm.api_params || ''}
+                        onChange={(e) => setEditForm({ ...editForm, api_params: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl h-20 resize-none font-mono text-sm"
+                        placeholder='{"type": "card", "count": 1}'
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 固定文字配置 */}
+                {editForm.type === 'text' && (
+                  <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <h3 className="font-bold text-gray-900 mb-3">固定文字配置</h3>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">文字内容</label>
+                      <textarea
+                        value={editForm.text_content || ''}
+                        onChange={(e) => setEditForm({ ...editForm, text_content: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl h-32 resize-none"
+                        placeholder="请输入要发送的固定文字内容..."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 批量数据配置 */}
+                {editForm.type === 'data' && (
+                  <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <h3 className="font-bold text-gray-900 mb-3">批量数据配置</h3>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">数据内容（一行一个）</label>
+                      <textarea
+                        value={editForm.data_content || ''}
+                        onChange={(e) => setEditForm({ ...editForm, data_content: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl h-40 resize-none font-mono text-sm"
+                        placeholder="请输入数据，每行一个：&#10;卡号1:密码1&#10;卡号2:密码2&#10;或者&#10;兑换码1&#10;兑换码2"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">支持格式：卡号:密码 或 单独的兑换码</p>
+                      <p className="text-xs text-gray-500">当前库存：<span className="font-bold text-amber-600">
+                        {editForm.data_content ? editForm.data_content.split('\n').filter(line => line.trim()).length : 0}
+                      </span> 条</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 图片配置 */}
+                {editForm.type === 'image' && (
+                  <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <h3 className="font-bold text-gray-900 mb-3">图片配置</h3>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">图片 URL</label>
+                      <input
+                        type="url"
+                        value={editForm.image_url || ''}
+                        onChange={(e) => setEditForm({ ...editForm, image_url: e.target.value })}
+                        className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                        placeholder="https://example.com/image.png"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">输入图片卡密的 URL 地址</p>
+                    </div>
+                    {editForm.image_url && (
+                      <div className="mt-3">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">图片预览</label>
+                        <img
+                          src={editForm.image_url}
+                          alt="预览"
+                          className="max-w-full max-h-48 rounded-xl border border-gray-200"
+                          onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/400x200?text=图片加载失败'; }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 延时发货时间 */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">描述</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">延时发货时间（秒）</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={editForm.delay_seconds || 0}
+                      onChange={(e) => setEditForm({ ...editForm, delay_seconds: parseInt(e.target.value) || 0 })}
+                      className="flex-1 ios-input px-4 py-3 rounded-xl"
+                      min="0"
+                      max="3600"
+                      placeholder="0"
+                    />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">秒</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">0表示立即发货，最大3600秒（1小时）</p>
+                </div>
+
+                {/* 备注信息 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">备注信息</label>
                   <textarea
                     value={editForm.description || ''}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     className="w-full ios-input px-4 py-3 rounded-xl h-20 resize-none"
-                    placeholder="卡密描述"
+                    placeholder="可选的备注信息"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">延时发货（秒）</label>
-                  <input
-                    type="number"
-                    value={editForm.delay_seconds || 0}
-                    onChange={(e) => setEditForm({ ...editForm, delay_seconds: parseInt(e.target.value) || 0 })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                    min="0"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                  <span className="font-bold text-gray-900">启用状态</span>
-                  <button
-                    type="button"
-                    onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}
-                    className={`w-14 h-8 rounded-full transition-colors duration-300 relative ${
-                      editForm.enabled ? 'bg-[#FFE815]' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 block ${
-                        editForm.enabled ? 'translate-x-7' : 'translate-x-1'
-                      }`}
+                {/* 多规格设置 */}
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <input
+                      type="checkbox"
+                      id="edit-isMultiSpec"
+                      checked={editForm.is_multi_spec || false}
+                      onChange={(e) => setEditForm({ ...editForm, is_multi_spec: e.target.checked })}
+                      className="w-4 h-4 rounded"
                     />
-                  </button>
+                    <label htmlFor="edit-isMultiSpec" className="font-bold text-gray-900">
+                      多规格卡券
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">开启后可以为同一商品的不同规格创建不同的卡券</p>
+
+                  {editForm.is_multi_spec && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">规格名称</label>
+                        <input
+                          type="text"
+                          value={editForm.spec_name || ''}
+                          onChange={(e) => setEditForm({ ...editForm, spec_name: e.target.value })}
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                          placeholder="例如：套餐类型、颜色、尺寸"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">规格值</label>
+                        <input
+                          type="text"
+                          value={editForm.spec_value || ''}
+                          onChange={(e) => setEditForm({ ...editForm, spec_value: e.target.value })}
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                          placeholder="例如：30天、红色、XL"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
+                {/* 启用状态 */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <span className="font-bold text-gray-900">启用状态</span>
                   <button
