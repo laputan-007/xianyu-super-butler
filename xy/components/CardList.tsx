@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../types';
-import { getCards, createCard, updateCard, deleteCard } from '../services/api';
+import { getCards, createCard, updateCard, deleteCard, getCardDetails } from '../services/api';
 import {
   Plus,
   CreditCard,
@@ -13,7 +13,11 @@ import {
   Trash2,
   X,
   Save,
-  Loader2
+  Loader2,
+  Eye,
+  Package,
+  TrendingUp,
+  Calendar
 } from 'lucide-react';
 
 const CardList: React.FC = () => {
@@ -28,6 +32,12 @@ const CardList: React.FC = () => {
     enabled: true,
     text_content: ''
   });
+
+  // Detail modal states
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [cardDetails, setCardDetails] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadCards = () => {
     setLoading(true);
@@ -91,6 +101,20 @@ const CardList: React.FC = () => {
     }
   };
 
+  const handleViewDetail = async (card: Card) => {
+    setSelectedCard(card);
+    setShowDetailModal(true);
+    setDetailLoading(true);
+    try {
+      const details = await getCardDetails(String(card.id));
+      setCardDetails(details);
+    } catch (e) {
+      alert('获取卡券详情失败：' + (e as Error).message);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const CardIcon = ({ type }: { type: string }) => {
     switch (type) {
       case 'text':
@@ -128,7 +152,8 @@ const CardList: React.FC = () => {
         {cards.map((card) => (
           <div
             key={card.id}
-            className="ios-card p-6 rounded-[2rem] hover:shadow-xl transition-all group relative overflow-hidden"
+            onClick={() => handleViewDetail(card)}
+            className="ios-card p-6 rounded-[2rem] hover:shadow-xl transition-all group relative overflow-hidden cursor-pointer"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-gray-50 rounded-2xl group-hover:bg-[#FFFDE7] transition-colors">
@@ -155,14 +180,20 @@ const CardList: React.FC = () => {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleEdit(card)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(card);
+                  }}
                   className="p-2 bg-yellow-50 text-yellow-700 rounded-xl hover:bg-yellow-100 transition-colors"
                   title="编辑"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(card.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(card.id);
+                  }}
                   className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
                   title="删除"
                 >
@@ -335,6 +366,135 @@ const CardList: React.FC = () => {
               >
                 <Save className="w-5 h-5" />
                 保存卡券
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {showDetailModal && selectedCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-4xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowDetailModal(false)}
+              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+
+            <div className="mb-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="p-4 bg-gray-50 rounded-2xl">
+                  <CardIcon type={selectedCard.type} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-extrabold text-gray-900">{selectedCard.name}</h3>
+                  <p className="text-gray-500 mt-1">{selectedCard.description || '暂无描述'}</p>
+                </div>
+              </div>
+            </div>
+
+            {detailLoading ? (
+              <div className="py-20 flex justify-center">
+                <Loader2 className="w-8 h-8 text-[#FFE815] animate-spin" />
+              </div>
+            ) : cardDetails ? (
+              <div className="space-y-6">
+                {/* 库存统计 */}
+                <div>
+                  <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-gray-700" />
+                    库存统计
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-xl">
+                      <div className="text-sm text-gray-600 mb-1">总库存</div>
+                      <div className="text-3xl font-bold text-gray-900">{cardDetails?.total || 0}</div>
+                    </div>
+                    <div className="bg-red-50 p-4 rounded-xl">
+                      <div className="text-sm text-gray-600 mb-1">已发货</div>
+                      <div className="text-3xl font-bold text-red-600">{cardDetails?.used || 0}</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-xl">
+                      <div className="text-sm text-gray-600 mb-1">剩余</div>
+                      <div className="text-3xl font-bold text-green-600">{cardDetails?.remaining || 0}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 卡密列表 (仅数据类型) */}
+                {selectedCard.type === 'data' && cardDetails?.cards && cardDetails.cards.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-gray-700" />
+                      卡密列表
+                    </h4>
+                    <div className="max-h-64 overflow-y-auto space-y-2">
+                      {cardDetails.cards.map((item: any, i: number) => (
+                        <div
+                          key={i}
+                          className={`p-3 rounded-xl flex items-center justify-between ${
+                            item.is_used ? 'bg-gray-100' : 'bg-green-50'
+                          }`}
+                        >
+                          <span className="font-mono text-sm flex-1 truncate">{item.content}</span>
+                          <span
+                            className={`text-xs px-3 py-1 rounded-lg font-bold ml-3 ${
+                              item.is_used ? 'bg-gray-300 text-gray-700' : 'bg-green-200 text-green-700'
+                            }`}
+                          >
+                            {item.is_used ? '已使用' : '未使用'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 发货记录 */}
+                {cardDetails?.history && cardDetails.history.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-gray-700" />
+                      发货记录
+                    </h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {cardDetails.history.map((record: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">订单 {record.order_id}</div>
+                            <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                              <Calendar className="w-3 h-3" />
+                              {record.created_at || '未知时间'}
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-600 font-mono">{record.buyer_id || '未知买家'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 无发货记录提示 */}
+                {(!cardDetails?.history || cardDetails.history.length === 0) && (
+                  <div className="text-center py-8 bg-gray-50 rounded-xl">
+                    <div className="text-gray-400 mb-2">暂无发货记录</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                无法加载卡券详情
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+              >
+                关闭
               </button>
             </div>
           </div>

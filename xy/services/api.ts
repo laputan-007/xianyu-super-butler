@@ -179,6 +179,10 @@ export const deleteCard = async (cardId: string): Promise<ApiResponse> => {
   return del(`/cards/${cardId}`);
 };
 
+export const getCardDetails = async (cardId: string): Promise<any> => {
+  return get(`/cards/${cardId}/details`);
+};
+
 // Items
 export const getItems = async (): Promise<Item[]> => {
     const res = await get<any>('/items');
@@ -191,6 +195,14 @@ export const syncItemsFromAccount = async (cookieId: string): Promise<any> => {
 
 export const deleteItem = async (cookieId: string, itemId: string): Promise<any> => {
     return del(`/items/${cookieId}/${itemId}`);
+}
+
+export const createItem = async (cookieId: string, data: any): Promise<any> => {
+    return post(`/items/${cookieId}`, data);
+}
+
+export const updateItem = async (cookieId: string, itemId: string, data: any): Promise<any> => {
+    return put(`/items/${cookieId}/${itemId}`, data);
 }
 
 // Rules - 发货规则 (使用正确的后端API)
