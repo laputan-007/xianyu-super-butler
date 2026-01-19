@@ -133,14 +133,15 @@ export const manualShipOrder = async (orderIds: string[], shipMode: 'auto_match'
     });
 }
 
-export const importOrders = async (orders: Partial<Order>[]): Promise<any> => {
+export const importOrders = async (data: Partial<Order>[] | FormData): Promise<any> => {
+  const isFormData = data instanceof FormData;
   const response = await fetch('/api/orders/import', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
     },
-    body: JSON.stringify(orders)
+    body: isFormData ? data : JSON.stringify(data)
   });
   return response.json();
 }
@@ -150,15 +151,32 @@ export const getAdminStats = async (): Promise<AdminStats> => {
   return get('/admin/stats');
 };
 
-export const getOrderAnalytics = async (days: number = 7): Promise<OrderAnalytics> => {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    
-    return get('/analytics/orders', {
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0]
+export const getOrderAnalytics = async (daysOrParams: number | {start_date: string; end_date: string} = 7): Promise<OrderAnalytics> => {
+    let params: {start_date: string; end_date: string};
+
+    if (typeof daysOrParams === 'number') {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysOrParams);
+        params = {
+            start_date: startDate.toISOString().split('T')[0],
+            end_date: endDate.toISOString().split('T')[0]
+        };
+    } else {
+        params = daysOrParams;
+    }
+
+    return get('/analytics/orders', params);
+}
+
+export const getValidOrders = async (dateRange: {start_date: string; end_date: string}): Promise<Order[]> => {
+    const res = await get<any>('/api/orders', {
+        start_date: dateRange.start_date,
+        end_date: dateRange.end_date,
+        page: 1,
+        page_size: 1000
     });
+    return res.orders || res.data || [];
 }
 
 // Cards

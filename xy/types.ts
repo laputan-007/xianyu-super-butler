@@ -145,6 +145,7 @@ export interface AIReplySettings {
   api_key: string;
   base_url: string;
   max_discount_percent: number;
+  max_discount_amount?: number;
   max_bargain_rounds: number;
   custom_prompts: string;
 }
