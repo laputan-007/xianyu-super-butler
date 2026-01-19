@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Order, OrderStatus } from '../types';
-import { getOrders, syncOrders, manualShipOrder, updateOrder, importOrders } from '../services/api';
+import { Order, OrderStatus, Item } from '../types';
+import { getOrders, syncOrders, manualShipOrder, updateOrder, importOrders, getItems } from '../services/api';
 import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin, Upload } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
@@ -32,6 +32,7 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
 
 const OrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [itemNames, setItemNames] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -62,43 +63,31 @@ const OrderList: React.FC = () => {
       getOrders(undefined, filter, page).then((res) => {
           setOrders(res.data);
           setTotalPages(res.total_pages);
-
-          // 收集所有唯一的商品ID并获取商品名
-          const uniqueItemIds = [...new Set(res.data.map(order => order.item_id).filter(Boolean))];
-          if (uniqueItemIds.length > 0) {
-            fetchItemNames(uniqueItemIds);
-          }
-
           setLoading(false);
       }).catch(() => setLoading(false));
   };
 
-  const fetchItemNames = async (itemIds: string[]) => {
-    try {
+  // 从商品列表构建商品ID到商品名的映射
+  const buildItemNamesMap = () => {
       const namesMap: Record<string, string> = {};
-      for (const itemId of itemIds) {
-        try {
-          const response = await fetch(`/api/items/${itemId}/info`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            }
-          });
-          if (response.ok) {
-            const data = await response.json();
-            namesMap[itemId] = data.title || data.name || '未知商品';
+      items.forEach(item => {
+          // 使用 item_id 作为键，商品标题作为值
+          if (item.item_id) {
+              namesMap[item.item_id] = item.item_title || item.item_id;
           }
-        } catch (e) {
-          console.error(`Failed to fetch item ${itemId}:`, e);
-        }
-      }
-      setItemNames(prev => ({ ...prev, ...namesMap }));
-    } catch (e) {
-      console.error('Failed to fetch item names:', e);
-    }
+      });
+      setItemNames(namesMap);
   };
 
   useEffect(() => {
     loadOrders();
+    // 加载商品列表
+    getItems().then((itemsList) => {
+      setItems(itemsList);
+      buildItemNamesMap();
+    }).catch((e) => {
+      console.error('加载商品列表失败:', e);
+    });
   }, [filter, page]);
 
   const handleSync = async () => {
@@ -371,7 +360,9 @@ const OrderList: React.FC = () => {
                     <img src={selectedOrder.item_image} alt="" className="w-20 h-20 rounded-xl object-cover border border-gray-200" />
                   )}
                   <div className="flex-1">
-                    <div className="font-bold text-gray-900 mb-1">{selectedOrder.item_title || '未知商品'}</div>
+                    <div className="font-bold text-gray-900 mb-1">
+                      {itemNames[selectedOrder.item_id] || selectedOrder.item_title || '未知商品'}
+                    </div>
                     <div className="text-sm text-gray-500">商品ID: {selectedOrder.item_id}</div>
                     {selectedOrder.item_price && (
                       <div className="text-sm text-gray-500 mt-1">标价: ¥{selectedOrder.item_price}</div>
