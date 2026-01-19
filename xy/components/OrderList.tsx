@@ -76,16 +76,16 @@ const OrderList: React.FC = () => {
   };
 
   const handleEdit = (order: Order) => {
-    setSelectedOrder(order);
-    setEditForm({ ...order });
+    setEditingOrder({ ...order });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
-    if (!selectedOrder) return;
+    if (!editingOrder || !editingOrder.order_id) return;
     try {
-      await updateOrder(selectedOrder.order_id, editForm);
+      await updateOrder(editingOrder.order_id, editingOrder);
       setShowEditModal(false);
+      setEditingOrder(null);
       loadOrders();
     } catch (error) {
       console.error('更新订单失败:', error);

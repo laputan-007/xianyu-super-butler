@@ -105,55 +105,104 @@ const CardList: React.FC = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cards.map(card => (
-              <div
-                key={card.id}
-                onClick={() => handleEdit(card)}
-                className="ios-card p-6 rounded-3xl hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer group relative overflow-hidden"
-              >
-                  <div className="flex justify-between items-start mb-4">
-                      <div className="p-3 bg-gray-50 rounded-2xl group-hover:bg-white transition-colors">
-                        <CardIcon type={card.type} />
-                      </div>
-                      <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleCardStatus(card); }}
-                            className={`p-2 rounded-xl transition-colors ${card.enabled ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}
-                          >
-                            {card.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(card.id); }}
-                            className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                      </div>
-                  </div>
+      <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
+                <th className="px-8 py-5">卡密名称</th>
+                <th className="px-6 py-5">类型</th>
+                <th className="px-6 py-5">内容/库存</th>
+                <th className="px-6 py-5">描述</th>
+                <th className="px-6 py-5">状态</th>
+                <th className="px-6 py-5 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {cards.map((card) => {
+                // 计算库存或内容预览
+                let stockInfo = '';
+                if (card.type === 'data' && card.data_content) {
+                  const lines = card.data_content.split('\n').filter(line => line.trim());
+                  stockInfo = `库存: ${lines.length} 条`;
+                } else if (card.type === 'text' && card.text_content) {
+                  stockInfo = card.text_content.substring(0, 20) + (card.text_content.length > 20 ? '...' : '');
+                } else if (card.type === 'api' && card.api_config) {
+                  stockInfo = card.api_config.url;
+                } else if (card.type === 'image' && card.text_content) {
+                  stockInfo = '图片链接';
+                }
 
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">{card.name}</h3>
-                  <p className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">{card.description || '暂无描述'}</p>
-
-                  <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400 font-medium">
-                      <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(card.created_at).toLocaleDateString()}
+                return (
+                  <tr key={card.id} className="hover:bg-[#FFFDE7]/50 transition-colors group">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gray-50 rounded-xl group-hover:bg-white transition-colors">
+                          <CardIcon type={card.type} />
+                        </div>
+                        <span className="font-bold text-gray-900">{card.name}</span>
                       </div>
-                      <button className="text-[#FFE815] hover:text-black font-bold flex items-center gap-1">
-                          <Edit className="w-3 h-3" />
-                          编辑
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                        card.type === 'text' ? 'bg-blue-50 text-blue-600' :
+                        card.type === 'data' ? 'bg-purple-50 text-purple-600' :
+                        card.type === 'api' ? 'bg-orange-50 text-orange-600' :
+                        'bg-pink-50 text-pink-600'
+                      }`}>
+                        {card.type === 'text' ? '文本' :
+                         card.type === 'data' ? '批量' :
+                         card.type === 'api' ? 'API' : '图片'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className="text-sm text-gray-600 font-mono">{stockInfo}</span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <span className="text-sm text-gray-500">{card.description || '-'}</span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <button
+                        onClick={() => toggleCardStatus(card)}
+                        className={`w-12 h-8 rounded-full relative transition-colors ${
+                          card.enabled ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform ${
+                          card.enabled ? 'left-5' : 'left-1'
+                        }`}></div>
                       </button>
-                  </div>
-              </div>
-          ))}
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(card)}
+                          className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-xl transition-colors"
+                          title="编辑"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(card.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-          {cards.length === 0 && (
-              <div className="col-span-full py-20 text-center text-gray-400 bg-white/40 rounded-3xl border border-dashed border-gray-300">
-                  <Package className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                  <p>暂无卡密配置，请点击右上角添加。</p>
-              </div>
-          )}
+        {cards.length === 0 && (
+          <div className="py-20 text-center text-gray-400">
+            <Package className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p>暂无卡密配置，请点击右上角添加。</p>
+          </div>
+        )}
       </div>
 
       {/* 编辑卡密弹窗 */}

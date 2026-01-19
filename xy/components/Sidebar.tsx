@@ -15,7 +15,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
     { id: 'cards', icon: CreditCard, label: '卡密库存' },
     { id: 'items', icon: Box, label: '商品列表' },
     { id: 'keywords', icon: MessageSquare, label: '关键词管理' },
-    { id: 'rules', icon: Zap, label: '智能策略' },
     { id: 'settings', icon: Settings, label: '系统与AI' },
   ];
 
