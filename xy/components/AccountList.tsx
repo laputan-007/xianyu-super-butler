@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { AccountDetail } from '../types';
-import { getAccountDetails, updateAccountStatus, deleteAccount, generateQRLogin, checkQRLoginStatus } from '../services/api';
-import { Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
+import { AccountDetail, AIReplySettings } from '../types';
+import {
+  getAccountDetails,
+  updateAccountStatus,
+  deleteAccount,
+  generateQRLogin,
+  checkQRLoginStatus,
+  updateAccountRemark,
+  updateAccountAutoConfirm,
+  updateAccountPauseDuration,
+  getAccountAISettings,
+  updateAccountAISettings,
+  testAIConnection
+} from '../services/api';
+import { Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2, MessageSquare, RefreshCw, Bot, Save, TestTube } from 'lucide-react';
 
 const AccountList: React.FC = () => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
@@ -9,6 +21,25 @@ const AccountList: React.FC = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [qrStatus, setQrStatus] = useState<string>('pending');
+
+  // Edit modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AccountDetail | null>(null);
+  const [editForm, setEditForm] = useState({
+    remark: '',
+    auto_confirm: false,
+    pause_duration: 0
+  });
+  const [aiSettings, setAiSettings] = useState<AIReplySettings>({
+    ai_enabled: false,
+    model_name: 'qwen-plus',
+    api_key: '',
+    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    max_discount_percent: 10,
+    max_bargain_rounds: 3,
+    custom_prompts: ''
+  });
+  const [aiTestLoading, setAiTestLoading] = useState(false);
 
   const loadAccounts = () => {
     setLoading(true);
@@ -42,7 +73,7 @@ const AccountList: React.FC = () => {
           if (res.success && res.qr_code_url && res.session_id) {
               setQrCodeUrl(res.qr_code_url);
               setQrStatus('waiting');
-              
+
               // Poll
               const interval = setInterval(async () => {
                   const statusRes = await checkQRLoginStatus(res.session_id!);
@@ -62,6 +93,58 @@ const AccountList: React.FC = () => {
       } catch (e) {
           setQrStatus('error');
       }
+  };
+
+  const handleEdit = async (account: AccountDetail) => {
+    setEditingAccount(account);
+    setEditForm({
+      remark: account.remark || '',
+      auto_confirm: account.auto_confirm || false,
+      pause_duration: account.pause_duration || 0
+    });
+
+    // Load AI settings
+    try {
+      const settings = await getAccountAISettings(account.id);
+      setAiSettings(settings);
+    } catch (e) {
+      // Use defaults if failed
+    }
+
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAccount) return;
+
+    try {
+      // Save basic settings
+      await updateAccountRemark(editingAccount.id, editForm.remark);
+      await updateAccountAutoConfirm(editingAccount.id, editForm.auto_confirm);
+      await updateAccountPauseDuration(editingAccount.id, editForm.pause_duration);
+
+      // Save AI settings
+      await updateAccountAISettings(editingAccount.id, aiSettings);
+
+      setShowEditModal(false);
+      loadAccounts();
+      alert('保存成功！');
+    } catch (e) {
+      alert('保存失败：' + (e as Error).message);
+    }
+  };
+
+  const handleTestAI = async () => {
+    if (!editingAccount) return;
+    setAiTestLoading(true);
+    try {
+      const res = await testAIConnection(editingAccount.id);
+      alert(res.message || 'AI 连接测试成功');
+    } catch (e) {
+      alert('AI 连接测试失败：' + (e as Error).message);
+    } finally {
+      setAiTestLoading(false);
+    }
   };
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="w-8 h-8 text-[#FFE815] animate-spin"/></div>;
@@ -115,14 +198,17 @@ const AccountList: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 pl-8 border-l border-gray-100">
-              <button 
+              <button
                 onClick={() => handleToggle(account.id, account.enabled)}
                 title={account.enabled ? "暂停账号" : "启用账号"}
                 className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all font-bold ${account.enabled ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
               >
                 <Power className="w-5 h-5" />
               </button>
-              <button title="编辑配置" className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#FFF9C4] text-yellow-800 hover:bg-[#FFE815] hover:text-black transition-all">
+              <button
+                onClick={() => handleEdit(account)}
+                title="编辑配置"
+                className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#FFF9C4] text-yellow-800 hover:bg-[#FFE815] hover:text-black transition-all">
                 <Edit2 className="w-5 h-5" />
               </button>
               <button 
@@ -185,6 +271,190 @@ const AccountList: React.FC = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in overflow-y-auto p-4">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-3xl w-full shadow-2xl relative my-8">
+            <button
+              onClick={() => setShowEditModal(false)}
+              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+
+            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">编辑账号配置</h3>
+
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+              {/* Basic Settings */}
+              <div className="space-y-4">
+                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  基本设置
+                </h4>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">账号备注</label>
+                  <input
+                    type="text"
+                    value={editForm.remark}
+                    onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
+                    placeholder="给账号起个名字"
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <div className="font-bold text-gray-900">自动确认订单</div>
+                    <div className="text-xs text-gray-500 mt-1">收到订单后自动确认并发货</div>
+                  </div>
+                  <button
+                    onClick={() => setEditForm({ ...editForm, auto_confirm: !editForm.auto_confirm })}
+                    className={`w-14 h-8 rounded-full transition-all relative ${editForm.auto_confirm ? 'bg-[#FFE815]' : 'bg-gray-300'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${editForm.auto_confirm ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">暂停时长（分钟）</label>
+                  <input
+                    type="number"
+                    value={editForm.pause_duration}
+                    onChange={(e) => setEditForm({ ...editForm, pause_duration: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    min="0"
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">设置为 0 表示不暂停</p>
+                </div>
+              </div>
+
+              {/* AI Settings */}
+              <div className="space-y-4 pt-6 border-t border-gray-200">
+                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <Bot className="w-5 h-5" />
+                  AI 回复设置
+                </h4>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div>
+                    <div className="font-bold text-gray-900">启用 AI 回复</div>
+                    <div className="text-xs text-gray-500 mt-1">使用 AI 智能回复买家消息</div>
+                  </div>
+                  <button
+                    onClick={() => setAiSettings({ ...aiSettings, ai_enabled: !aiSettings.ai_enabled })}
+                    className={`w-14 h-8 rounded-full transition-all relative ${aiSettings.ai_enabled ? 'bg-[#FFE815]' : 'bg-gray-300'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${aiSettings.ai_enabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                {aiSettings.ai_enabled && (
+                  <div className="space-y-4 pl-4 border-l-2 border-yellow-200">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">模型名称</label>
+                      <input
+                        type="text"
+                        value={aiSettings.model_name}
+                        onChange={(e) => setAiSettings({ ...aiSettings, model_name: e.target.value })}
+                        placeholder="qwen-plus"
+                        className="w-full ios-input px-4 py-3 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">API Key</label>
+                      <input
+                        type="password"
+                        value={aiSettings.api_key}
+                        onChange={(e) => setAiSettings({ ...aiSettings, api_key: e.target.value })}
+                        placeholder="sk-xxxxxxxxxxxxxxxx"
+                        className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Base URL</label>
+                      <input
+                        type="text"
+                        value={aiSettings.base_url}
+                        onChange={(e) => setAiSettings({ ...aiSettings, base_url: e.target.value })}
+                        placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                        className="w-full ios-input px-4 py-3 rounded-xl text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">最大折扣率 (%)</label>
+                        <input
+                          type="number"
+                          value={aiSettings.max_discount_percent}
+                          onChange={(e) => setAiSettings({ ...aiSettings, max_discount_percent: parseInt(e.target.value) || 0 })}
+                          placeholder="10"
+                          min="0"
+                          max="100"
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">最大议价轮数</label>
+                        <input
+                          type="number"
+                          value={aiSettings.max_bargain_rounds}
+                          onChange={(e) => setAiSettings({ ...aiSettings, max_bargain_rounds: parseInt(e.target.value) || 0 })}
+                          placeholder="3"
+                          min="0"
+                          className="w-full ios-input px-4 py-3 rounded-xl"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">自定义提示词</label>
+                      <textarea
+                        value={aiSettings.custom_prompts}
+                        onChange={(e) => setAiSettings({ ...aiSettings, custom_prompts: e.target.value })}
+                        placeholder="可选：自定义 AI 的回复风格和规则..."
+                        rows={3}
+                        className="w-full ios-input px-4 py-3 rounded-xl resize-none"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleTestAI}
+                      disabled={aiTestLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                    >
+                      {aiTestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+                      测试 AI 连接
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+              >
+                <Save className="w-5 h-5" />
+                保存设置
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

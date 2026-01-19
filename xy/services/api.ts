@@ -55,6 +55,18 @@ export const deleteAccount = async (id: string): Promise<any> => {
   return del(`/cookies/${id}`);
 };
 
+export const updateAccountRemark = async (id: string, remark: string): Promise<any> => {
+  return put(`/cookies/${id}/remark`, { remark });
+};
+
+export const updateAccountAutoConfirm = async (id: string, autoConfirm: boolean): Promise<any> => {
+  return put(`/cookies/${id}/auto-confirm`, { auto_confirm: autoConfirm });
+};
+
+export const updateAccountPauseDuration = async (id: string, pauseDuration: number): Promise<any> => {
+  return put(`/cookies/${id}/pause-duration`, { pause_duration: pauseDuration });
+};
+
 // Orders
 export const getOrders = async (
   cookieId?: string,
@@ -175,6 +187,10 @@ export const getItems = async (): Promise<Item[]> => {
 
 export const syncItemsFromAccount = async (cookieId: string): Promise<any> => {
     return post('/items/get-all-from-account', { cookie_id: cookieId });
+}
+
+export const deleteItem = async (cookieId: string, itemId: string): Promise<any> => {
+    return del(`/items/${cookieId}/${itemId}`);
 }
 
 // Rules - 发货规则 (使用正确的后端API)

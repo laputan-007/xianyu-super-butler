@@ -7,6 +7,7 @@ import CardList from './components/CardList';
 import ItemList from './components/ItemList';
 import Settings from './components/Settings';
 import Rules from './components/Rules';
+import Keywords from './components/Keywords';
 import { login, verifyToken } from './services/api';
 import { ShieldCheck, ArrowRight, Loader2, Sparkles, User, Lock, KeyRound } from 'lucide-react';
 
@@ -160,6 +161,7 @@ const App: React.FC = () => {
       case 'orders': return <OrderList />;
       case 'cards': return <CardList />;
       case 'items': return <ItemList />;
+      case 'keywords': return <Keywords />;
       case 'rules': return <Rules />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;

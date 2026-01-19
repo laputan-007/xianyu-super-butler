@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Item, AccountDetail } from '../types';
-import { getItems, getAccountDetails, syncItemsFromAccount } from '../services/api';
-import { Box, RefreshCw, ShoppingBag } from 'lucide-react';
+import { getItems, getAccountDetails, syncItemsFromAccount, deleteItem } from '../services/api';
+import { Box, RefreshCw, ShoppingBag, Trash2, Loader2 } from 'lucide-react';
 
 const ItemList: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
@@ -20,6 +20,17 @@ const ItemList: React.FC = () => {
       await syncItemsFromAccount(selectedAccount);
       getItems().then(setItems);
       setLoading(false);
+  };
+
+  const handleDelete = async (cookieId: string, itemId: string) => {
+    if (!confirm('确认删除该商品吗？')) return;
+    try {
+      await deleteItem(cookieId, itemId);
+      getItems().then(setItems);
+      alert('删除成功！');
+    } catch (e) {
+      alert('删除失败：' + (e as Error).message);
+    }
   };
 
   return (
@@ -67,9 +78,18 @@ const ItemList: React.FC = () => {
                       </div>
                   </div>
                   <h3 className="font-bold text-gray-900 line-clamp-2 text-sm mb-2 h-10">{item.item_title}</h3>
-                  <div className="flex justify-between items-center text-xs text-gray-500">
-                      <span className="bg-gray-100 px-2 py-1 rounded-md truncate max-w-[100px]">ID: {item.item_id}</span>
-                      <span>{item.is_multi_spec ? '多规格' : '单规格'}</span>
+                  <div className="flex justify-between items-center text-xs">
+                      <div className="flex-1 flex items-center gap-2 text-gray-500">
+                        <span className="bg-gray-100 px-2 py-1 rounded-md text-xs truncate">ID: {item.item_id.substring(0, 8)}</span>
+                        <span className="text-xs">{item.is_multi_spec ? '多规格' : '单规格'}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(item.cookie_id, item.item_id)}
+                        className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors flex-shrink-0"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                   </div>
               </div>
           ))}
