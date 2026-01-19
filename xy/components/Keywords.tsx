@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AccountDetail } from '../types';
 import { getAccountDetails, getReplyRules, updateReplyRule, deleteReplyRule } from '../services/api';
 import { Plus, Trash2, MessageSquare, X, Save, Loader2, Key } from 'lucide-react';
@@ -24,7 +25,13 @@ const Keywords: React.FC = () => {
   });
 
   useEffect(() => {
-    getAccountDetails().then(setAccounts);
+    getAccountDetails().then((data) => {
+      setAccounts(data);
+      // 默认选择第一个账号
+      if (data && data.length > 0 && !selectedAccount) {
+        setSelectedAccount(data[0].id);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -196,9 +203,9 @@ const Keywords: React.FC = () => {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="modal-overlay">
+      {/* Add/Edit Modal - 使用 Portal */}
+      {showModal && createPortal(
+        <div className="modal-overlay-centered">
           <div className="modal-container">
             <div className="modal-header">
               <div className="flex items-center justify-between w-full">
@@ -258,7 +265,8 @@ const Keywords: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

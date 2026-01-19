@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../types';
 import { getCards, createCard, updateCard, deleteCard } from '../services/api';
 import { Plus, CreditCard, Clock, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Eye, EyeOff, Package } from 'lucide-react';
@@ -205,11 +206,11 @@ const CardList: React.FC = () => {
         )}
       </div>
 
-      {/* 编辑卡密弹窗 */}
-      {showEditModal && selectedCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+      {/* 编辑卡密弹窗 - 使用 Portal */}
+      {showEditModal && selectedCard && createPortal(
+        <div className="modal-overlay-centered">
+          <div className="modal-container">
+            <div className="modal-header">
               <h3 className="text-2xl font-extrabold text-gray-900">编辑卡密</h3>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -219,7 +220,7 @@ const CardList: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+            <div className="modal-body">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">卡密名称</label>
@@ -310,32 +311,52 @@ const CardList: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <span className="font-bold text-gray-900">启用状态</span>
                   <button
-                    onClick={() => setShowEditModal(false)}
-                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}
+                    className={`w-14 h-8 rounded-full transition-colors duration-300 relative ${
+                      editForm.enabled ? 'bg-[#FFE815]' : 'bg-gray-300'
+                    }`}
                   >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    保存更改
+                    <span
+                      className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 block ${
+                        editForm.enabled ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
                   </button>
                 </div>
               </div>
             </div>
+
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  保存更改
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* 添加新卡密弹窗 */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+      {/* 添加新卡密弹窗 - 使用 Portal */}
+      {showAddModal && createPortal(
+        <div className="modal-overlay-centered">
+          <div className="modal-container">
+            <div className="modal-header">
               <h3 className="text-2xl font-extrabold text-gray-900">添加新卡密</h3>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -431,26 +452,29 @@ const CardList: React.FC = () => {
                     placeholder="0"
                   />
                 </div>
+              </div>
+            </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={() => setShowAddModal(false)}
-                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleAddCard}
-                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    添加卡密
-                  </button>
-                </div>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddCard}
+                  className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  添加卡密
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -318,6 +318,33 @@ body {
   max-width: 64rem; /* max-w-4xl */
 }
 
+/* 自定义弹窗定位 - 上下参考侧边栏中间，左右居中 */
+.modal-overlay-centered {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.modal-overlay-centered .modal-container {
+  position: relative;
+  width: 100%;
+  max-width: 42rem;
+  max-height: 85vh;
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  border-radius: 2.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
 /* 响应式工具类 */
 @media (max-width: 768px) {
   .ios-card {

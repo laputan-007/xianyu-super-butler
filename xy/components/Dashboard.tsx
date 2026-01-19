@@ -28,7 +28,6 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [analytics, setAnalytics] = useState<OrderAnalytics | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('7days');
-  const [showReportModal, setShowReportModal] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -104,13 +103,15 @@ const Dashboard: React.FC = () => {
             <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
             系统正常运行
           </div>
-          <button
-            onClick={() => setShowReportModal(true)}
-            className="ios-btn-primary px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 text-sm flex items-center gap-2"
+          <a
+            href="/report"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ios-btn-primary px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 text-sm flex items-center gap-2 cursor-pointer"
           >
             <ArrowUpRight className="w-4 h-4" />
             查看报表
-          </button>
+          </a>
         </div>
       </div>
 
@@ -228,140 +229,6 @@ const Dashboard: React.FC = () => {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {/* 详细报表弹窗 */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden animate-slide-up">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-[#FFFDE7] to-white">
-              <div>
-                <h3 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-                  <BarChart3 className="w-6 h-6 text-[#FFE815]" />
-                  详细BI数据报表
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {timeRange === 'custom'
-                    ? `${customStartDate} 至 ${customEndDate}`
-                    : timeRangeOptions.find(o => o.key === timeRange)?.label}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)] space-y-6">
-              {/* 统计概览卡片 */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-yellow-50 to-white p-4 rounded-2xl border border-yellow-100">
-                  <div className="text-sm text-gray-500 font-medium">总营收</div>
-                  <div className="text-2xl font-extrabold text-gray-900 mt-1">
-                    ¥{analytics.revenue_stats.total_amount.toFixed(2)}
-                  </div>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-2xl border border-blue-100">
-                  <div className="text-sm text-gray-500 font-medium">总订单数</div>
-                  <div className="text-2xl font-extrabold text-gray-900 mt-1">
-                    {analytics.revenue_stats.total_orders}
-                  </div>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-white p-4 rounded-2xl border border-green-100">
-                  <div className="text-sm text-gray-500 font-medium">客单价</div>
-                  <div className="text-2xl font-extrabold text-gray-900 mt-1">
-                    ¥{analytics.revenue_stats.total_orders > 0
-                      ? (analytics.revenue_stats.total_amount / analytics.revenue_stats.total_orders).toFixed(2)
-                      : '0.00'}
-                  </div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-white p-4 rounded-2xl border border-purple-100">
-                  <div className="text-sm text-gray-500 font-medium">日均营收</div>
-                  <div className="text-2xl font-extrabold text-gray-900 mt-1">
-                    ¥{(analytics.revenue_stats.total_amount / (analytics.daily_stats?.length || 1)).toFixed(2)}
-                  </div>
-                </div>
-              </div>
-
-              {/* 营收趋势图 */}
-              <div className="ios-card p-6 rounded-2xl">
-                <h4 className="text-lg font-bold text-gray-900 mb-4">营收趋势</h4>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorAmount2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#FFE815" stopOpacity={0.5}/>
-                          <stop offset="95%" stopColor="#FFE815" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} dy={15} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
-                      <CartesianGrid vertical={false} stroke="#F3F4F6" strokeDasharray="3 3" />
-                      <Tooltip
-                        contentStyle={{ background: '#1A1A1A', borderRadius: '12px', border: 'none' }}
-                        itemStyle={{ color: '#FFE815' }}
-                        labelStyle={{ color: '#888' }}
-                      />
-                      <Area type="monotone" dataKey="amount" stroke="#FACC15" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount2)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 订单数量柱状图 */}
-              <div className="ios-card p-6 rounded-2xl">
-                <h4 className="text-lg font-bold text-gray-900 mb-4">每日订单量</h4>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} dy={15} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
-                      <CartesianGrid vertical={false} stroke="#F3F4F6" strokeDasharray="3 3" />
-                      <Tooltip
-                        contentStyle={{ background: '#1A1A1A', borderRadius: '12px', border: 'none' }}
-                        itemStyle={{ color: '#FFE815' }}
-                        labelStyle={{ color: '#888' }}
-                      />
-                      <Bar dataKey="orders" fill="#3B82F6" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 详细数据表格 */}
-              <div className="ios-card p-6 rounded-2xl">
-                <h4 className="text-lg font-bold text-gray-900 mb-4">每日明细</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="pb-3 text-sm font-bold text-gray-500">日期</th>
-                        <th className="pb-3 text-sm font-bold text-gray-500">订单数</th>
-                        <th className="pb-3 text-sm font-bold text-gray-500">营收金额</th>
-                        <th className="pb-3 text-sm font-bold text-gray-500">客单价</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.daily_stats?.map((day, index) => (
-                        <tr key={index} className="border-b border-gray-50 last:border-0">
-                          <td className="py-3 text-sm font-medium text-gray-900">{day.date}</td>
-                          <td className="py-3 text-sm text-gray-600">{day.order_count}</td>
-                          <td className="py-3 text-sm font-bold text-gray-900">¥{day.amount.toFixed(2)}</td>
-                          <td className="py-3 text-sm text-gray-600">
-                            ¥{day.order_count > 0 ? (day.amount / day.order_count).toFixed(2) : '0.00'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

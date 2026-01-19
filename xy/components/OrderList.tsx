@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Order, OrderStatus } from '../types';
 import { getOrders, syncOrders, manualShipOrder, updateOrder, importOrders } from '../services/api';
-import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin } from 'lucide-react';
+import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin, Upload } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
@@ -31,6 +32,7 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
 
 const OrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [itemNames, setItemNames] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -43,14 +45,56 @@ const OrderList: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Order>>({});
   const [importText, setImportText] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importFormData, setImportFormData] = useState({
+    order_id: '',
+    item_id: '',
+    buyer_id: '',
+    receiver_name: '',
+    receiver_phone: '',
+    receiver_address: '',
+    status: 'pending_ship' as OrderStatus,
+    quantity: 1,
+    amount: ''
+  });
 
   const loadOrders = () => {
       setLoading(true);
       getOrders(undefined, filter, page).then((res) => {
           setOrders(res.data);
           setTotalPages(res.total_pages);
+
+          // 收集所有唯一的商品ID并获取商品名
+          const uniqueItemIds = [...new Set(res.data.map(order => order.item_id).filter(Boolean))];
+          if (uniqueItemIds.length > 0) {
+            fetchItemNames(uniqueItemIds);
+          }
+
           setLoading(false);
       }).catch(() => setLoading(false));
+  };
+
+  const fetchItemNames = async (itemIds: string[]) => {
+    try {
+      const namesMap: Record<string, string> = {};
+      for (const itemId of itemIds) {
+        try {
+          const response = await fetch(`/api/items/${itemId}/info`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            namesMap[itemId] = data.title || data.name || '未知商品';
+          }
+        } catch (e) {
+          console.error(`Failed to fetch item ${itemId}:`, e);
+        }
+      }
+      setItemNames(prev => ({ ...prev, ...namesMap }));
+    } catch (e) {
+      console.error('Failed to fetch item names:', e);
+    }
   };
 
   useEffect(() => {
@@ -185,7 +229,9 @@ const OrderList: React.FC = () => {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">{order.item_title || '未知商品'}</div>
+                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">
+                          {itemNames[order.item_id] || order.item_title || '未知商品'}
+                        </div>
                         <div className="text-xs text-gray-500 mt-1 font-medium">订单ID: {order.order_id}</div>
                         <div className="text-xs text-gray-400 mt-0.5">数量: {order.quantity} • {order.created_at}</div>
                       </div>
@@ -193,9 +239,26 @@ const OrderList: React.FC = () => {
                   </td>
                   <td className="px-6 py-5">
                       <div className="flex flex-col gap-1">
+                          <div className="text-xs text-gray-500">买家ID</div>
                           <div className="text-sm font-bold text-gray-800">{order.buyer_id}</div>
-                          <div className="text-xs text-gray-500">{order.buyer_name || '-'}</div>
-                          <div className="text-xs text-gray-400">{order.buyer_phone || '-'}</div>
+                          {order.receiver_name && (
+                              <>
+                                  <div className="text-xs text-gray-500">收货人</div>
+                                  <div className="text-xs text-gray-600">{order.receiver_name}</div>
+                              </>
+                          )}
+                          {order.receiver_phone && (
+                              <>
+                                  <div className="text-xs text-gray-500">联系电话</div>
+                                  <div className="text-xs text-gray-600 font-mono">{order.receiver_phone}</div>
+                              </>
+                          )}
+                          {order.receiver_address && (
+                              <>
+                                  <div className="text-xs text-gray-500">收货地址</div>
+                                  <div className="text-xs text-gray-600 line-clamp-1">{order.receiver_address}</div>
+                              </>
+                          )}
                       </div>
                   </td>
                   <td className="px-6 py-5 text-base font-extrabold text-gray-900 font-feature-settings-tnum">¥{order.amount}</td>
@@ -256,9 +319,9 @@ const OrderList: React.FC = () => {
         </div>
       </div>
 
-      {/* 订单详情弹窗 */}
-      {showDetailModal && selectedOrder && (
-        <div className="modal-overlay">
+      {/* 订单详情弹窗 - 使用 Portal */}
+      {showDetailModal && selectedOrder && createPortal(
+        <div className="modal-overlay-centered">
           <div className="modal-container">
             <div className="modal-header">
               <div className="flex items-center justify-between w-full">
@@ -369,12 +432,13 @@ const OrderList: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="modal-overlay">
+      {/* Import Modal - 使用 Portal */}
+      {showImportModal && createPortal(
+        <div className="modal-overlay-centered">
           <div className="modal-container">
             <div className="modal-header">
               <div className="flex items-center justify-between w-full">
@@ -428,12 +492,13 @@ const OrderList: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Edit Modal */}
-      {showEditModal && editingOrder && (
-        <div className="modal-overlay">
+      {/* Edit Modal - 使用 Portal */}
+      {showEditModal && editingOrder && createPortal(
+        <div className="modal-overlay-centered">
           <div className="modal-container">
             <div className="modal-header">
               <div className="flex items-center justify-between w-full">
@@ -536,8 +601,10 @@ const OrderList: React.FC = () => {
                   className="w-full ios-input px-4 py-3 rounded-xl"
                 />
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-4">
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
                 <button
                   onClick={() => setShowEditModal(false)}
                   className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
@@ -554,7 +621,8 @@ const OrderList: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
