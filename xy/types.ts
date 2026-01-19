@@ -73,7 +73,26 @@ export interface Card {
   type: 'api' | 'text' | 'data' | 'image';
   description?: string;
   enabled: boolean;
+  // 文本类型
   text_content?: string;
+  // 批量数据类型
+  data_content?: string;
+  // API 类型配置
+  api_config?: {
+    url: string;
+    method: 'GET' | 'POST';
+    timeout?: number;
+    headers?: string;
+    params?: string;
+  };
+  // 图片类型
+  image_url?: string;
+  // 通用配置
+  delay_seconds?: number;
+  // 多规格配置
+  is_multi_spec?: boolean;
+  spec_name?: string;
+  spec_value?: string;
   created_at: string;
   updated_at: string;
 }

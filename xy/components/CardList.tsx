@@ -30,7 +30,18 @@ const CardList: React.FC = () => {
     type: 'text' as 'api' | 'text' | 'data' | 'image',
     description: '',
     enabled: true,
-    text_content: ''
+    text_content: '',
+    data_content: '',
+    api_url: '',
+    api_method: 'GET' as 'GET' | 'POST',
+    api_timeout: 10,
+    api_headers: '',
+    api_params: '',
+    image_url: '',
+    delay_seconds: 0,
+    is_multi_spec: false,
+    spec_name: '',
+    spec_value: ''
   });
 
   // Detail modal states
@@ -58,7 +69,18 @@ const CardList: React.FC = () => {
       type: 'text',
       description: '',
       enabled: true,
-      text_content: ''
+      text_content: '',
+      data_content: '',
+      api_url: '',
+      api_method: 'GET',
+      api_timeout: 10,
+      api_headers: '',
+      api_params: '',
+      image_url: '',
+      delay_seconds: 0,
+      is_multi_spec: false,
+      spec_name: '',
+      spec_value: ''
     });
     setShowModal(true);
   };
@@ -70,17 +92,56 @@ const CardList: React.FC = () => {
       type: card.type,
       description: card.description || '',
       enabled: card.enabled,
-      text_content: card.text_content || ''
+      text_content: card.text_content || '',
+      data_content: card.data_content || '',
+      api_url: card.api_config?.url || '',
+      api_method: (card.api_config?.method as 'GET' | 'POST') || 'GET',
+      api_timeout: card.api_config?.timeout || 10,
+      api_headers: card.api_config?.headers || '',
+      api_params: card.api_config?.params || '',
+      image_url: card.image_url || '',
+      delay_seconds: card.delay_seconds || 0,
+      is_multi_spec: card.is_multi_spec || false,
+      spec_name: card.spec_name || '',
+      spec_value: card.spec_value || ''
     });
     setShowModal(true);
   };
 
   const handleSave = async () => {
     try {
+      const cardData: any = {
+        name: form.name.trim(),
+        type: form.type,
+        description: form.description.trim() || undefined,
+        enabled: form.enabled,
+        delay_seconds: form.delay_seconds,
+        is_multi_spec: form.is_multi_spec,
+        spec_name: form.is_multi_spec ? form.spec_name.trim() : undefined,
+        spec_value: form.is_multi_spec ? form.spec_value.trim() : undefined,
+      };
+
+      // 根据类型设置内容
+      if (form.type === 'api') {
+        cardData.api_config = {
+          url: form.api_url.trim(),
+          method: form.api_method,
+          timeout: form.api_timeout,
+          headers: form.api_headers.trim() || undefined,
+          params: form.api_params.trim() || undefined,
+        };
+      } else if (form.type === 'text') {
+        cardData.text_content = form.text_content.trim();
+      } else if (form.type === 'data') {
+        cardData.data_content = form.data_content.trim();
+      } else if (form.type === 'image') {
+        cardData.image_url = form.image_url.trim();
+      }
+
       if (editingCard) {
-        await updateCard(String(editingCard.id), form);
+        await updateCard(String(editingCard.id), cardData);
       } else {
-        await createCard(form);
+        await createCard(cardData);
       }
       setShowModal(false);
       loadCards();
@@ -217,20 +278,23 @@ const CardList: React.FC = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-extrabold text-gray-900">
+                  {editingCard ? '编辑卡券' : '添加新卡券'}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
 
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">
-              {editingCard ? '编辑卡券' : '添加新卡券'}
-            </h3>
-
-            <div className="space-y-5">
+            <div className="modal-body space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">卡券名称</label>
                 <input
@@ -278,6 +342,68 @@ const CardList: React.FC = () => {
                 />
               </div>
 
+              {/* API 配置 */}
+              {form.type === 'api' && (
+                <div className="space-y-4 p-4 bg-gray-50 rounded-xl">
+                  <h4 className="font-bold text-gray-800">API 配置</h4>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">API 地址</label>
+                    <input
+                      type="text"
+                      value={form.api_url}
+                      onChange={(e) => setForm({ ...form, api_url: e.target.value })}
+                      placeholder="https://api.example.com/get-code"
+                      className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">请求方法</label>
+                      <select
+                        value={form.api_method}
+                        onChange={(e) => setForm({ ...form, api_method: e.target.value as 'GET' | 'POST' })}
+                        className="w-full ios-input px-4 py-3 rounded-xl"
+                      >
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">超时时间(秒)</label>
+                      <input
+                        type="number"
+                        value={form.api_timeout}
+                        onChange={(e) => setForm({ ...form, api_timeout: parseInt(e.target.value) || 10 })}
+                        className="w-full ios-input px-4 py-3 rounded-xl"
+                        min="1"
+                        max="60"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">请求头 (JSON)</label>
+                    <textarea
+                      value={form.api_headers}
+                      onChange={(e) => setForm({ ...form, api_headers: e.target.value })}
+                      placeholder='{"Authorization": "Bearer token"}'
+                      rows={3}
+                      className="w-full ios-input px-4 py-3 rounded-xl resize-none font-mono text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">请求参数 (JSON)</label>
+                    <textarea
+                      value={form.api_params}
+                      onChange={(e) => setForm({ ...form, api_params: e.target.value })}
+                      placeholder='{"type": "card"}'
+                      rows={3}
+                      className="w-full ios-input px-4 py-3 rounded-xl resize-none font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 文本配置 */}
               {form.type === 'text' && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">文本内容</label>
@@ -291,12 +417,13 @@ const CardList: React.FC = () => {
                 </div>
               )}
 
+              {/* 批量数据配置 */}
               {form.type === 'data' && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">批量数据</label>
                   <textarea
-                    value={form.text_content}
-                    onChange={(e) => setForm({ ...form, text_content: e.target.value })}
+                    value={form.data_content}
+                    onChange={(e) => setForm({ ...form, data_content: e.target.value })}
                     placeholder="每行一个卡密，例如：&#10;ABCD-1234-EFGH&#10;IJKL-5678-MNOP"
                     rows={6}
                     className="w-full ios-input px-4 py-3 rounded-xl resize-none font-mono text-sm"
@@ -305,33 +432,84 @@ const CardList: React.FC = () => {
                 </div>
               )}
 
-              {form.type === 'api' && (
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">API 地址</label>
-                  <input
-                    type="text"
-                    value={form.text_content}
-                    onChange={(e) => setForm({ ...form, text_content: e.target.value })}
-                    placeholder="https://api.example.com/get-code"
-                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">发货时将调用此 API 获取卡密</p>
-                </div>
-              )}
-
+              {/* 图片配置 */}
               {form.type === 'image' && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">图片 URL</label>
                   <input
                     type="text"
-                    value={form.text_content}
-                    onChange={(e) => setForm({ ...form, text_content: e.target.value })}
+                    value={form.image_url}
+                    onChange={(e) => setForm({ ...form, image_url: e.target.value })}
                     placeholder="https://example.com/image.jpg"
                     className="w-full ios-input px-4 py-3 rounded-xl text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-2">输入图片的完整 URL 地址</p>
                 </div>
               )}
+
+              {/* 延时发货 */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">延时发货时间</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={form.delay_seconds}
+                    onChange={(e) => setForm({ ...form, delay_seconds: parseInt(e.target.value) || 0 })}
+                    className="w-32 ios-input px-4 py-3 rounded-xl"
+                    min="0"
+                    max="3600"
+                  />
+                  <span className="text-gray-500">秒</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">设置自动发货的延时时间，0表示立即发货</p>
+              </div>
+
+              {/* 多规格配置 */}
+              <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-gray-900">多规格卡券</div>
+                    <div className="text-xs text-gray-500 mt-1">为不同规格商品设置不同卡券</div>
+                  </div>
+                  <button
+                    onClick={() => setForm({ ...form, is_multi_spec: !form.is_multi_spec })}
+                    className={`w-14 h-8 rounded-full transition-all relative ${
+                      form.is_multi_spec ? 'bg-[#FFE815]' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${
+                        form.is_multi_spec ? 'left-7' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {form.is_multi_spec && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">规格名称</label>
+                      <input
+                        type="text"
+                        value={form.spec_name}
+                        onChange={(e) => setForm({ ...form, spec_name: e.target.value })}
+                        placeholder="例如：套餐类型"
+                        className="w-full ios-input px-4 py-3 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">规格值</label>
+                      <input
+                        type="text"
+                        value={form.spec_value}
+                        onChange={(e) => setForm({ ...form, spec_value: e.target.value })}
+                        placeholder="例如：30天"
+                        className="w-full ios-input px-4 py-3 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div>
@@ -353,20 +531,22 @@ const CardList: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSave}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存卡券
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存卡券
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -374,27 +554,31 @@ const CardList: React.FC = () => {
 
       {/* Detail Modal */}
       {showDetailModal && selectedCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-4xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowDetailModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
-
-            <div className="mb-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="p-4 bg-gray-50 rounded-2xl">
-                  <CardIcon type={selectedCard.type} />
+        <div className="modal-overlay">
+          <div className="modal-container modal-container-lg">
+            <div className="modal-header">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl">
+                      <CardIcon type={selectedCard.type} />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-extrabold text-gray-900">{selectedCard.name}</h3>
+                      <p className="text-gray-500 mt-1">{selectedCard.description || '暂无描述'}</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-extrabold text-gray-900">{selectedCard.name}</h3>
-                  <p className="text-gray-500 mt-1">{selectedCard.description || '暂无描述'}</p>
-                </div>
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
               </div>
             </div>
 
+            <div className="modal-body">
             {detailLoading ? (
               <div className="py-20 flex justify-center">
                 <Loader2 className="w-8 h-8 text-[#FFE815] animate-spin" />
@@ -488,14 +672,17 @@ const CardList: React.FC = () => {
                 无法加载卡券详情
               </div>
             )}
+            </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowDetailModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                关闭
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
             </div>
           </div>
         </div>

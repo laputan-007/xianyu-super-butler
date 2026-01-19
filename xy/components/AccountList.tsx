@@ -235,17 +235,21 @@ const AccountList: React.FC = () => {
 
       {/* QR Code Modal */}
       {showQRModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in">
-              <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl relative">
-                  <button 
-                    onClick={() => setShowQRModal(false)}
-                    className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                  >
-                      <X className="w-5 h-5 text-gray-600" />
-                  </button>
-                  
-                  <div className="text-center">
-                      <h3 className="text-2xl font-extrabold text-gray-900 mb-2">扫码登录</h3>
+          <div className="modal-overlay">
+              <div className="modal-container" style={{maxWidth: '28rem'}}>
+                  <div className="modal-header">
+                      <div className="flex items-center justify-between w-full">
+                          <h3 className="text-2xl font-extrabold text-gray-900">扫码登录</h3>
+                          <button
+                            onClick={() => setShowQRModal(false)}
+                            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                          >
+                              <X className="w-5 h-5 text-gray-600" />
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="modal-body text-center">
                       <p className="text-gray-500 mb-8 font-medium">请打开闲鱼APP扫描下方二维码</p>
                       
                       <div className="w-64 h-64 bg-[#F7F8FA] rounded-[2rem] mx-auto flex items-center justify-center overflow-hidden border-4 border-white shadow-inner mb-8 relative">
@@ -275,18 +279,21 @@ const AccountList: React.FC = () => {
 
       {/* Edit Modal */}
       {showEditModal && editingAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in overflow-y-auto p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-3xl w-full shadow-2xl relative my-8">
-            <button
-              onClick={() => setShowEditModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-container modal-container-lg">
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">编辑账号配置</h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
 
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">编辑账号配置</h3>
-
-            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="modal-body space-y-6">
               {/* Basic Settings */}
               <div className="space-y-4">
                 <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -438,20 +445,22 @@ const AccountList: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存设置
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存设置
+                </button>
+              </div>
             </div>
           </div>
         </div>

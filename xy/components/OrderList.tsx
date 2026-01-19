@@ -358,8 +358,8 @@ const OrderList: React.FC = () => {
 
       {/* Order Detail Modal */}
       {showDetailModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="modal-overlay">
+          <div className="modal-container">
             <button
               onClick={() => setShowDetailModal(false)}
               className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
@@ -469,8 +469,8 @@ const OrderList: React.FC = () => {
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl relative">
+        <div className="modal-overlay">
+          <div className="modal-container">
             <button
               onClick={() => setShowImportModal(false)}
               className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"

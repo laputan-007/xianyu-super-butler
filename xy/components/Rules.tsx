@@ -313,8 +313,8 @@ const Rules: React.FC = () => {
 
       {/* Shipping Rule Modal */}
       {showShippingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative">
+        <div className="modal-overlay">
+          <div className="modal-container">
             <button
               onClick={() => setShowShippingModal(false)}
               className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
@@ -416,8 +416,8 @@ const Rules: React.FC = () => {
 
       {/* Reply Rule Modal */}
       {showReplyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative">
+        <div className="modal-overlay">
+          <div className="modal-container">
             <button
               onClick={() => setShowReplyModal(false)}
               className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"

@@ -261,22 +261,26 @@ const Dashboard: React.FC = () => {
 
       {/* Report Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-6xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white z-10 p-8 border-b border-gray-100 rounded-t-[2.5rem]">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-              <h2 className="text-3xl font-extrabold text-gray-900">详细报表分析</h2>
-              <p className="text-gray-500 mt-2">
-                数据期间：{getDateRange().start_date} 至 {getDateRange().end_date}
-              </p>
+        <div className="modal-overlay">
+          <div className="modal-container" style={{maxWidth: '80rem'}}>
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <div>
+                  <h2 className="text-3xl font-extrabold text-gray-900">详细报表分析</h2>
+                  <p className="text-gray-500 mt-2">
+                    数据期间：{getDateRange().start_date} 至 {getDateRange().end_date}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-8 space-y-8">
+            <div className="modal-body space-y-8">
               {/* Revenue Overview */}
               <div>
                 <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
