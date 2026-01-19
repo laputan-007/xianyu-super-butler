@@ -85,24 +85,34 @@ cd xianyu-super-butler
 # 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. 启动服务
+# 3. 构建前端
+cd frontend
+npm install
+npm run build
+
+# 4. 启动服务（返回项目根目录）
+cd ..
 python Start.py
 
-# 4. 访问应用
+# 5. 访问应用
 # 浏览器打开 http://localhost:8080
 ```
 
+**说明：**
+- `npm run build` 会将前端打包到 `static/` 目录
+- `Start.py` 启动后端服务（端口 8080），同时提供前端静态文件
+- 前端已构建，无需单独运行前端开发服务器
+
 ### 前端开发模式
 
-如需修改前端代码：
+如需修改前端代码（支持热更新）：
 
 ```bash
-# 启动后端
+# 终端1：启动后端
 python Start.py
 
-# 另开终端，启动前端开发服务器
+# 终端2：启动前端开发服务器
 cd frontend
-npm install
 npm run dev
 
 # 访问 http://localhost:3000

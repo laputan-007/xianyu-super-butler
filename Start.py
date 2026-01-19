@@ -419,6 +419,125 @@ except Exception as e:
     print("   程序将继续启动，但Playwright功能可能不可用")
     # 继续启动，不影响主程序运行
 
+# ==================== 自动构建前端 ====================
+def _build_frontend():
+    """自动安装依赖并构建前端"""
+    frontend_dir = Path("frontend")
+    static_dir = Path("static")
+
+    # 检查 frontend 目录是否存在
+    if not frontend_dir.exists():
+        print(f"{_WARN} frontend 目录不存在，跳过前端构建")
+        return False
+
+    print("检查前端构建状态...")
+
+    # 检查是否需要重新构建
+    need_build = False
+
+    # 如果 static 目录不存在，需要构建
+    if not static_dir.exists():
+        need_build = True
+        print(f"{_INFO} static 目录不存在，需要构建前端")
+    else:
+        # 检查 index.html 是否存在
+        index_html = static_dir / "index.html"
+        if not index_html.exists():
+            need_build = True
+            print(f"{_INFO} static/index.html 不存在，需要构建前端")
+        else:
+            print(f"{_OK} 前端已构建，跳过")
+
+    # 如果不需要构建，直接返回
+    if not need_build:
+        return True
+
+    # 开始构建前端
+    print(f"{_INFO} 开始构建前端...")
+    print(f"   1. 安装 npm 依赖...")
+
+    try:
+        import subprocess
+
+        # 设置 Windows 下的 subprocess 参数
+        creation_flags = 0
+        if sys.platform == 'win32' and hasattr(subprocess, 'CREATE_NO_WINDOW'):
+            creation_flags = subprocess.CREATE_NO_WINDOW
+
+        # 1. npm install
+        try:
+            result = subprocess.run(
+                ['npm', 'install'],
+                cwd=str(frontend_dir),
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5分钟超时
+                creationflags=creation_flags
+            )
+
+            if result.returncode == 0:
+                print(f"{_OK} npm 依赖安装成功")
+            else:
+                print(f"{_WARN} npm install 失败")
+                if result.stdout:
+                    print(f"   输出: {result.stdout[-500:]}")
+                if result.stderr:
+                    print(f"   错误: {result.stderr[-500:]}")
+                return False
+        except subprocess.TimeoutExpired:
+            print(f"{_WARN} npm install 超时（超过5分钟）")
+            return False
+        except FileNotFoundError:
+            print(f"{_WARN} 未找到 npm，请确保已安装 Node.js 和 npm")
+            print(f"   你可以手动运行: cd frontend && npm install && npm run build")
+            return False
+        except Exception as e:
+            print(f"{_WARN} npm install 失败: {e}")
+            return False
+
+        # 2. npm run build
+        print(f"   2. 构建前端...")
+        try:
+            result = subprocess.run(
+                ['npm', 'run', 'build'],
+                cwd=str(frontend_dir),
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5分钟超时
+                creationflags=creation_flags
+            )
+
+            if result.returncode == 0:
+                print(f"{_OK} 前端构建成功")
+                return True
+            else:
+                print(f"{_WARN} npm run build 失败")
+                if result.stdout:
+                    print(f"   输出: {result.stdout[-500:]}")
+                if result.stderr:
+                    print(f"   错误: {result.stderr[-500:]}")
+                return False
+        except subprocess.TimeoutExpired:
+            print(f"{_WARN} npm run build 超时（超过5分钟）")
+            return False
+        except Exception as e:
+            print(f"{_WARN} npm run build 失败: {e}")
+            return False
+
+    except Exception as e:
+        print(f"{_WARN} 前端构建过程出错: {e}")
+        return False
+
+
+# 尝试构建前端
+try:
+    build_success = _build_frontend()
+    if not build_success:
+        print(f"{_WARN} 前端构建失败，程序将继续启动但前端可能不可用")
+except Exception as e:
+    print(f"{_WARN} 前端构建检查失败: {e}")
+    print("   程序将继续启动，但前端可能不可用")
+
 # ==================== 现在可以安全地导入其他模块 ====================
 import asyncio
 import threading
