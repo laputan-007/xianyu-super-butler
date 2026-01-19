@@ -32,51 +32,70 @@ const Dashboard: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState('');
 
   const loadAnalytics = (range: TimeRange) => {
-    const today = new Date();
+    // 使用本地时间而不是UTC时间
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
     let params: { start_date: string; end_date: string };
 
     switch (range) {
       case 'today':
         // 今天：从今天00:00:00到今天23:59:59
         params = {
-          start_date: today.toISOString().split('T')[0],
-          end_date: today.toISOString().split('T')[0]
+          start_date: todayStr,
+          end_date: todayStr
         };
         break;
       case 'yesterday':
         // 昨天：从昨天00:00:00到昨天23:59:59
-        const yesterday = new Date(today);
+        const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
+        const yYear = yesterday.getFullYear();
+        const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+        const yDay = String(yesterday.getDate()).padStart(2, '0');
+        const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
         params = {
-          start_date: yesterday.toISOString().split('T')[0],
-          end_date: yesterday.toISOString().split('T')[0]
+          start_date: yesterdayStr,
+          end_date: yesterdayStr
         };
         break;
       case '3days':
         // 3天：从3天前到今天
-        const threeDaysAgo = new Date(today);
+        const threeDaysAgo = new Date(now);
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const tdYear = threeDaysAgo.getFullYear();
+        const tdMonth = String(threeDaysAgo.getMonth() + 1).padStart(2, '0');
+        const tdDay = String(threeDaysAgo.getDate()).padStart(2, '0');
         params = {
-          start_date: threeDaysAgo.toISOString().split('T')[0],
-          end_date: today.toISOString().split('T')[0]
+          start_date: `${tdYear}-${tdMonth}-${tdDay}`,
+          end_date: todayStr
         };
         break;
       case '7days':
         // 7天：从7天前到今天
-        const sevenDaysAgo = new Date(today);
+        const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sdYear = sevenDaysAgo.getFullYear();
+        const sdMonth = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+        const sdDay = String(sevenDaysAgo.getDate()).padStart(2, '0');
         params = {
-          start_date: sevenDaysAgo.toISOString().split('T')[0],
-          end_date: today.toISOString().split('T')[0]
+          start_date: `${sdYear}-${sdMonth}-${sdDay}`,
+          end_date: todayStr
         };
         break;
       case '30days':
         // 30天：从30天前到今天
-        const thirtyDaysAgo = new Date(today);
+        const thirtyDaysAgo = new Date(now);
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const tdYear2 = thirtyDaysAgo.getFullYear();
+        const tdMonth2 = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+        const tdDay2 = String(thirtyDaysAgo.getDate()).padStart(2, '0');
         params = {
-          start_date: thirtyDaysAgo.toISOString().split('T')[0],
-          end_date: today.toISOString().split('T')[0]
+          start_date: `${tdYear2}-${tdMonth2}-${tdDay2}`,
+          end_date: todayStr
         };
         break;
       case 'custom':
@@ -88,21 +107,27 @@ const Dashboard: React.FC = () => {
           };
         } else {
           // 默认7天
-          const defaultDaysAgo = new Date(today);
+          const defaultDaysAgo = new Date(now);
           defaultDaysAgo.setDate(defaultDaysAgo.getDate() - 7);
+          const ddYear = defaultDaysAgo.getFullYear();
+          const ddMonth = String(defaultDaysAgo.getMonth() + 1).padStart(2, '0');
+          const ddDay = String(defaultDaysAgo.getDate()).padStart(2, '0');
           params = {
-            start_date: defaultDaysAgo.toISOString().split('T')[0],
-            end_date: today.toISOString().split('T')[0]
+            start_date: `${ddYear}-${ddMonth}-${ddDay}`,
+            end_date: todayStr
           };
         }
         break;
       default:
         // 默认7天
-        const defaultStart = new Date(today);
+        const defaultStart = new Date(now);
         defaultStart.setDate(defaultStart.getDate() - 7);
+        const dsYear = defaultStart.getFullYear();
+        const dsMonth = String(defaultStart.getMonth() + 1).padStart(2, '0');
+        const dsDay = String(defaultStart.getDate()).padStart(2, '0');
         params = {
-          start_date: defaultStart.toISOString().split('T')[0],
-          end_date: today.toISOString().split('T')[0]
+          start_date: `${dsYear}-${dsMonth}-${dsDay}`,
+          end_date: todayStr
         };
     }
 
