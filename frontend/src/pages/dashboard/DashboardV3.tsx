@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   Activity, MessageSquare, RefreshCw, Shield, ShoppingCart, Users,
   TrendingUp, TrendingDown, Filter, Download,
-  MoreVertical, ArrowRight, Bell, Settings as SettingsIcon
+  MoreVertical, ArrowRight, Bell, Settings as SettingsIcon, Sun, Moon
 } from 'lucide-react'
 import { getAccountDetails } from '@/api/accounts'
 import { getKeywords } from '@/api/keywords'
@@ -31,7 +31,7 @@ interface QuickAction {
 }
 
 export function DashboardV3() {
-  const { addToast } = useUIStore()
+  const { addToast, darkMode, toggleDarkMode } = useUIStore()
   const { isAuthenticated, token, _hasHydrated, user } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today')
@@ -121,27 +121,36 @@ export function DashboardV3() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 transition-colors duration-200">
       {/* 顶部导航栏 */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 backdrop-blur-sm bg-white/95">
+      <div className="bg-white dark:bg-slate-800/95 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 backdrop-blur-sm">
         <div className="px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">工作台</h1>
-              <p className="text-sm text-slate-500 mt-0.5">欢迎回来，{user?.username || '管理员'}</p>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">工作台</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">欢迎回来，{user?.username || '管理员'}</p>
             </div>
 
             <div className="flex items-center gap-3">
+              {/* 暗色模式切换 */}
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                aria-label="切换暗色模式"
+              >
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+
               {/* 时间范围选择 */}
-              <div className="hidden sm:flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+              <div className="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
                 {['today', 'week', 'month'].map((range) => (
                   <button
                     key={range}
                     onClick={() => setTimeRange(range as any)}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
                       timeRange === range
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     {range === 'today' ? '今日' : range === 'week' ? '本周' : '本月'}
@@ -149,7 +158,7 @@ export function DashboardV3() {
                 ))}
               </div>
 
-              <button className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+              <button className="relative p-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
               </button>
@@ -220,34 +229,34 @@ export function DashboardV3() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
+                className="group relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-xl dark:hover:shadow-slate-900/50 transition-all duration-300 overflow-hidden"
               >
                 {/* 渐变背景装饰 */}
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} opacity-5 rounded-full -mr-16 -mt-16 group-hover:opacity-10 transition-opacity`}></div>
+                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} opacity-5 dark:opacity-10 rounded-full -mr-16 -mt-16 group-hover:opacity-10 dark:group-hover:opacity-20 transition-opacity`}></div>
 
                 <div className="p-6 relative">
                   <div className="flex items-start justify-between mb-4">
-                    <div className={`p-3 ${stat.lightBg} rounded-xl`}>
-                      <Icon className={`w-6 h-6 ${stat.darkIcon}`} />
+                    <div className={`p-3 ${stat.lightBg} dark:bg-opacity-20 rounded-xl`}>
+                      <Icon className={`w-6 h-6 ${stat.darkIcon} dark:brightness-150`} />
                     </div>
-                    <button className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-                      <MoreVertical className="w-4 h-4 text-slate-400" />
+                    <button className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                      <MoreVertical className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </button>
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-3xl font-bold text-slate-900">{stat.value.toLocaleString()}</p>
-                    <p className="text-sm text-slate-600">{stat.label}</p>
+                    <p className="text-3xl font-bold text-slate-900 dark:text-white">{stat.value.toLocaleString()}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">{stat.label}</p>
                   </div>
 
-                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <div className={`flex items-center gap-1 text-xs font-medium ${
-                      stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                      stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                       <TrendIcon className="w-3.5 h-3.5" />
                       <span>{stat.change}</span>
                     </div>
-                    <span className="text-xs text-slate-500">vs 上周</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">vs 上周</span>
                   </div>
                 </div>
               </motion.div>
@@ -264,11 +273,11 @@ export function DashboardV3() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-white rounded-2xl shadow-sm p-6"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm dark:shadow-slate-900/50 p-6"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-slate-900">快捷操作</h2>
-                <button className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">快捷操作</h2>
+                <button className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-1">
                   查看全部
                   <ArrowRight className="w-4 h-4" />
                 </button>
@@ -284,12 +293,12 @@ export function DashboardV3() {
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.5 + index * 0.05 }}
-                      className="group relative p-5 rounded-xl border-2 border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-all cursor-pointer"
+                      className="group relative p-5 rounded-xl border-2 border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all cursor-pointer"
                     >
-                      <div className={`${action.bgColor} w-12 h-12 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
-                        <Icon className={`w-6 h-6 ${action.color}`} />
+                      <div className={`${action.bgColor} dark:bg-opacity-20 w-12 h-12 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                        <Icon className={`w-6 h-6 ${action.color} dark:brightness-125`} />
                       </div>
-                      <p className="text-sm font-medium text-slate-900">{action.label}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{action.label}</p>
                     </motion.a>
                   )
                 })}
@@ -340,16 +349,16 @@ export function DashboardV3() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
-              className="bg-white rounded-2xl shadow-sm p-6"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm dark:shadow-slate-900/50 p-6"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-slate-900">账号状态概览</h2>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">账号状态概览</h2>
                 <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                    <Filter className="w-4 h-4 text-slate-600" />
+                  <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    <Filter className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                   </button>
-                  <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                    <Download className="w-4 h-4 text-slate-600" />
+                  <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    <Download className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                   </button>
                 </div>
               </div>
@@ -357,15 +366,15 @@ export function DashboardV3() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 uppercase">账号</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 uppercase">关键词</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 uppercase">状态</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 uppercase">更新时间</th>
-                      <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600 uppercase">操作</th>
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">账号</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">关键词</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">状态</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">更新时间</th>
+                      <th className="text-right py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">操作</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {accounts.slice(0, 5).map((account, index) => {
                       const isEnabled = account.enabled !== false
                       const keywordCount = account.keywordCount || 0
@@ -376,7 +385,7 @@ export function DashboardV3() {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.7 + index * 0.05 }}
-                          className="hover:bg-slate-50 transition-colors"
+                          className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-3">
@@ -384,13 +393,13 @@ export function DashboardV3() {
                                 {account.id.substring(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <p className="font-medium text-slate-900">{account.id}</p>
-                                <p className="text-xs text-slate-500">ID: {account.id.substring(0, 8)}...</p>
+                                <p className="font-medium text-slate-900 dark:text-white">{account.id}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">ID: {account.id.substring(0, 8)}...</p>
                               </div>
                             </div>
                           </td>
                           <td className="py-4 px-4">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-sm font-medium">
                               <MessageSquare className="w-3.5 h-3.5" />
                               {keywordCount}
                             </span>
@@ -398,8 +407,8 @@ export function DashboardV3() {
                           <td className="py-4 px-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium ${
                               isEnabled
-                                ? 'bg-green-50 text-green-700'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                             }`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${
                                 isEnabled ? 'bg-green-500' : 'bg-slate-400'
@@ -407,7 +416,7 @@ export function DashboardV3() {
                               {isEnabled ? '运行中' : '已禁用'}
                             </span>
                           </td>
-                          <td className="py-4 px-4 text-sm text-slate-600">
+                          <td className="py-4 px-4 text-sm text-slate-600 dark:text-slate-400">
                             {account.updated_at
                               ? new Date(account.updated_at).toLocaleString('zh-CN', {
                                   month: '2-digit',
@@ -418,7 +427,7 @@ export function DashboardV3() {
                               : '-'}
                           </td>
                           <td className="py-4 px-4 text-right">
-                            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                            <button className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium">
                               查看详情
                             </button>
                           </td>
@@ -430,10 +439,10 @@ export function DashboardV3() {
               </div>
 
               {accounts.length > 5 && (
-                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-center">
                   <a
                     href="/accounts"
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-1"
                   >
                     查看全部 {accounts.length} 个账号
                     <ArrowRight className="w-4 h-4" />
@@ -449,11 +458,11 @@ export function DashboardV3() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
-              className="bg-white rounded-2xl shadow-sm p-6"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm dark:shadow-slate-900/50 p-6"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-slate-900">最近活动</h2>
-                <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">最近活动</h2>
+                <button className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium">
                   查看全部
                 </button>
               </div>
@@ -467,9 +476,9 @@ export function DashboardV3() {
                 ].map((activity, index) => {
                   const Icon = activity.icon
                   const colors = {
-                    success: 'bg-green-50 text-green-600',
-                    info: 'bg-blue-50 text-blue-600',
-                    warning: 'bg-yellow-50 text-yellow-600',
+                    success: 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+                    info: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+                    warning: 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
                   }
 
                   return (
@@ -478,14 +487,14 @@ export function DashboardV3() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.6 + index * 0.05 }}
-                      className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors"
+                      className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                     >
                       <div className={`p-2 rounded-lg ${colors[activity.type as keyof typeof colors]}`}>
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900">{activity.message}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{activity.time}</p>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{activity.message}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{activity.time}</p>
                       </div>
                     </motion.div>
                   )
@@ -498,9 +507,9 @@ export function DashboardV3() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
-              className="bg-white rounded-2xl shadow-sm p-6"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm dark:shadow-slate-900/50 p-6"
             >
-              <h2 className="text-lg font-semibold text-slate-900 mb-6">系统状态</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">系统状态</h2>
 
               <div className="space-y-4">
                 {[
@@ -511,9 +520,9 @@ export function DashboardV3() {
                   <div key={item.label} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                      <span className="text-sm font-medium text-slate-900">{item.label}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</span>
                     </div>
-                    <span className="text-sm text-slate-600">{item.value}</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{item.value}</span>
                   </div>
                 ))}
               </div>
