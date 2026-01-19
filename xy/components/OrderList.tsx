@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Order, OrderStatus } from '../types';
-import { getOrders, syncOrders, manualShipOrder, deleteOrder, updateOrder } from '../services/api';
-import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Trash2, Eye, Edit2, X, Save } from 'lucide-react';
+import { getOrders, syncOrders, manualShipOrder, deleteOrder, updateOrder, importOrders } from '../services/api';
+import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Trash2, Eye, Edit2, X, Save, Upload, Plus } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
@@ -38,6 +38,10 @@ const OrderList: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const loadOrders = () => {
       setLoading(true);
@@ -97,6 +101,51 @@ const OrderList: React.FC = () => {
     }
   };
 
+  const handleImport = async () => {
+    if (!importFile) {
+      alert('请选择文件');
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      await importOrders(formData);
+      setShowImportModal(false);
+      setImportFile(null);
+      loadOrders();
+      alert('订单导入成功！');
+    } catch (e) {
+      alert('导入失败：' + (e as Error).message);
+    }
+  };
+
+  const handleEdit = (order: Order) => {
+    setEditingOrder(order);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingOrder) return;
+    try {
+      await updateOrder(editingOrder.order_id, editingOrder);
+      setShowEditModal(false);
+      loadOrders();
+      alert('更新成功！');
+    } catch (e) {
+      alert('更新失败：' + (e as Error).message);
+    }
+  };
+
+  const handleRefreshOrder = async (orderId: string) => {
+    try {
+      await updateOrder(orderId, {});
+      loadOrders();
+      alert('刷新成功！');
+    } catch (e) {
+      alert('刷新失败：' + (e as Error).message);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
@@ -116,6 +165,13 @@ const OrderList: React.FC = () => {
             )}
             <button onClick={loadOrders} className="p-3 rounded-2xl bg-white border border-gray-100 text-gray-600 hover:bg-gray-50 hover:text-black transition-colors shadow-sm">
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-6 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 shadow-sm"
+            >
+              <Upload className="w-5 h-5" />
+              插入订单
             </button>
             <button onClick={handleSync} className="ios-btn-primary px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 text-sm flex items-center gap-2">
                 <Truck className="w-5 h-5" />
@@ -206,17 +262,24 @@ const OrderList: React.FC = () => {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">{order.item_title || '未知商品'}</div>
-                        <div className="text-xs text-gray-500 mt-1 font-medium">数量: {order.quantity} • {order.created_at}</div>
+                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">{order.item_title || `订单 ${order.order_id.substring(0, 12)}...`}</div>
+                        <div className="text-xs text-gray-500 mt-1 font-medium">
+                          ID: {order.order_id.substring(0, 8)}... • 数量: {order.quantity}
+                        </div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                      <div className="flex flex-col gap-1">
-                          <div className="text-xs font-mono text-gray-500 flex items-center gap-1 cursor-pointer hover:text-black font-medium">
-                              {order.order_id} <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                      <div className="flex flex-col gap-1.5">
+                          <div className="text-xs font-mono text-gray-400 flex items-center gap-1">
+                              订单号 <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100" />
                           </div>
-                          <div className="text-sm font-bold text-gray-800">{order.buyer_id}</div>
+                          <div className="text-sm font-bold text-gray-900">{order.buyer_id}</div>
+                          {order.receiver_name && (
+                            <div className="text-xs text-gray-600">
+                              {order.receiver_name} {order.receiver_phone && `• ${order.receiver_phone}`}
+                            </div>
+                          )}
                       </div>
                   </td>
                   <td className="px-6 py-5 text-base font-extrabold text-gray-900 font-feature-settings-tnum">¥{order.amount}</td>
@@ -239,6 +302,20 @@ const OrderList: React.FC = () => {
                         title="查看详情"
                       >
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleEdit(order)}
+                        className="p-2 bg-yellow-50 text-yellow-700 rounded-xl hover:bg-yellow-100 transition-colors"
+                        title="编辑"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRefreshOrder(order.order_id)}
+                        className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors"
+                        title="刷新"
+                      >
+                        <RefreshCw className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(order.order_id)}
@@ -385,6 +462,204 @@ const OrderList: React.FC = () => {
                   立即发货
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl relative">
+            <button
+              onClick={() => setShowImportModal(false)}
+              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+
+            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">插入订单</h3>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">选择Excel文件</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="w-full ios-input px-4 py-3 rounded-xl text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-2">支持 .xlsx 和 .xls 格式</p>
+              </div>
+
+              {importFile && (
+                <div className="p-3 bg-blue-50 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">{importFile.name}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!importFile}
+                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
+              >
+                导入订单
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4 overflow-y-auto">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative my-8">
+            <button
+              onClick={() => setShowEditModal(false)}
+              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+
+            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">编辑订单</h3>
+
+            <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">订单号</label>
+                  <input
+                    type="text"
+                    value={editingOrder.order_id}
+                    disabled
+                    className="w-full ios-input px-4 py-3 rounded-xl bg-gray-50 text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">订单状态</label>
+                  <select
+                    value={editingOrder.status}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value as OrderStatus })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  >
+                    <option value="processing">处理中</option>
+                    <option value="pending_ship">待发货</option>
+                    <option value="shipped">已发货</option>
+                    <option value="completed">已完成</option>
+                    <option value="cancelled">已取消</option>
+                    <option value="refunding">退款中</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">买家ID</label>
+                  <input
+                    type="text"
+                    value={editingOrder.buyer_id}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, buyer_id: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">实付金额</label>
+                  <input
+                    type="number"
+                    value={editingOrder.amount}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, amount: parseFloat(e.target.value) })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">收货人</label>
+                  <input
+                    type="text"
+                    value={editingOrder.receiver_name || ''}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, receiver_name: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">联系电话</label>
+                  <input
+                    type="text"
+                    value={editingOrder.receiver_phone || ''}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, receiver_phone: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">收货地址</label>
+                <textarea
+                  value={editingOrder.receiver_address || ''}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, receiver_address: e.target.value })}
+                  rows={2}
+                  className="w-full ios-input px-4 py-3 rounded-xl resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
+                <input
+                  type="text"
+                  value={editingOrder.item_title || ''}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, item_title: e.target.value })}
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
+                  <input
+                    type="text"
+                    value={editingOrder.item_id}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, item_id: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">数量</label>
+                  <input
+                    type="number"
+                    value={editingOrder.quantity}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, quantity: parseInt(e.target.value) })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+              >
+                <Save className="w-5 h-5" />
+                保存修改
+              </button>
             </div>
           </div>
         </div>
