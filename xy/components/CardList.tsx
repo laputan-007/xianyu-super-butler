@@ -404,7 +404,7 @@ const CardList: React.FC = () => {
                       <textarea
                         value={editForm.data_content || ''}
                         onChange={(e) => setEditForm({ ...editForm, data_content: e.target.value })}
-                        className="w-full ios-input px-4 py-3 rounded-xl h-40 resize-none font-mono text-sm"
+                        className="w-full ios-input px-4 py-3 rounded-xl h-80 resize-none font-mono text-sm"
                         placeholder="请输入数据，每行一个：&#10;卡号1:密码1&#10;卡号2:密码2&#10;或者&#10;兑换码1&#10;兑换码2"
                       />
                       <p className="text-xs text-gray-500 mt-2">支持格式：卡号:密码 或 单独的兑换码</p>
@@ -468,7 +468,7 @@ const CardList: React.FC = () => {
                   <textarea
                     value={editForm.description || ''}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl h-20 resize-none"
+                    className="w-full ios-input px-4 py-3 rounded-xl h-40 resize-none"
                     placeholder="可选的备注信息"
                   />
                 </div>
