@@ -6771,8 +6771,10 @@ async def import_orders(
         required_fields = ['order_id', 'cookie_id']
         optional_fields = [
             'item_id', 'item_title', 'item_price', 'item_image',
+            'buyer_id',
             'receiver_name', 'receiver_phone', 'receiver_address', 'receiver_city',
-            'status', 'status_text', 'order_time', 'pay_time'
+            'status', 'status_text', 'order_time', 'pay_time',
+            'quantity', 'amount'
         ]
 
         for order_data in orders:
@@ -6788,8 +6790,8 @@ async def import_orders(
                     failed_count += 1
                     continue
 
-                order_id = order_data['order_id']
-                cookie_id = order_data['cookie_id']
+                order_id = str(order_data['order_id'])
+                cookie_id = str(order_data['cookie_id'])
 
                 # 验证Cookie属于当前用户
                 if cookie_id not in user_cookies:
@@ -6803,32 +6805,47 @@ async def import_orders(
 
                 # 检查订单是否已存在
                 existing_order = db_manager.get_order_by_id(order_id)
-                if existing_order:
-                    # 更新现有订单
-                    update_data = {k: v for k, v in order_data.items() if k in optional_fields and v is not None}
-                    db_manager.update_order(order_id, **update_data)
-                    results.append({
-                        'order_id': order_id,
-                        'success': True,
-                        'message': '订单已更新'
-                    })
-                else:
-                    # 插入新订单
-                    insert_data = {
-                        'order_id': order_id,
-                        'cookie_id': cookie_id
-                    }
-                    # 添加可选字段
-                    for field in optional_fields:
-                        if field in order_data and order_data[field] is not None:
-                            insert_data[field] = order_data[field]
 
-                    db_manager.insert_or_update_order(**insert_data)
-                    results.append({
-                        'order_id': order_id,
-                        'success': True,
-                        'message': '订单已导入'
-                    })
+                # 准备订单数据，直接使用 insert_or_update_order 的参数名
+                # 构建参数字典，只传递非 None 的值
+                insert_params = {
+                    'order_id': order_id,
+                    'cookie_id': cookie_id
+                }
+
+                # 前端字段名 -> 数据库参数名映射
+                param_mapping = {
+                    'item_id': 'item_id',
+                    'buyer_id': 'buyer_id',
+                    'receiver_name': 'receiver_name',
+                    'receiver_phone': 'receiver_phone',
+                    'receiver_address': 'receiver_address',
+                    'receiver_city': 'receiver_city',
+                    'status': 'order_status',  # 注意：前端用 status，后端用 order_status
+                    'status_text': 'status_text',
+                    'order_time': 'order_time',
+                    'pay_time': 'pay_time',
+                    'quantity': 'quantity',
+                    'amount': 'amount',
+                    'item_title': 'item_title',
+                    'item_price': 'item_price',
+                    'item_image': 'item_image'
+                }
+
+                # 遍历订单数据，添加到参数字典
+                for field, value in order_data.items():
+                    if value is not None and field in param_mapping:
+                        param_name = param_mapping[field]
+                        insert_params[param_name] = value
+
+                # 使用 insert_or_update_order 统一处理
+                db_manager.insert_or_update_order(**insert_params)
+
+                results.append({
+                    'order_id': order_id,
+                    'success': True,
+                    'message': '订单已更新' if existing_order else '订单已导入'
+                })
 
                 success_count += 1
 
