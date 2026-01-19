@@ -1,19 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { AccountDetail, AIReplySettings } from '../types';
-import {
-  getAccountDetails,
-  updateAccountStatus,
-  deleteAccount,
-  generateQRLogin,
-  checkQRLoginStatus,
-  updateAccountRemark,
-  updateAccountAutoConfirm,
-  updateAccountPauseDuration,
-  getAccountAISettings,
-  updateAccountAISettings,
-  testAIConnection
-} from '../services/api';
-import { Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2, MessageSquare, RefreshCw, Bot, Save, TestTube } from 'lucide-react';
+import { AccountDetail } from '../types';
+import { getAccountDetails, updateAccountStatus, deleteAccount, generateQRLogin, checkQRLoginStatus } from '../services/api';
+import { Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2, MessageSquare, RefreshCw, Save, User, Clock, MessageCircle } from 'lucide-react';
 
 const AccountList: React.FC = () => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
@@ -21,8 +9,6 @@ const AccountList: React.FC = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [qrStatus, setQrStatus] = useState<string>('pending');
-
-  // Edit modal states
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountDetail | null>(null);
   const [editForm, setEditForm] = useState({
@@ -30,16 +16,6 @@ const AccountList: React.FC = () => {
     auto_confirm: false,
     pause_duration: 0
   });
-  const [aiSettings, setAiSettings] = useState<AIReplySettings>({
-    ai_enabled: false,
-    model_name: 'qwen-plus',
-    api_key: '',
-    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    max_discount_percent: 10,
-    max_bargain_rounds: 3,
-    custom_prompts: ''
-  });
-  const [aiTestLoading, setAiTestLoading] = useState(false);
 
   const loadAccounts = () => {
     setLoading(true);
@@ -65,6 +41,37 @@ const AccountList: React.FC = () => {
       }
   };
 
+  const handleEdit = (account: AccountDetail) => {
+    setEditingAccount(account);
+    setEditForm({
+      remark: account.remark || '',
+      auto_confirm: account.auto_confirm || false,
+      pause_duration: account.pause_duration || 0
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAccount) return;
+
+    try {
+      // 调用更新API（需要添加到api.ts）
+      await fetch(`/api/cookies/${editingAccount.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify(editForm)
+      });
+      setShowEditModal(false);
+      loadAccounts();
+    } catch (error) {
+      console.error('更新账号失败:', error);
+      alert('更新失败，请重试');
+    }
+  };
+
   const startQRLogin = async () => {
       setShowQRModal(true);
       setQrStatus('loading');
@@ -73,7 +80,7 @@ const AccountList: React.FC = () => {
           if (res.success && res.qr_code_url && res.session_id) {
               setQrCodeUrl(res.qr_code_url);
               setQrStatus('waiting');
-
+              
               // Poll
               const interval = setInterval(async () => {
                   const statusRes = await checkQRLoginStatus(res.session_id!);
@@ -93,58 +100,6 @@ const AccountList: React.FC = () => {
       } catch (e) {
           setQrStatus('error');
       }
-  };
-
-  const handleEdit = async (account: AccountDetail) => {
-    setEditingAccount(account);
-    setEditForm({
-      remark: account.remark || '',
-      auto_confirm: account.auto_confirm || false,
-      pause_duration: account.pause_duration || 0
-    });
-
-    // Load AI settings
-    try {
-      const settings = await getAccountAISettings(account.id);
-      setAiSettings(settings);
-    } catch (e) {
-      // Use defaults if failed
-    }
-
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingAccount) return;
-
-    try {
-      // Save basic settings
-      await updateAccountRemark(editingAccount.id, editForm.remark);
-      await updateAccountAutoConfirm(editingAccount.id, editForm.auto_confirm);
-      await updateAccountPauseDuration(editingAccount.id, editForm.pause_duration);
-
-      // Save AI settings
-      await updateAccountAISettings(editingAccount.id, aiSettings);
-
-      setShowEditModal(false);
-      loadAccounts();
-      alert('保存成功！');
-    } catch (e) {
-      alert('保存失败：' + (e as Error).message);
-    }
-  };
-
-  const handleTestAI = async () => {
-    if (!editingAccount) return;
-    setAiTestLoading(true);
-    try {
-      const res = await testAIConnection(editingAccount.id);
-      alert(res.message || 'AI 连接测试成功');
-    } catch (e) {
-      alert('AI 连接测试失败：' + (e as Error).message);
-    } finally {
-      setAiTestLoading(false);
-    }
   };
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="w-8 h-8 text-[#FFE815] animate-spin"/></div>;
@@ -198,7 +153,7 @@ const AccountList: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 pl-8 border-l border-gray-100">
-              <button
+              <button 
                 onClick={() => handleToggle(account.id, account.enabled)}
                 title={account.enabled ? "暂停账号" : "启用账号"}
                 className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all font-bold ${account.enabled ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
@@ -208,7 +163,8 @@ const AccountList: React.FC = () => {
               <button
                 onClick={() => handleEdit(account)}
                 title="编辑配置"
-                className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#FFF9C4] text-yellow-800 hover:bg-[#FFE815] hover:text-black transition-all">
+                className="w-12 h-12 flex items-center justify-center rounded-2xl bg-[#FFF9C4] text-yellow-800 hover:bg-[#FFE815] hover:text-black transition-all"
+              >
                 <Edit2 className="w-5 h-5" />
               </button>
               <button 
@@ -233,100 +189,112 @@ const AccountList: React.FC = () => {
         )}
       </div>
 
-      {/* QR Code Modal */}
+      {/* QR Code Modal - 修复居中问题 */}
       {showQRModal && (
-          <div className="modal-overlay">
-              <div className="modal-container" style={{maxWidth: '28rem'}}>
-                  <div className="modal-header">
-                      <div className="flex items-center justify-between w-full">
-                          <h3 className="text-2xl font-extrabold text-gray-900">扫码登录</h3>
-                          <button
-                            onClick={() => setShowQRModal(false)}
-                            className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                          >
-                              <X className="w-5 h-5 text-gray-600" />
-                          </button>
-                      </div>
-                  </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+              <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+                  <button
+                    onClick={() => setShowQRModal(false)}
+                    className="self-end p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors mb-6"
+                  >
+                      <X className="w-5 h-5 text-gray-600" />
+                  </button>
 
-                  <div className="modal-body text-center">
-                      <p className="text-gray-500 mb-8 font-medium">请打开闲鱼APP扫描下方二维码</p>
-                      
-                      <div className="w-64 h-64 bg-[#F7F8FA] rounded-[2rem] mx-auto flex items-center justify-center overflow-hidden border-4 border-white shadow-inner mb-8 relative">
-                          {qrStatus === 'loading' && <Loader2 className="w-10 h-10 text-[#FFE815] animate-spin" />}
-                          {qrStatus === 'waiting' && <img src={qrCodeUrl} alt="QR Code" className="w-full h-full p-2" />}
-                          {qrStatus === 'success' && (
-                              <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-green-600 animate-fade-in">
-                                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                                     <Check className="w-8 h-8" />
+                  <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+                      <div className="text-center">
+                          <h3 className="text-2xl font-extrabold text-gray-900 mb-2">扫码登录</h3>
+                          <p className="text-gray-500 mb-8 font-medium">请打开闲鱼APP扫描下方二维码</p>
+
+                          <div className="w-64 h-64 bg-[#F7F8FA] rounded-[2rem] mx-auto flex items-center justify-center overflow-hidden border-4 border-white shadow-inner mb-8 relative">
+                              {qrStatus === 'loading' && <Loader2 className="w-10 h-10 text-[#FFE815] animate-spin" />}
+                              {qrStatus === 'waiting' && <img src={qrCodeUrl} alt="QR Code" className="w-full h-full p-2" />}
+                              {qrStatus === 'success' && (
+                                  <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-green-600 animate-fade-in">
+                                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                                         <Check className="w-8 h-8" />
+                                      </div>
+                                      <span className="font-bold text-lg">登录成功</span>
                                   </div>
-                                  <span className="font-bold text-lg">登录成功</span>
-                              </div>
-                          )}
-                          {qrStatus === 'error' && (
-                              <div className="flex flex-col items-center">
-                                  <span className="text-red-500 font-bold mb-2">获取失败</span>
-                                  <button onClick={startQRLogin} className="text-xs bg-gray-200 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-gray-300"><RefreshCw className="w-3 h-3"/> 重试</button>
-                              </div>
-                          )}
-                      </div>
+                              )}
+                              {qrStatus === 'error' && (
+                                  <div className="flex flex-col items-center">
+                                      <span className="text-red-500 font-bold mb-2">获取失败</span>
+                                      <button onClick={startQRLogin} className="text-xs bg-gray-200 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-gray-300"><RefreshCw className="w-3 h-3"/> 重试</button>
+                                  </div>
+                              )}
+                          </div>
 
-                      <p className="text-xs text-gray-400 font-medium bg-gray-50 py-2 rounded-xl">二维码有效期为5分钟，请尽快扫码。</p>
+                          <p className="text-xs text-gray-400 font-medium bg-gray-50 py-2 rounded-xl">二维码有效期为5分钟，请尽快扫码。</p>
+                      </div>
                   </div>
               </div>
           </div>
       )}
 
-      {/* Edit Modal */}
+      {/* 编辑账号弹窗 */}
       {showEditModal && editingAccount && (
-        <div className="modal-overlay">
-          <div className="modal-container modal-container-lg">
-            <div className="modal-header">
-              <div className="flex items-center justify-between w-full">
-                <h3 className="text-2xl font-extrabold text-gray-900">编辑账号配置</h3>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+              <div>
+                <h3 className="text-2xl font-extrabold text-gray-900">编辑账号</h3>
+                <p className="text-sm text-gray-500 mt-1">{editingAccount.nickname || editingAccount.id}</p>
               </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
 
-            <div className="modal-body space-y-6">
-              {/* Basic Settings */}
-              <div className="space-y-4">
-                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5" />
-                  基本设置
-                </h4>
-
+            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+              <div className="space-y-5">
+                {/* 备注 */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">账号备注</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    账号备注
+                  </label>
                   <input
                     type="text"
                     value={editForm.remark}
                     onChange={(e) => setEditForm({ ...editForm, remark: e.target.value })}
-                    placeholder="给账号起个名字"
+                    placeholder="输入账号备注名称"
                     className="w-full ios-input px-4 py-3 rounded-xl"
                   />
                 </div>
 
+                {/* 自动确认收货 */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                  <div>
-                    <div className="font-bold text-gray-900">自动确认订单</div>
-                    <div className="text-xs text-gray-500 mt-1">收到订单后自动确认并发货</div>
+                  <div className="flex items-center gap-3">
+                    <MessageCircle className="w-5 h-5 text-gray-600" />
+                    <div>
+                      <div className="font-bold text-gray-900">自动回复</div>
+                      <div className="text-xs text-gray-500">开启后将自动回复买家消息</div>
+                    </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setEditForm({ ...editForm, auto_confirm: !editForm.auto_confirm })}
-                    className={`w-14 h-8 rounded-full transition-all relative ${editForm.auto_confirm ? 'bg-[#FFE815]' : 'bg-gray-300'}`}
+                    className={`w-14 h-8 rounded-full transition-colors duration-300 relative ${
+                      editForm.auto_confirm ? 'bg-[#FFE815]' : 'bg-gray-300'
+                    }`}
                   >
-                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${editForm.auto_confirm ? 'left-7' : 'left-1'}`} />
+                    <span
+                      className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 block ${
+                        editForm.auto_confirm ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
                   </button>
                 </div>
 
+                {/* 暂停时长 */}
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">暂停时长（分钟）</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    暂停时长（分钟）
+                  </label>
                   <input
                     type="number"
                     value={editForm.pause_duration}
@@ -335,131 +303,25 @@ const AccountList: React.FC = () => {
                     min="0"
                     className="w-full ios-input px-4 py-3 rounded-xl"
                   />
-                  <p className="text-xs text-gray-500 mt-1">设置为 0 表示不暂停</p>
+                  <p className="text-xs text-gray-500 mt-1">设置为0表示不暂停</p>
                 </div>
-              </div>
 
-              {/* AI Settings */}
-              <div className="space-y-4 pt-6 border-t border-gray-200">
-                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <Bot className="w-5 h-5" />
-                  AI 回复设置
-                </h4>
-
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                  <div>
-                    <div className="font-bold text-gray-900">启用 AI 回复</div>
-                    <div className="text-xs text-gray-500 mt-1">使用 AI 智能回复买家消息</div>
-                  </div>
+                {/* 保存按钮 */}
+                <div className="flex gap-3 pt-4">
                   <button
-                    onClick={() => setAiSettings({ ...aiSettings, ai_enabled: !aiSettings.ai_enabled })}
-                    className={`w-14 h-8 rounded-full transition-all relative ${aiSettings.ai_enabled ? 'bg-[#FFE815]' : 'bg-gray-300'}`}
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                   >
-                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${aiSettings.ai_enabled ? 'left-7' : 'left-1'}`} />
+                    取消
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    保存更改
                   </button>
                 </div>
-
-                {aiSettings.ai_enabled && (
-                  <div className="space-y-4 pl-4 border-l-2 border-yellow-200">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">模型名称</label>
-                      <input
-                        type="text"
-                        value={aiSettings.model_name}
-                        onChange={(e) => setAiSettings({ ...aiSettings, model_name: e.target.value })}
-                        placeholder="qwen-plus"
-                        className="w-full ios-input px-4 py-3 rounded-xl"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">API Key</label>
-                      <input
-                        type="password"
-                        value={aiSettings.api_key}
-                        onChange={(e) => setAiSettings({ ...aiSettings, api_key: e.target.value })}
-                        placeholder="sk-xxxxxxxxxxxxxxxx"
-                        className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Base URL</label>
-                      <input
-                        type="text"
-                        value={aiSettings.base_url}
-                        onChange={(e) => setAiSettings({ ...aiSettings, base_url: e.target.value })}
-                        placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
-                        className="w-full ios-input px-4 py-3 rounded-xl text-sm"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">最大折扣率 (%)</label>
-                        <input
-                          type="number"
-                          value={aiSettings.max_discount_percent}
-                          onChange={(e) => setAiSettings({ ...aiSettings, max_discount_percent: parseInt(e.target.value) || 0 })}
-                          placeholder="10"
-                          min="0"
-                          max="100"
-                          className="w-full ios-input px-4 py-3 rounded-xl"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">最大议价轮数</label>
-                        <input
-                          type="number"
-                          value={aiSettings.max_bargain_rounds}
-                          onChange={(e) => setAiSettings({ ...aiSettings, max_bargain_rounds: parseInt(e.target.value) || 0 })}
-                          placeholder="3"
-                          min="0"
-                          className="w-full ios-input px-4 py-3 rounded-xl"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">自定义提示词</label>
-                      <textarea
-                        value={aiSettings.custom_prompts}
-                        onChange={(e) => setAiSettings({ ...aiSettings, custom_prompts: e.target.value })}
-                        placeholder="可选：自定义 AI 的回复风格和规则..."
-                        rows={3}
-                        className="w-full ios-input px-4 py-3 rounded-xl resize-none"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleTestAI}
-                      disabled={aiTestLoading}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-                    >
-                      {aiTestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
-                      测试 AI 连接
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-5 h-5" />
-                  保存设置
-                </button>
               </div>
             </div>
           </div>

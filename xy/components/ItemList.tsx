@@ -1,22 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Item, AccountDetail } from '../types';
-import { getItems, getAccountDetails, syncItemsFromAccount, deleteItem, createItem, updateItem } from '../services/api';
-import { Box, RefreshCw, ShoppingBag, Trash2, Loader2, Plus, Edit2, X, Save } from 'lucide-react';
+import { getItems, getAccountDetails, syncItemsFromAccount } from '../services/api';
+import { Box, RefreshCw, ShoppingBag, Edit, Trash2, Plus, Save, X, Eye, EyeOff } from 'lucide-react';
 
 const ItemList: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
-
-  // Modal states
-  const [showModal, setShowModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
-  const [form, setForm] = useState({
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Item>>({});
+  const [addForm, setAddForm] = useState({
+    cookie_id: '',
+    item_id: '',
     item_title: '',
-    item_price: 0,
+    item_price: '',
     item_image: '',
-    is_multi_spec: false
+    is_multi_spec: false,
+    is_multi_qty_ship: false
   });
 
   useEffect(() => {
@@ -32,52 +35,88 @@ const ItemList: React.FC = () => {
       setLoading(false);
   };
 
-  const handleDelete = async (cookieId: string, itemId: string) => {
-    if (!confirm('确认删除该商品吗？')) return;
+  const handleEdit = (item: Item) => {
+    setSelectedItem(item);
+    setEditForm({ ...item });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedItem) return;
     try {
-      await deleteItem(cookieId, itemId);
-      getItems().then(setItems);
-      alert('删除成功！');
-    } catch (e) {
-      alert('删除失败：' + (e as Error).message);
+      const updatedItems = items.map(item =>
+        item.cookie_id === selectedItem.cookie_id && item.item_id === selectedItem.item_id
+          ? { ...item, ...editForm }
+          : item
+      );
+      setItems(updatedItems);
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('更新商品失败:', error);
+      alert('更新失败，请重试');
     }
   };
 
-  const handleAdd = () => {
-    if (!selectedAccount) return alert('请先选择账号');
-    setEditingItem(null);
-    setForm({
-      item_title: '',
-      item_price: 0,
-      item_image: '',
-      is_multi_spec: false
-    });
-    setShowModal(true);
-  };
-
-  const handleEdit = (item: Item) => {
-    setEditingItem(item);
-    setForm({
-      item_title: item.item_title,
-      item_price: item.item_price,
-      item_image: item.item_image || '',
-      is_multi_spec: item.is_multi_spec
-    });
-    setShowModal(true);
-  };
-
-  const handleSave = async () => {
-    try {
-      if (editingItem) {
-        await updateItem(editingItem.cookie_id, editingItem.item_id, form);
-      } else {
-        await createItem(selectedAccount, form);
+  const handleDelete = async (item: Item) => {
+    if (confirm(`确认删除商品"${item.item_title}"吗？`)) {
+      try {
+        const filteredItems = items.filter(i =>
+          !(i.cookie_id === item.cookie_id && i.item_id === item.item_id)
+        );
+        setItems(filteredItems);
+      } catch (error) {
+        console.error('删除商品失败:', error);
+        alert('删除失败，请重试');
       }
-      setShowModal(false);
-      getItems().then(setItems);
-      alert('保存成功！');
-    } catch (e) {
-      alert('保存失败：' + (e as Error).message);
+    }
+  };
+
+  const handleAddItem = async () => {
+    try {
+      const newItem: Item = {
+        ...addForm,
+        id: Date.now().toString()
+      } as Item;
+      setItems([newItem, ...items]);
+      setShowAddModal(false);
+      setAddForm({
+        cookie_id: '',
+        item_id: '',
+        item_title: '',
+        item_price: '',
+        item_image: '',
+        is_multi_spec: false,
+        is_multi_qty_ship: false
+      });
+    } catch (error) {
+      console.error('添加商品失败:', error);
+      alert('添加失败，请重试');
+    }
+  };
+
+  const toggleMultiSpec = async (item: Item) => {
+    try {
+      const updatedItems = items.map(i =>
+        i.cookie_id === item.cookie_id && i.item_id === item.item_id
+          ? { ...i, is_multi_spec: !i.is_multi_spec }
+          : i
+      );
+      setItems(updatedItems);
+    } catch (error) {
+      console.error('切换状态失败:', error);
+    }
+  };
+
+  const toggleMultiQty = async (item: Item) => {
+    try {
+      const updatedItems = items.map(i =>
+        i.cookie_id === item.cookie_id && i.item_id === item.item_id
+          ? { ...i, is_multi_qty_ship: !i.is_multi_qty_ship }
+          : i
+      );
+      setItems(updatedItems);
+    } catch (error) {
+      console.error('切换状态失败:', error);
     }
   };
 
@@ -90,7 +129,7 @@ const ItemList: React.FC = () => {
         </div>
         <div className="flex gap-3">
             <select
-                className="ios-input px-4 py-2 rounded-xl text-sm"
+                className="ios-input px-4 py-3 rounded-xl text-sm"
                 value={selectedAccount}
                 onChange={e => setSelectedAccount(e.target.value)}
             >
@@ -100,27 +139,42 @@ const ItemList: React.FC = () => {
                 ))}
             </select>
             <button
-                onClick={handleAdd}
-                disabled={!selectedAccount}
-                className="ios-btn-primary flex items-center gap-2 px-6 py-2 rounded-full font-medium shadow-lg shadow-yellow-200 disabled:opacity-50"
-            >
-                <Plus className="w-4 h-4" />
-                新增商品
-            </button>
-            <button
                 onClick={handleSync}
                 disabled={loading || !selectedAccount}
-                className="ios-btn-primary flex items-center gap-2 px-6 py-2 rounded-full font-medium shadow-lg shadow-blue-500/30 disabled:opacity-50"
+                className="ios-btn-primary flex items-center gap-2 px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
             >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 同步商品
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-5 py-3 rounded-2xl font-bold bg-gray-900 text-white hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg"
+            >
+              <Plus className="w-4 h-4" />
+              添加商品
             </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {items.map(item => (
-              <div key={`${item.cookie_id}-${item.item_id}`} className="ios-card p-4 rounded-3xl hover:shadow-lg transition-all group">
+              <div key={`${item.cookie_id}-${item.item_id}`} className="ios-card p-4 rounded-3xl hover:shadow-lg transition-all group relative">
+                  <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-2 bg-white/90 backdrop-blur rounded-lg shadow-md hover:bg-[#FFE815] transition-colors"
+                        title="编辑"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item)}
+                        className="p-2 bg-white/90 backdrop-blur rounded-lg shadow-md hover:bg-red-100 text-red-500 transition-colors"
+                        title="删除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                  </div>
                   <div className="aspect-square bg-gray-100 rounded-2xl mb-4 overflow-hidden relative">
                       {item.item_image ? (
                           <img src={item.item_image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -129,32 +183,35 @@ const ItemList: React.FC = () => {
                               <Box className="w-10 h-10" />
                           </div>
                       )}
-                      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-md text-white text-xs font-bold px-2 py-1 rounded-lg">
+                      <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md text-white text-xs font-bold px-2 py-1 rounded-lg">
                           ¥{item.item_price}
                       </div>
                   </div>
                   <h3 className="font-bold text-gray-900 line-clamp-2 text-sm mb-2 h-10">{item.item_title}</h3>
-                  <div className="flex justify-between items-center text-xs">
-                      <div className="flex-1 flex items-center gap-2 text-gray-500">
-                        <span className="bg-gray-100 px-2 py-1 rounded-md text-xs truncate">ID: {item.item_id.substring(0, 8)}</span>
-                        <span className="text-xs">{item.is_multi_spec ? '多规格' : '单规格'}</span>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="p-1.5 bg-yellow-50 text-yellow-700 rounded-lg hover:bg-yellow-100 transition-colors flex-shrink-0"
-                          title="编辑"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.cookie_id, item.item_id)}
-                          className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors flex-shrink-0"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                  <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
+                      <span className="bg-gray-100 px-2 py-1 rounded-md truncate max-w-[100px]">ID: {item.item_id}</span>
+                  </div>
+                  <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleMultiSpec(item)}
+                        className={`flex-1 text-xs font-bold px-2 py-1.5 rounded-lg transition-colors ${
+                          item.is_multi_spec
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        多规格
+                      </button>
+                      <button
+                        onClick={() => toggleMultiQty(item)}
+                        className={`flex-1 text-xs font-bold px-2 py-1.5 rounded-lg transition-colors ${
+                          item.is_multi_qty_ship
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        多数量发货
+                      </button>
                   </div>
               </div>
           ))}
@@ -166,90 +223,215 @@ const ItemList: React.FC = () => {
           )}
       </div>
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
-
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">
-              {editingItem ? '编辑商品' : '新增商品'}
-            </h3>
-
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
-                <input
-                  type="text"
-                  value={form.item_title}
-                  onChange={(e) => setForm({ ...form, item_title: e.target.value })}
-                  placeholder="例如：苹果手机 iPhone 13"
-                  className="w-full ios-input px-4 py-3 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">商品价格</label>
-                <input
-                  type="number"
-                  value={form.item_price}
-                  onChange={(e) => setForm({ ...form, item_price: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="w-full ios-input px-4 py-3 rounded-xl"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">商品图片 URL</label>
-                <input
-                  type="text"
-                  value={form.item_image}
-                  onChange={(e) => setForm({ ...form, item_image: e.target.value })}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full ios-input px-4 py-3 rounded-xl"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                <div>
-                  <div className="font-bold text-gray-900">多规格商品</div>
-                  <div className="text-xs text-gray-500 mt-1">是否存在多个规格选项</div>
-                </div>
-                <button
-                  onClick={() => setForm({ ...form, is_multi_spec: !form.is_multi_spec })}
-                  className={`w-14 h-8 rounded-full transition-all relative ${
-                    form.is_multi_spec ? 'bg-[#FFE815]' : 'bg-gray-300'
-                  }`}
-                >
-                  <div
-                    className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-all shadow-md ${
-                      form.is_multi_spec ? 'left-7' : 'left-1'
-                    }`}
-                  />
-                </button>
-              </div>
+      {/* 编辑商品弹窗 */}
+      {showEditModal && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+              <h3 className="text-2xl font-extrabold text-gray-900">编辑商品</h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
+                  <input
+                    type="text"
+                    value={editForm.item_title || ''}
+                    onChange={(e) => setEditForm({ ...editForm, item_title: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
+                  <input
+                    type="text"
+                    value={editForm.item_id || ''}
+                    onChange={(e) => setEditForm({ ...editForm, item_id: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">价格</label>
+                  <input
+                    type="text"
+                    value={editForm.item_price || ''}
+                    onChange={(e) => setEditForm({ ...editForm, item_price: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">图片URL</label>
+                  <input
+                    type="text"
+                    value={editForm.item_image || ''}
+                    onChange={(e) => setEditForm({ ...editForm, item_image: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, is_multi_spec: !editForm.is_multi_spec })}
+                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
+                      editForm.is_multi_spec ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    多规格: {editForm.is_multi_spec ? '开' : '关'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, is_multi_qty_ship: !editForm.is_multi_qty_ship })}
+                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
+                      editForm.is_multi_qty_ship ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    多数量发货: {editForm.is_multi_qty_ship ? '开' : '关'}
+                  </button>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    保存更改
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 添加商品弹窗 */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+              <h3 className="text-2xl font-extrabold text-gray-900">添加新商品</h3>
               <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                onClick={() => setShowAddModal(false)}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
               >
-                取消
+                <X className="w-5 h-5 text-gray-500" />
               </button>
-              <button
-                onClick={handleSave}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存商品
-              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">所属账号</label>
+                  <select
+                    value={addForm.cookie_id}
+                    onChange={(e) => setAddForm({ ...addForm, cookie_id: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  >
+                    <option value="">选择账号</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.nickname}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
+                  <input
+                    type="text"
+                    value={addForm.item_id}
+                    onChange={(e) => setAddForm({ ...addForm, item_id: e.target.value })}
+                    placeholder="输入商品ID"
+                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
+                  <input
+                    type="text"
+                    value={addForm.item_title}
+                    onChange={(e) => setAddForm({ ...addForm, item_title: e.target.value })}
+                    placeholder="输入商品标题"
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">价格</label>
+                  <input
+                    type="text"
+                    value={addForm.item_price}
+                    onChange={(e) => setAddForm({ ...addForm, item_price: e.target.value })}
+                    placeholder="例如: 99.00"
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">图片URL</label>
+                  <input
+                    type="text"
+                    value={addForm.item_image}
+                    onChange={(e) => setAddForm({ ...addForm, item_image: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setAddForm({ ...addForm, is_multi_spec: !addForm.is_multi_spec })}
+                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
+                      addForm.is_multi_spec ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    多规格: {addForm.is_multi_spec ? '开' : '关'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddForm({ ...addForm, is_multi_qty_ship: !addForm.is_multi_qty_ship })}
+                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
+                      addForm.is_multi_qty_ship ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    多数量发货: {addForm.is_multi_qty_ship ? '开' : '关'}
+                  </button>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleAddItem}
+                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    添加商品
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
