@@ -32,37 +32,81 @@ const Dashboard: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState('');
 
   const loadAnalytics = (range: TimeRange) => {
-    let days = 7;
     const today = new Date();
+    let params: { start_date: string; end_date: string };
 
     switch (range) {
       case 'today':
-        days = 1;
+        // 今天：从今天00:00:00到今天23:59:59
+        params = {
+          start_date: today.toISOString().split('T')[0],
+          end_date: today.toISOString().split('T')[0]
+        };
         break;
       case 'yesterday':
-        days = 1;
+        // 昨天：从昨天00:00:00到昨天23:59:59
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        params = {
+          start_date: yesterday.toISOString().split('T')[0],
+          end_date: yesterday.toISOString().split('T')[0]
+        };
         break;
       case '3days':
-        days = 3;
+        // 3天：从3天前到今天
+        const threeDaysAgo = new Date(today);
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        params = {
+          start_date: threeDaysAgo.toISOString().split('T')[0],
+          end_date: today.toISOString().split('T')[0]
+        };
         break;
       case '7days':
-        days = 7;
+        // 7天：从7天前到今天
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        params = {
+          start_date: sevenDaysAgo.toISOString().split('T')[0],
+          end_date: today.toISOString().split('T')[0]
+        };
         break;
       case '30days':
-        days = 30;
+        // 30天：从30天前到今天
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        params = {
+          start_date: thirtyDaysAgo.toISOString().split('T')[0],
+          end_date: today.toISOString().split('T')[0]
+        };
         break;
       case 'custom':
+        // 自定义范围
         if (customStartDate && customEndDate) {
-          const start = new Date(customStartDate);
-          const end = new Date(customEndDate);
-          days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          params = {
+            start_date: customStartDate,
+            end_date: customEndDate
+          };
         } else {
-          days = 7;
+          // 默认7天
+          const defaultDaysAgo = new Date(today);
+          defaultDaysAgo.setDate(defaultDaysAgo.getDate() - 7);
+          params = {
+            start_date: defaultDaysAgo.toISOString().split('T')[0],
+            end_date: today.toISOString().split('T')[0]
+          };
         }
         break;
+      default:
+        // 默认7天
+        const defaultStart = new Date(today);
+        defaultStart.setDate(defaultStart.getDate() - 7);
+        params = {
+          start_date: defaultStart.toISOString().split('T')[0],
+          end_date: today.toISOString().split('T')[0]
+        };
     }
 
-    getOrderAnalytics(days).then(setAnalytics).catch(console.error);
+    getOrderAnalytics(params).then(setAnalytics).catch(console.error);
   };
 
   useEffect(() => {
