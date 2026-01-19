@@ -255,6 +255,15 @@ class DBManager:
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT DEFAULT ''")
                 logger.info("orders 表收货人信息列添加完成")
 
+            # 检查并添加 version 列（用于乐观锁）
+            try:
+                self._execute_sql(cursor, "SELECT version FROM orders LIMIT 1")
+            except sqlite3.OperationalError:
+                # version 列不存在，需要添加
+                logger.info("正在为 orders 表添加 version 列...")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN version INTEGER DEFAULT 1")
+                logger.info("orders 表 version 列添加完成")
+
             # 检查并添加 user_id 列（用于数据库迁移）
             try:
                 self._execute_sql(cursor, "SELECT user_id FROM cards LIMIT 1")
@@ -4537,7 +4546,7 @@ class DBManager:
                               amount: str = None, order_status: str = None, cookie_id: str = None,
                               is_bargain: bool = None, created_at: str = None, receiver_name: str = None,
                               receiver_phone: str = None, receiver_address: str = None,
-                              system_shipped: bool = None):
+                              system_shipped: bool = None, expected_version: int = None):
         """插入或更新订单信息"""
         with self.lock:
             try:
@@ -4606,10 +4615,27 @@ class DBManager:
 
                     if update_fields:
                         update_fields.append("updated_at = CURRENT_TIMESTAMP")
-                        update_values.append(order_id)
+                        # 增加版本号
+                        update_fields.append("version = version + 1")
 
-                        sql = f"UPDATE orders SET {', '.join(update_fields)} WHERE order_id = ?"
+                        # 构建WHERE条件
+                        if expected_version is not None:
+                            # 使用乐观锁：只有version匹配时才更新
+                            where_clause = "order_id = ? AND version = ?"
+                            update_values.extend([order_id, expected_version])
+                        else:
+                            # 不使用乐观锁
+                            where_clause = "order_id = ?"
+                            update_values.append(order_id)
+
+                        sql = f"UPDATE orders SET {', '.join(update_fields)} WHERE {where_clause}"
                         cursor.execute(sql, update_values)
+
+                        # 检查是否更新成功（乐观锁）
+                        if expected_version is not None and cursor.rowcount == 0:
+                            logger.warning(f"订单更新失败（版本冲突）: {order_id}, expected_version={expected_version}")
+                            return False
+
                         logger.info(f"更新订单信息: {order_id}")
                 else:
                     # 插入新订单
@@ -4652,9 +4678,10 @@ class DBManager:
         with self.lock:
             try:
                 cursor = self.conn.cursor()
+                # 先尝试查询包含version的订单
                 cursor.execute('''
                 SELECT order_id, item_id, buyer_id, spec_name, spec_value,
-                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at
+                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at, version
                 FROM orders WHERE order_id = ?
                 ''', (order_id,))
 
@@ -4669,11 +4696,13 @@ class DBManager:
                         'spec_value': row[4],
                         'quantity': row[5],
                         'amount': row[6],
-                        'status': row[7],
+                        'order_status': row[7],
+                        'status': row[7],  # 同时保留status字段以兼容旧代码
                         'cookie_id': row[8],
                         'is_bargain': bool(row[9]) if row[9] is not None else False,
                         'created_at': row[10],
-                        'updated_at': row[11]
+                        'updated_at': row[11],
+                        'version': row[12] if len(row) > 12 else 1  # 默认版本为1
                     }
                 return None
 
@@ -4696,6 +4725,51 @@ class DBManager:
                 logger.error(f"删除订单失败: {order_id} - {e}")
                 self.conn.rollback()
                 return False
+
+    def get_recent_order_by_item_and_buyer(self, item_id: str, buyer_id: str):
+        """根据商品ID和买家ID获取最近的订单
+
+        Args:
+            item_id: 商品ID
+            buyer_id: 买家ID
+
+        Returns:
+            dict: 订单信息，如果没有找到则返回None
+        """
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                SELECT order_id, item_id, buyer_id, spec_name, spec_value,
+                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at
+                FROM orders
+                WHERE item_id = ? AND buyer_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                ''', (item_id, buyer_id))
+
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],  # 使用 order_id 作为 id
+                        'order_id': row[0],
+                        'item_id': row[1],
+                        'buyer_id': row[2],
+                        'spec_name': row[3],
+                        'spec_value': row[4],
+                        'quantity': row[5],
+                        'amount': row[6],
+                        'order_status': row[7],
+                        'cookie_id': row[8],
+                        'is_bargain': bool(row[9]) if row[9] is not None else False,
+                        'created_at': row[10],
+                        'updated_at': row[11]
+                    }
+                return None
+
+            except Exception as e:
+                logger.error(f"获取订单信息失败: item_id={item_id}, buyer_id={buyer_id} - {e}")
+                return None
 
     def get_orders_by_cookie(self, cookie_id: str, limit: int = 100):
         """根据Cookie ID获取订单列表"""

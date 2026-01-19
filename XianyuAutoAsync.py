@@ -7558,12 +7558,17 @@ class XianyuLive:
                         except:
                             pass
 
-                        # 调用订单详情获取方法
-                        order_detail = await self.fetch_order_detail_info(order_id, temp_item_id, temp_user_id)
-                        if order_detail:
-                            logger.info(f'[{msg_time}] 【{self.cookie_id}】✅ 订单详情获取成功: {order_id}')
+                        # 检查是否已经在获取该订单详情
+                        order_detail_lock = self._order_detail_locks[order_id]
+                        if order_detail_lock.locked():
+                            logger.info(f'[{msg_time}] 【{self.cookie_id}】🔒 订单 {order_id} 详情正在被其他任务获取，跳过重复请求')
                         else:
-                            logger.warning(f'[{msg_time}] 【{self.cookie_id}】⚠️ 订单详情获取失败: {order_id}')
+                            # 调用订单详情获取方法
+                            order_detail = await self.fetch_order_detail_info(order_id, temp_item_id, temp_user_id)
+                            if order_detail:
+                                logger.info(f'[{msg_time}] 【{self.cookie_id}】✅ 订单详情获取成功: {order_id}')
+                            else:
+                                logger.warning(f'[{msg_time}] 【{self.cookie_id}】⚠️ 订单详情获取失败: {order_id}')
 
                     except Exception as detail_e:
                         logger.error(f'[{msg_time}] 【{self.cookie_id}】❌ 获取订单详情异常: {self._safe_str(detail_e)}')

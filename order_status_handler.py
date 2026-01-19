@@ -153,12 +153,44 @@ class OrderStatusHandler:
                 except Exception as parse_e:
                     logger.error(f"解析dynamicOperation JSON失败: {parse_e}")
             
-            # 方法3: 如果前面的方法都失败，尝试在整个消息中搜索订单ID模式
+            # 方法3: 从tip类型消息中提取订单ID（通过itemId和买家ID查询）
+            if not order_id and isinstance(message_1, dict):
+                try:
+                    # 检查是否为tip类型消息（contentType=14）
+                    message_1_10 = message_1.get('10', {})
+                    if isinstance(message_1_10, dict):
+                        reminder_url = message_1_10.get('reminderUrl', '')
+                        if reminder_url:
+                            # 从reminderUrl提取itemId和peerUserId
+                            # 格式：fleamarket://message_chat?itemId=xxx&peerUserId=yyy&...
+                            item_match = re.search(r'itemId=(\d+)', reminder_url)
+                            peer_match = re.search(r'peerUserId=(\d+)', reminder_url)
+
+                            if item_match and peer_match:
+                                item_id = item_match.group(1)
+                                buyer_id = peer_match.group(1)
+                                logger.info(f'🔍 从tip消息提取到: itemId={item_id}, buyerId={buyer_id}')
+
+                                # 通过itemId和买家ID查询最近的订单
+                                try:
+                                    from db_manager import db_manager
+                                    # 查询该商品和买家的最近订单
+                                    recent_order = db_manager.get_recent_order_by_item_and_buyer(item_id, buyer_id)
+                                    if recent_order:
+                                        order_id = recent_order.get('order_id')
+                                        if order_id:
+                                            logger.info(f'✅ 从数据库查询到关联订单ID: {order_id}')
+                                except Exception as db_e:
+                                    logger.warning(f'从数据库查询订单失败: {db_e}')
+                except Exception as tip_e:
+                    logger.warning(f'处理tip消息失败: {tip_e}')
+
+            # 方法4: 如果前面的方法都失败，尝试在整个消息中搜索订单ID模式
             if not order_id:
                 try:
                     # 将整个消息转换为字符串进行搜索
                     message_str = str(message)
-                    
+
                     # 搜索各种可能的订单ID模式
                     patterns = [
                         r'orderId[=:](\d{10,})',  # orderId=123456789 或 orderId:123456789
@@ -166,7 +198,7 @@ class OrderStatusHandler:
                         r'"id"\s*:\s*"?(\d{10,})"?',  # "id":"123456789" 或 "id":123456789
                         r'bizOrderId[=:](\d{10,})',  # bizOrderId=123456789
                     ]
-                    
+
                     for pattern in patterns:
                         matches = re.findall(pattern, message_str)
                         if matches:
@@ -174,7 +206,7 @@ class OrderStatusHandler:
                             order_id = matches[0]
                             logger.info(f'✅ 从消息字符串中提取到订单ID: {order_id} (模式: {pattern})')
                             break
-                
+
                 except Exception as search_e:
                     logger.error(f"在消息字符串中搜索订单ID失败: {search_e}")
             
@@ -268,18 +300,35 @@ class OrderStatusHandler:
                         logger.warning(f"⚠️ 退款撤销但无法获取上一次状态，保持当前状态: {current_status}")
                         new_status = current_status
                 
-                # 更新订单状态（带重试机制）
+                # 更新订单状态（带乐观锁和重试机制）
                 success = False
+                current_version = current_order.get('version', 1)
                 for attempt in range(max_retries):
                     try:
-                        logger.info(f"💾 尝试更新订单状态 (尝试 {attempt + 1}/{max_retries}): {order_id}")
+                        logger.info(f"💾 尝试更新订单状态 (尝试 {attempt + 1}/{max_retries}): {order_id}, version={current_version}")
                         success = db_manager.insert_or_update_order(
                             order_id=order_id,
                             order_status=new_status,
-                            cookie_id=cookie_id
+                            cookie_id=cookie_id,
+                            expected_version=current_version
                         )
-                        logger.info(f"✅ 订单状态更新成功: {order_id}")
-                        break
+                        if success:
+                            logger.info(f"✅ 订单状态更新成功: {order_id}")
+                            break
+                        else:
+                            # 乐观锁冲突，重新获取订单信息
+                            logger.warning(f"⚠️ 订单状态更新失败（版本冲突），重新获取订单信息 (尝试 {attempt + 1}/{max_retries})")
+                            time.sleep(0.1 * (attempt + 1))  # 递增延迟
+                            current_order = db_manager.get_order_by_id(order_id)
+                            if not current_order:
+                                logger.error(f"❌ 重新获取订单信息失败: {order_id}")
+                                return False
+                            current_version = current_order.get('version', 1)
+                            current_status = current_order.get('order_status', 'processing')
+                            # 检查是否已经被更新为目标状态
+                            if current_status == new_status:
+                                logger.info(f"✅ 订单 {order_id} 已被其他线程更新为目标状态: {new_status}")
+                                return True
                     except Exception as db_e:
                         if attempt == max_retries - 1:
                             logger.error(f"❌ 更新订单状态失败 (尝试 {attempt + 1}/{max_retries}): {str(db_e)}")

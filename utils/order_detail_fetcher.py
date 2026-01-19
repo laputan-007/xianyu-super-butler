@@ -342,8 +342,17 @@ class OrderDetailFetcher:
                     logger.warning(f"等待页面加载状态失败: {e}")
                     # 继续执行，不中断流程
 
-                # 额外等待确保动态内容加载完成
-                await asyncio.sleep(3)
+                # 等待收货地址元素出现（最多等待10秒）
+                try:
+                    logger.info("等待收货地址元素加载...")
+                    await self.page.wait_for_selector('text=/收货地址/', timeout=10000)
+                    logger.info("收货地址元素已加载")
+                    # 收货地址加载后，再等待1秒确保完全渲染
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    logger.warning(f"等待收货地址元素失败，使用默认等待时间: {e}")
+                    # 如果收货地址元素未出现，使用默认等待时间
+                    await asyncio.sleep(3)
 
                 # 获取并解析SKU信息
                 sku_info = await self._get_sku_content()
