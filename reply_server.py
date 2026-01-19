@@ -5953,10 +5953,20 @@ def get_user_orders(
 
         # 获取所有订单数据
         all_orders = []
+        # 先获取所有商品的 item_id 到 item_title 的映射
+        item_titles = {}
+        with db_manager.lock:
+            cursor = db_manager.conn.cursor()
+            cursor.execute('SELECT item_id, item_title FROM item_info')
+            for row in cursor.fetchall():
+                item_titles[row[0]] = row[1]
+
         for cid in user_cookies.keys():
             orders = db_manager.get_orders_by_cookie(cid, limit=1000)
             for order in orders:
                 order['cookie_id'] = cid
+                # 添加 item_title 字段
+                order['item_title'] = item_titles.get(order.get('item_id'), '')
                 # 状态筛选
                 if status and order.get('order_status') != status:
                     continue
