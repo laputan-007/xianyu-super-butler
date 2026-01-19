@@ -67,6 +67,37 @@ const OrderList: React.FC = () => {
       }).catch(() => setLoading(false));
   };
 
+  // 从订单的 item_id 查找对应的商品名称（通过标题匹配）
+  const getItemNameById = (orderId: string, orderItemTitle?: string): string => {
+      // 如果订单有 item_title，优先使用
+      if (orderItemTitle && orderItemTitle.trim()) {
+          return orderItemTitle;
+      }
+
+      // 尝试通过 item_id 直接匹配
+      if (itemNames[orderId]) {
+          return itemNames[orderId];
+      }
+
+      // 尝试在商品列表中查找相似标题的商品
+      const matchingItem = items.find(item => {
+          // 如果订单有标题，尝试匹配商品标题
+          if (orderItemTitle && item.item_title) {
+              // 检查是否包含关键词
+              const orderTitleLower = orderItemTitle.toLowerCase();
+              const itemTitleLower = item.item_title.toLowerCase();
+              return itemTitleLower.includes(orderTitleLower) || orderTitleLower.includes(itemTitleLower);
+          }
+          return false;
+      });
+
+      if (matchingItem?.item_title) {
+          return matchingItem.item_title;
+      }
+
+      return '未知商品';
+  };
+
   // 从商品列表构建商品ID到商品名的映射
   const buildItemNamesMap = () => {
       const namesMap: Record<string, string> = {};
@@ -219,7 +250,7 @@ const OrderList: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-gray-900 line-clamp-1 text-sm">
-                          {itemNames[order.item_id] || order.item_title || '未知商品'}
+                          {getItemNameById(order.item_id, order.item_title)}
                         </div>
                         <div className="text-xs text-gray-500 mt-1 font-medium">订单ID: {order.order_id}</div>
                         <div className="text-xs text-gray-400 mt-0.5">数量: {order.quantity} • {order.created_at}</div>
@@ -361,7 +392,7 @@ const OrderList: React.FC = () => {
                   )}
                   <div className="flex-1">
                     <div className="font-bold text-gray-900 mb-1">
-                      {itemNames[selectedOrder.item_id] || selectedOrder.item_title || '未知商品'}
+                      {getItemNameById(selectedOrder.item_id, selectedOrder.item_title)}
                     </div>
                     <div className="text-sm text-gray-500">商品ID: {selectedOrder.item_id}</div>
                     {selectedOrder.item_price && (
