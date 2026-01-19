@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Order, OrderStatus } from '../types';
-import { getOrders, syncOrders, manualShipOrder, deleteOrder, updateOrder, importOrders } from '../services/api';
-import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Trash2, Eye, Edit2, X, Save, Upload, Plus } from 'lucide-react';
+import { getOrders, syncOrders, manualShipOrder, updateOrder, importOrders } from '../services/api';
+import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
@@ -36,12 +36,13 @@ const OrderList: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Partial<Order> | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Order>>({});
+  const [importText, setImportText] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const loadOrders = () => {
       setLoading(true);
@@ -74,75 +75,34 @@ const OrderList: React.FC = () => {
     setShowDetailModal(true);
   };
 
-  const handleDelete = async (orderId: string) => {
-    if (!confirm('确认删除该订单吗？')) return;
-    try {
-      await deleteOrder(orderId);
-      loadOrders();
-      alert('删除成功！');
-    } catch (e) {
-      alert('删除失败：' + (e as Error).message);
-    }
-  };
-
-  const handleBatchDelete = async () => {
-    if (selectedOrders.length === 0) {
-      alert('请先选择要删除的订单');
-      return;
-    }
-    if (!confirm(`确认删除选中的 ${selectedOrders.length} 个订单吗？`)) return;
-    try {
-      await Promise.all(selectedOrders.map(id => deleteOrder(id)));
-      setSelectedOrders([]);
-      loadOrders();
-      alert('批量删除成功！');
-    } catch (e) {
-      alert('批量删除失败：' + (e as Error).message);
-    }
-  };
-
-  const handleImport = async () => {
-    if (!importFile) {
-      alert('请选择文件');
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-      await importOrders(formData);
-      setShowImportModal(false);
-      setImportFile(null);
-      loadOrders();
-      alert('订单导入成功！');
-    } catch (e) {
-      alert('导入失败：' + (e as Error).message);
-    }
-  };
-
   const handleEdit = (order: Order) => {
-    setEditingOrder(order);
+    setSelectedOrder(order);
+    setEditForm({ ...order });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async () => {
-    if (!editingOrder) return;
+    if (!selectedOrder) return;
     try {
-      await updateOrder(editingOrder.order_id, editingOrder);
+      await updateOrder(selectedOrder.order_id, editForm);
       setShowEditModal(false);
       loadOrders();
-      alert('更新成功！');
-    } catch (e) {
-      alert('更新失败：' + (e as Error).message);
+    } catch (error) {
+      console.error('更新订单失败:', error);
+      alert('更新失败，请重试');
     }
   };
 
-  const handleRefreshOrder = async (orderId: string) => {
+  const handleImportOrders = async () => {
     try {
-      await updateOrder(orderId, {});
+      const orders = JSON.parse(importText);
+      await importOrders(Array.isArray(orders) ? orders : [orders]);
+      setShowImportModal(false);
+      setImportText('');
       loadOrders();
-      alert('刷新成功！');
-    } catch (e) {
-      alert('刷新失败：' + (e as Error).message);
+      alert('订单导入成功');
+    } catch (error) {
+      alert('导入失败，请检查JSON格式');
     }
   };
 
@@ -154,23 +114,14 @@ const OrderList: React.FC = () => {
           <p className="text-gray-500 mt-2 font-medium">查看所有闲鱼交易记录与状态。</p>
         </div>
         <div className="flex items-center gap-3">
-            {selectedOrders.length > 0 && (
-              <button
-                onClick={handleBatchDelete}
-                className="px-4 py-3 rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 font-bold text-sm flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                删除选中 ({selectedOrders.length})
-              </button>
-            )}
             <button onClick={loadOrders} className="p-3 rounded-2xl bg-white border border-gray-100 text-gray-600 hover:bg-gray-50 hover:text-black transition-colors shadow-sm">
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setShowImportModal(true)}
-              className="px-6 py-3 rounded-2xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold text-sm flex items-center gap-2 shadow-sm"
+              className="px-5 py-3 rounded-2xl font-bold bg-gray-900 text-white hover:bg-gray-800 transition-colors text-sm flex items-center gap-2 shadow-lg"
             >
-              <Upload className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
               插入订单
             </button>
             <button onClick={handleSync} className="ios-btn-primary px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 text-sm flex items-center gap-2">
@@ -185,12 +136,12 @@ const OrderList: React.FC = () => {
         <div className="p-4 border-b border-gray-50 flex flex-col md:flex-row gap-4 justify-between items-center bg-[#FAFAFA]">
           <div className="flex gap-1 p-1 bg-gray-200/50 rounded-xl overflow-x-auto max-w-full">
              {[
-                 {k:'all', v:'全部'}, 
-                 {k:'pending_ship', v:'待发货'}, 
-                 {k:'shipped', v:'已发货'}, 
+                 {k:'all', v:'全部'},
+                 {k:'pending_ship', v:'待发货'},
+                 {k:'shipped', v:'已发货'},
                  {k:'refunding', v:'售后'}
              ].map(opt => (
-                 <button 
+                 <button
                     key={opt.k}
                     onClick={() => { setFilter(opt.k); setPage(1); }}
                     className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${filter === opt.k ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -201,9 +152,9 @@ const OrderList: React.FC = () => {
           </div>
           <div className="relative w-full md:w-auto group">
              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FFE815] transition-colors" />
-             <input 
-                 type="text" 
-                 placeholder="搜索订单号..." 
+             <input
+                 type="text"
+                 placeholder="搜索订单号..."
                  className="ios-input pl-10 pr-4 py-2.5 rounded-xl w-64 bg-white border-none shadow-sm focus:ring-0"
              />
           </div>
@@ -214,22 +165,8 @@ const OrderList: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
-                <th className="px-6 py-5 w-12">
-                  <input
-                    type="checkbox"
-                    checked={orders.length > 0 && selectedOrders.length === orders.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedOrders(orders.map(o => o.order_id));
-                      } else {
-                        setSelectedOrders([]);
-                      }
-                    }}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                </th>
-                <th className="px-6 py-5 w-1/3">商品信息</th>
-                <th className="px-6 py-5">订单号 / 买家</th>
+                <th className="px-8 py-5 w-1/3">订单信息</th>
+                <th className="px-6 py-5">买家信息</th>
                 <th className="px-6 py-5">实付金额</th>
                 <th className="px-6 py-5">当前状态</th>
                 <th className="px-6 py-5 text-right">操作</th>
@@ -238,21 +175,7 @@ const OrderList: React.FC = () => {
             <tbody className="divide-y divide-gray-50">
               {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-[#FFFDE7]/50 transition-colors group">
-                  <td className="px-6 py-5">
-                    <input
-                      type="checkbox"
-                      checked={selectedOrders.includes(order.order_id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedOrders([...selectedOrders, order.order_id]);
-                        } else {
-                          setSelectedOrders(selectedOrders.filter(id => id !== order.order_id));
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-gray-300"
-                    />
-                  </td>
-                  <td className="px-6 py-5">
+                  <td className="px-8 py-5">
                     <div className="flex items-center gap-5">
                       <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden shadow-sm border border-gray-100 flex-shrink-0">
                         {order.item_image ? (
@@ -262,24 +185,17 @@ const OrderList: React.FC = () => {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">{order.item_title || `订单 ${order.order_id.substring(0, 12)}...`}</div>
-                        <div className="text-xs text-gray-500 mt-1 font-medium">
-                          ID: {order.order_id.substring(0, 8)}... • 数量: {order.quantity}
-                        </div>
+                        <div className="font-bold text-gray-900 line-clamp-1 text-sm">{order.item_title || '未知商品'}</div>
+                        <div className="text-xs text-gray-500 mt-1 font-medium">订单ID: {order.order_id}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">数量: {order.quantity} • {order.created_at}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                      <div className="flex flex-col gap-1.5">
-                          <div className="text-xs font-mono text-gray-400 flex items-center gap-1">
-                              订单号 <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-                          </div>
-                          <div className="text-sm font-bold text-gray-900">{order.buyer_id}</div>
-                          {order.receiver_name && (
-                            <div className="text-xs text-gray-600">
-                              {order.receiver_name} {order.receiver_phone && `• ${order.receiver_phone}`}
-                            </div>
-                          )}
+                      <div className="flex flex-col gap-1">
+                          <div className="text-sm font-bold text-gray-800">{order.buyer_id}</div>
+                          <div className="text-xs text-gray-500">{order.buyer_name || '-'}</div>
+                          <div className="text-xs text-gray-400">{order.buyer_phone || '-'}</div>
                       </div>
                   </td>
                   <td className="px-6 py-5 text-base font-extrabold text-gray-900 font-feature-settings-tnum">¥{order.amount}</td>
@@ -287,65 +203,49 @@ const OrderList: React.FC = () => {
                     <StatusBadge status={order.status} />
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {order.status === 'pending_ship' && (
+                    {order.status === 'pending_ship' && (
                         <button
-                          onClick={() => handleShip(order.order_id)}
-                          className="text-white bg-black hover:bg-gray-800 shadow-lg shadow-gray-200 text-xs font-bold px-4 py-2 rounded-xl transition-all active:scale-95"
+                            onClick={() => handleShip(order.order_id)}
+                            className="mr-2 text-white bg-black hover:bg-gray-800 shadow-lg shadow-gray-200 text-xs font-bold px-3 py-2 rounded-xl transition-all active:scale-95"
                         >
-                          立即发货
+                            立即发货
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleViewDetail(order)}
-                        className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
-                        title="查看详情"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleEdit(order)}
-                        className="p-2 bg-yellow-50 text-yellow-700 rounded-xl hover:bg-yellow-100 transition-colors"
-                        title="编辑"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleRefreshOrder(order.order_id)}
-                        className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition-colors"
-                        title="刷新"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(order.order_id)}
-                        className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
-                        title="删除"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    )}
+                    <button
+                      onClick={() => handleViewDetail(order)}
+                      className="mr-2 text-gray-400 hover:text-blue-600 p-2 rounded-xl hover:bg-blue-50 transition-colors"
+                      title="查看详情"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleEdit(order)}
+                      className="text-gray-400 hover:text-black p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                      title="编辑订单"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        
+
         {/* Pagination */}
         <div className="p-4 border-t border-gray-50 flex items-center justify-between bg-white">
             <div className="text-sm text-gray-500 font-medium pl-2">
                 第 {page} 页 / 共 {totalPages} 页
             </div>
             <div className="flex gap-2">
-                <button 
+                <button
                     disabled={page <= 1}
                     onClick={() => setPage(p => p - 1)}
                     className="p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
                 >
                     <ChevronLeft className="w-5 h-5" />
                 </button>
-                <button 
+                <button
                     disabled={page >= totalPages}
                     onClick={() => setPage(p => p + 1)}
                     className="p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 transition-colors"
@@ -356,7 +256,7 @@ const OrderList: React.FC = () => {
         </div>
       </div>
 
-      {/* Order Detail Modal */}
+      {/* 订单详情弹窗 */}
       {showDetailModal && selectedOrder && (
         <div className="modal-overlay">
           <div className="modal-container">
@@ -364,7 +264,7 @@ const OrderList: React.FC = () => {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-2xl font-extrabold text-gray-900">订单详情</h3>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowDetailModal(false)}
                   className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
                 >
                   <X className="w-5 h-5 text-gray-600" />
@@ -480,7 +380,7 @@ const OrderList: React.FC = () => {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-2xl font-extrabold text-gray-900">插入订单</h3>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowImportModal(false)}
                   className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
                 >
                   <X className="w-5 h-5 text-gray-600" />
@@ -519,7 +419,7 @@ const OrderList: React.FC = () => {
                   取消
                 </button>
                 <button
-                  onClick={handleImport}
+                  onClick={handleImportOrders}
                   disabled={!importFile}
                   className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
                 >
@@ -637,42 +537,19 @@ const OrderList: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
-                  <input
-                    type="text"
-                    value={editingOrder.item_id}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, item_id: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">数量</label>
-                  <input
-                    type="number"
-                    value={editingOrder.quantity}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, quantity: parseInt(e.target.value) })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <div className="flex gap-3 w-full">
+              <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                  className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
                 >
-                  <Save className="w-5 h-5" />
-                  保存修改
+                  <Save className="w-4 h-4" />
+                  保存更改
                 </button>
               </div>
             </div>
