@@ -160,7 +160,12 @@ const CardList: React.FC = () => {
                       <span className="text-sm text-gray-600 font-mono">{stockInfo}</span>
                     </td>
                     <td className="px-6 py-5">
-                      <span className="text-sm text-gray-500">{card.description || '-'}</span>
+                      <span
+                        className="text-sm text-gray-500 block max-w-[200px] truncate"
+                        title={card.description || '-'}
+                      >
+                        {card.description || '-'}
+                      </span>
                     </td>
                     <td className="px-6 py-5">
                       <button
