@@ -111,12 +111,12 @@ const CardList: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
-                <th className="px-8 py-5">卡密名称</th>
-                <th className="px-6 py-5">类型</th>
-                <th className="px-6 py-5">内容/库存</th>
-                <th className="px-6 py-5">描述</th>
-                <th className="px-6 py-5">状态</th>
-                <th className="px-6 py-5 text-right">操作</th>
+                <th className="px-8 py-5 w-[15%]">卡密名称</th>
+                <th className="px-6 py-5 w-[12%]">类型</th>
+                <th className="px-6 py-5 w-[25%]">内容/库存</th>
+                <th className="px-6 py-5 w-[20%]">描述</th>
+                <th className="px-6 py-5 w-[10%]">状态</th>
+                <th className="px-6 py-5 w-[10%] text-right">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -157,7 +157,9 @@ const CardList: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-5">
-                      <span className="text-sm text-gray-600 font-mono">{stockInfo}</span>
+                      <span className="text-sm text-gray-600 font-mono block truncate" title={stockInfo}>
+                        {stockInfo}
+                      </span>
                     </td>
                     <td className="px-6 py-5">
                       <span
