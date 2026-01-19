@@ -280,7 +280,7 @@ body {
   position: relative;
   width: 100%;
   max-width: 42rem; /* max-w-2xl */
-  max-height: 90vh;
+  max-height: 85vh;
   margin: auto;
   display: flex;
   flex-direction: column;
@@ -294,25 +294,21 @@ body {
   flex-shrink: 0;
   padding: 2rem 2rem 1.5rem;
   border-bottom: 1px solid #F3F4F6;
-  position: sticky;
-  top: 0;
   background-color: white;
   z-index: 10;
 }
 
 .modal-body {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 2rem;
-  min-height: 0;
 }
 
 .modal-footer {
   flex-shrink: 0;
   padding: 1.5rem 2rem 2rem;
   border-top: 1px solid #F3F4F6;
-  position: sticky;
-  bottom: 0;
   background-color: white;
   z-index: 10;
 }
@@ -334,7 +330,7 @@ body {
 
   .modal-container {
     max-width: calc(100% - 2rem);
-    max-height: 95vh;
+    max-height: 90vh;
     border-radius: 1.5rem;
   }
 
