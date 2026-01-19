@@ -238,6 +238,7 @@ const ItemList: React.FC = () => {
                 </button>
               </div>
             </div>
+            </div>
 
             <div className="modal-footer">
               <div className="flex gap-3 w-full">

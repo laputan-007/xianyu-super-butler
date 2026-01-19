@@ -330,8 +330,6 @@ const Rules: React.FC = () => {
             </div>
 
             <div className="modal-body space-y-5">
-
-            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">规则名称</label>
                 <input
@@ -399,6 +397,7 @@ const Rules: React.FC = () => {
                 </button>
               </div>
             </div>
+            </div>
 
             <div className="modal-footer">
               <div className="flex gap-3 w-full">
@@ -440,8 +439,6 @@ const Rules: React.FC = () => {
             </div>
 
             <div className="modal-body space-y-5">
-
-            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">触发关键词</label>
                 <input
@@ -508,6 +505,7 @@ const Rules: React.FC = () => {
                   />
                 </button>
               </div>
+            </div>
             </div>
 
             <div className="modal-footer">

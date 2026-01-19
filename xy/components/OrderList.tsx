@@ -372,9 +372,7 @@ const OrderList: React.FC = () => {
               </div>
             </div>
 
-            <div className="modal-body space-y-5">
-
-            <div className="space-y-6">
+            <div className="modal-body space-y-6">
               {/* Order Info */}
               <div className="space-y-4">
                 <h4 className="text-lg font-bold text-gray-800">订单信息</h4>
@@ -491,8 +489,6 @@ const OrderList: React.FC = () => {
             </div>
 
             <div className="modal-body space-y-5">
-
-            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">选择Excel文件</label>
                 <input

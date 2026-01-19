@@ -215,8 +215,6 @@ const Keywords: React.FC = () => {
             </div>
 
             <div className="modal-body space-y-5">
-
-            <div className="space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">触发关键词</label>
                 <input
