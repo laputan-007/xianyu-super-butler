@@ -364,7 +364,13 @@ static_dir = os.path.join(os.path.dirname(__file__), 'static')
 if not os.path.exists(static_dir):
     os.makedirs(static_dir, exist_ok=True)
 
+# 挂载静态文件目录
 app.mount('/static', StaticFiles(directory=static_dir), name='static')
+
+# 挂载 /assets 路径，指向 static/assets 目录
+# 这样访问 /assets/xxx.js 时会正确映射到 static_dir/assets/xxx.js
+assets_dir = os.path.join(static_dir, 'assets')
+app.mount('/assets', StaticFiles(directory=assets_dir), name='assets')
 
 # 确保图片上传目录存在
 uploads_dir = os.path.join(static_dir, 'uploads', 'images')

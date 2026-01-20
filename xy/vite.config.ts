@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  base: '/static/',
   server: {
     port: 3000,
     host: '0.0.0.0',
@@ -134,12 +135,13 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: '../static',
     sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: undefined,
       },
     },
+    emptyOutDir: true,
   },
 });
