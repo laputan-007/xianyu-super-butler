@@ -32,9 +32,11 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
 
 const OrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]); // 保存所有订单用于搜索
   const [items, setItems] = useState<Item[]>([]);
   const [itemNames, setItemNames] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('all');
+  const [searchText, setSearchText] = useState(''); // 搜索文本
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -58,14 +60,62 @@ const OrderList: React.FC = () => {
     amount: ''
   });
 
-  const loadOrders = () => {
-      setLoading(true);
-      getOrders(undefined, filter, page).then((res) => {
-          setOrders(res.data);
-          setTotalPages(res.total_pages);
-          setLoading(false);
-      }).catch(() => setLoading(false));
+  // 搜索过滤订单
+  const filterOrders = (ordersToFilter: Order[]): Order[] => {
+    if (!searchText.trim()) {
+      return ordersToFilter;
+    }
+
+    const searchLower = searchText.toLowerCase().trim();
+    return ordersToFilter.filter(order =>
+      order.order_id?.toLowerCase().includes(searchLower) ||
+      order.item_id?.toLowerCase().includes(searchLower) ||
+      order.buyer_id?.toLowerCase().includes(searchLower) ||
+      order.item_title?.toLowerCase().includes(searchLower) ||
+      order.receiver_name?.toLowerCase().includes(searchLower) ||
+      order.receiver_phone?.toLowerCase().includes(searchLower)
+    );
   };
+
+  const loadOrders = async () => {
+      setLoading(true);
+
+      try {
+          // 如果有搜索文本，加载所有页的数据；否则只加载当前页
+          if (searchText.trim()) {
+              // 搜索模式：循环加载所有页
+              let allOrdersData: Order[] = [];
+              let currentPage = 1;
+              let hasMore = true;
+
+              while (hasMore) {
+                  const res = await getOrders(undefined, filter, currentPage, 100);
+                  allOrdersData = [...allOrdersData, ...res.data];
+                  hasMore = currentPage < res.total_pages;
+                  currentPage++;
+              }
+
+              setAllOrders(allOrdersData);
+              setOrders(filterOrders(allOrdersData));
+              setTotalPages(1); // 搜索时不分页
+          } else {
+              // 普通模式：只加载当前页
+              const res = await getOrders(undefined, filter, page, 20);
+              setAllOrders(res.data);
+              setOrders(filterOrders(res.data));
+              setTotalPages(res.total_pages);
+          }
+      } catch (e) {
+          console.error('加载订单失败:', e);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // 当订单数据改变时，重新过滤订单
+  useEffect(() => {
+    setOrders(filterOrders(allOrders));
+  }, [allOrders, searchText]);
 
   // 从订单的 item_id 查找对应的商品名称（通过标题匹配）
   const getItemNameById = (orderId: string, orderItemTitle?: string): string => {
@@ -119,7 +169,7 @@ const OrderList: React.FC = () => {
     }).catch((e) => {
       console.error('加载商品列表失败:', e);
     });
-  }, [filter, page]);
+  }, [filter, page, searchText]);
 
   const handleSync = async () => {
       setLoading(true);
@@ -207,7 +257,7 @@ const OrderList: React.FC = () => {
              ].map(opt => (
                  <button
                     key={opt.k}
-                    onClick={() => { setFilter(opt.k); setPage(1); }}
+                    onClick={() => { setFilter(opt.k); setPage(1); setSearchText(''); }}
                     className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${filter === opt.k ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                  >
                     {opt.v}
@@ -218,7 +268,9 @@ const OrderList: React.FC = () => {
              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FFE815] transition-colors" />
              <input
                  type="text"
-                 placeholder="搜索订单号..."
+                 placeholder="搜索订单号/商品/买家..."
+                 value={searchText}
+                 onChange={(e) => { setSearchText(e.target.value); setPage(1); }}
                  className="ios-input pl-10 pr-4 py-2.5 rounded-xl w-64 bg-white border-none shadow-sm focus:ring-0"
              />
           </div>
