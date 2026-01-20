@@ -197,7 +197,35 @@ const OrderList: React.FC = () => {
   const handleSaveEdit = async () => {
     if (!editingOrder || !editingOrder.order_id) return;
     try {
-      await updateOrder(editingOrder.order_id, editingOrder);
+      // 映射前端字段到后端期望的字段名
+      const updateData: Record<string, any> = {};
+
+      if (editingOrder.status !== undefined) {
+        updateData.order_status = editingOrder.status;
+      }
+      if (editingOrder.buyer_id !== undefined) {
+        updateData.buyer_id = editingOrder.buyer_id;
+      }
+      if (editingOrder.amount !== undefined) {
+        updateData.amount = editingOrder.amount;
+      }
+      if (editingOrder.receiver_name !== undefined) {
+        updateData.receiver_name = editingOrder.receiver_name;
+      }
+      if (editingOrder.receiver_phone !== undefined) {
+        updateData.receiver_phone = editingOrder.receiver_phone;
+      }
+      if (editingOrder.receiver_address !== undefined) {
+        updateData.receiver_address = editingOrder.receiver_address;
+      }
+      if (editingOrder.item_id !== undefined) {
+        updateData.item_id = editingOrder.item_id;
+      }
+      if (editingOrder.quantity !== undefined) {
+        updateData.quantity = editingOrder.quantity;
+      }
+
+      await updateOrder(editingOrder.order_id, updateData);
       setShowEditModal(false);
       setEditingOrder(null);
       loadOrders();
