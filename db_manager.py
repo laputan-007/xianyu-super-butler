@@ -5404,7 +5404,7 @@ class DBManager:
 
     # ==================== BI报表统计函数 ====================
 
-    def get_order_analytics(self, start_date: str = None, end_date: str = None, user_id: int = None, exclude_statuses: list = None):
+    def get_order_analytics(self, start_date: str = None, end_date: str = None, user_id: int = None, include_statuses: list = None):
         """
         获取订单分析数据
 
@@ -5412,7 +5412,7 @@ class DBManager:
             start_date: 开始日期 (格式: YYYY-MM-DD)
             end_date: 结束日期 (格式: YYYY-MM-DD)
             user_id: 用户ID (可选)
-            exclude_statuses: 要排除的订单状态列表 (可选)
+            include_statuses: 要包含的订单状态列表 (可选，如果指定则只统计这些状态)
 
         Returns:
             包含订单分析数据的字典
@@ -5438,11 +5438,11 @@ class DBManager:
                     where_conditions.append("EXISTS (SELECT 1 FROM cookies WHERE cookies.id = orders.cookie_id AND cookies.user_id = ?)")
                     params.append(user_id)
 
-                # 排除指定状态（小写形式）
-                if exclude_statuses:
-                    placeholders = ','.join(['?' for _ in exclude_statuses])
-                    where_conditions.append(f"order_status NOT IN ({placeholders})")
-                    params.extend(exclude_statuses)
+                # 只包含指定状态（小写形式）
+                if include_statuses:
+                    placeholders = ','.join(['?' for _ in include_statuses])
+                    where_conditions.append(f"order_status IN ({placeholders})")
+                    params.extend(include_statuses)
 
                 where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
 
@@ -5616,7 +5616,7 @@ class DBManager:
                 return False
 
     def get_orders_for_analytics(self, start_date: str = None, end_date: str = None,
-                                  user_id: int = None, exclude_statuses: list = None):
+                                  user_id: int = None, include_statuses: list = None):
         """
         获取用于分析的订单列表
 
@@ -5624,7 +5624,7 @@ class DBManager:
             start_date: 开始日期
             end_date: 结束日期
             user_id: 用户ID
-            exclude_statuses: 要排除的订单状态列表
+            include_statuses: 要包含的订单状态列表（如果指定则只返回这些状态的订单）
 
         Returns:
             订单列表
@@ -5650,11 +5650,11 @@ class DBManager:
                     where_conditions.append("EXISTS (SELECT 1 FROM cookies WHERE cookies.id = orders.cookie_id AND cookies.user_id = ?)")
                     params.append(user_id)
 
-                # 排除指定状态
-                if exclude_statuses:
-                    placeholders = ','.join(['?' for _ in exclude_statuses])
-                    where_conditions.append(f"order_status NOT IN ({placeholders})")
-                    params.extend(exclude_statuses)
+                # 只包含指定状态
+                if include_statuses:
+                    placeholders = ','.join(['?' for _ in include_statuses])
+                    where_conditions.append(f"order_status IN ({placeholders})")
+                    params.extend(include_statuses)
 
                 where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
 

@@ -5331,19 +5331,15 @@ def get_order_analytics(
         # 获取当前用户的ID
         user_id = current_user['user_id']
 
-        # 定义无效订单状态（小写形式，与数据库存储格式一致）
-        invalid_statuses = [
-            'returned', 'cancelled', 'refunded', 'return_processing',
-            'cancel_buyer', 'cancel_seller', 'cancel_platform',
-            'return_requested', 'return_approved', 'return_rejected'
-        ]
+        # 定义有效订单状态（只统计这几种状态）
+        valid_statuses = ['pending_ship', 'shipped', 'completed']
 
-        # 调用数据库分析函数，传入排除状态
+        # 调用数据库分析函数，传入包含状态
         analytics_data = db_manager.get_order_analytics(
             start_date=start_date,
             end_date=end_date,
             user_id=user_id,
-            exclude_statuses=invalid_statuses
+            include_statuses=valid_statuses
         )
 
         if 'error' in analytics_data:
@@ -5379,19 +5375,15 @@ def get_valid_orders(
         # 获取当前用户的ID
         user_id = current_user['user_id']
 
-        # 定义无效订单状态（小写形式，与数据库存储格式一致）
-        invalid_statuses = [
-            'returned', 'cancelled', 'refunded', 'return_processing',
-            'cancel_buyer', 'cancel_seller', 'cancel_platform',
-            'return_requested', 'return_approved', 'return_rejected'
-        ]
+        # 定义有效订单状态
+        valid_statuses = ['pending_ship', 'shipped', 'completed']
 
         # 调用数据库函数获取有效订单
         orders = db_manager.get_orders_for_analytics(
             start_date=start_date,
             end_date=end_date,
             user_id=user_id,
-            exclude_statuses=invalid_statuses
+            include_statuses=valid_statuses
         )
 
         log_with_user('info', f"查询到 {len(orders)} 个有效订单", current_user)
