@@ -29,13 +29,18 @@ export const getAccountDetails = async (): Promise<AccountDetail[]> => {
   return data.map(item => ({
     id: item.id,
     value: item.value,
+    cookie: item.value,
     enabled: item.enabled,
     auto_confirm: item.auto_confirm,
-    remark: item.remark, // Map remark to UI logic
+    remark: item.remark,
     note: item.remark,
     pause_duration: item.pause_duration,
+    username: item.username,
+    login_password: item.login_password,
+    show_browser: item.show_browser,
     nickname: item.remark || `Account ${item.id.substring(0,6)}`, // Fallback for UI
-    avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.id}` // Placeholder avatar
+    avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.id}`, // Placeholder avatar
+    ai_enabled: false, // 需要从AI设置API获取
   }));
 };
 
@@ -65,6 +70,22 @@ export const updateAccountAutoConfirm = async (id: string, autoConfirm: boolean)
 
 export const updateAccountPauseDuration = async (id: string, pauseDuration: number): Promise<any> => {
   return put(`/cookies/${id}/pause-duration`, { pause_duration: pauseDuration });
+};
+
+export const updateAccountCookie = async (id: string, value: string): Promise<any> => {
+  return put(`/cookies/${id}`, { id, value });
+};
+
+export const updateAccountLoginInfo = async (id: string, data: {
+  username?: string;
+  login_password?: string;
+  show_browser?: boolean;
+}): Promise<any> => {
+  return put(`/cookies/${id}/login-info`, data);
+};
+
+export const getAllAISettings = async (): Promise<Record<string, AIReplySettings>> => {
+  return get('/ai-reply-settings');
 };
 
 // Orders
