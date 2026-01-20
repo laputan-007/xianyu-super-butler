@@ -92,19 +92,14 @@ class OrderFetcherOptimized:
                         except (ValueError, TypeError):
                             amount_valid = False
 
-                    # 检查收货人信息是否完整
+                    # 获取收货人信息（不作为判断是否刷新的条件）
                     receiver_name = existing_order.get('receiver_name', '')
                     receiver_phone = existing_order.get('receiver_phone', '')
                     receiver_address = existing_order.get('receiver_address', '')
-                    receiver_info_complete = (
-                        receiver_name and receiver_name != 'unknown' and
-                        receiver_phone and receiver_phone != 'unknown' and
-                        receiver_address and receiver_address != 'unknown'
-                    )
 
-                    # 只有金额有效且收货人信息完整时才使用缓存
-                    if amount_valid and receiver_info_complete:
-                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且数据完整，直接返回缓存数据")
+                    # 只有金额有效时才使用缓存（不再检查收货人信息）
+                    if amount_valid:
+                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效，直接返回缓存数据")
                         print(f"✅ 订单 {order_id} 使用缓存数据")
 
                         result = {
@@ -134,9 +129,6 @@ class OrderFetcherOptimized:
                         if not amount_valid:
                             logger.info(f"📋 订单 {order_id} 金额无效({amount})，需要重新获取")
                             print(f"⚠️ 订单 {order_id} 金额无效，重新获取...")
-                        if not receiver_info_complete:
-                            logger.info(f"📋 订单 {order_id} 收货人信息不完整，需要重新获取")
-                            print(f"⚠️ 订单 {order_id} 收货人信息不完整，重新获取...")
 
                 # 获取浏览器实例（使用浏览器池或创建新实例）
                 if self.use_pool:

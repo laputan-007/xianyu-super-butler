@@ -233,20 +233,14 @@ class OrderDetailFetcher:
                         except (ValueError, TypeError):
                             amount_valid = False
 
-                    # 检查收货人信息是否完整
+                    # 获取收货人信息（不作为判断是否刷新的条件，但刷新时如果有新信息会更新）
                     receiver_name = existing_order.get('receiver_name', '')
                     receiver_phone = existing_order.get('receiver_phone', '')
                     receiver_address = existing_order.get('receiver_address', '')
 
-                    receiver_info_complete = (
-                        receiver_name and receiver_name != 'unknown' and
-                        receiver_phone and receiver_phone != 'unknown' and
-                        receiver_address and receiver_address != 'unknown'
-                    )
-
-                    # 只有金额有效且收货人信息完整时才使用缓存
-                    if amount_valid and receiver_info_complete:
-                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且数据完整（金额:{amount}, 收货人:{receiver_name}），直接返回缓存数据")
+                    # 只有金额有效时才使用缓存（不再检查收货人信息是否完整）
+                    if amount_valid:
+                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
                         print(f"✅ 订单 {order_id} 使用缓存数据，跳过浏览器获取")
 
                         # 构建返回格式，与浏览器获取的格式保持一致
@@ -280,9 +274,6 @@ class OrderDetailFetcher:
                         if not amount_valid:
                             logger.info(f"📋 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
                             print(f"⚠️ 订单 {order_id} 金额无效，重新获取详情...")
-                        if not receiver_info_complete:
-                            logger.info(f"📋 订单 {order_id} 收货人信息不完整（姓名:{receiver_name}, 电话:{receiver_phone}），需要重新获取")
-                            print(f"⚠️ 订单 {order_id} 收货人信息不完整，重新获取详情...")
 
                 # 只有在数据库中没有有效数据时才初始化浏览器
                 logger.info(f"🌐 订单 {order_id} 需要浏览器获取，开始初始化浏览器...")
@@ -923,20 +914,15 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
                 except (ValueError, TypeError):
                     amount_valid = False
 
-            # 检查收货人信息是否完整
+            # 获取收货人信息（不作为判断是否刷新的条件，但刷新时如果有新信息会更新）
             receiver_name = existing_order.get('receiver_name', '')
             receiver_phone = existing_order.get('receiver_phone', '')
             receiver_address = existing_order.get('receiver_address', '')
-            receiver_info_complete = (
-                receiver_name and receiver_name != 'unknown' and
-                receiver_phone and receiver_phone != 'unknown' and
-                receiver_address and receiver_address != 'unknown'
-            )
 
-            # 只有金额有效且收货人信息完整时才使用缓存
-            if amount_valid and receiver_info_complete:
-                logger.info(f"📋 订单 {order_id} 已存在于数据库中且数据完整，直接返回缓存数据")
-                print(f"[OK] 订单 {order_id} 使用缓存数据（金额:{amount}, 收货人:{receiver_name}）")
+            # 只有金额有效时才使用缓存（不再检查收货人信息是否完整）
+            if amount_valid:
+                logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
+                print(f"[OK] 订单 {order_id} 使用缓存数据（金额:{amount}）")
 
                 # 构建返回格式（包含收货人信息）
                 result = {
@@ -966,9 +952,6 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
                 if not amount_valid:
                     logger.info(f"📋 订单 {order_id} 金额无效({amount})，需要重新获取")
                     print(f"[WARN] 订单 {order_id} 金额无效，重新获取详情...")
-                if not receiver_info_complete:
-                    logger.info(f"📋 订单 {order_id} 收货人信息不完整（姓名:{receiver_name}, 电话:{receiver_phone}），需要重新获取")
-                    print(f"[WARN] 订单 {order_id} 收货人信息不完整，重新获取详情...")
     except Exception as e:
         logger.warning(f"检查数据库缓存失败: {e}")
 
