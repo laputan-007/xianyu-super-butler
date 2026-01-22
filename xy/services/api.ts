@@ -2,7 +2,7 @@ import { get, post, put, del } from '../lib/request';
 import {
   LoginResponse, AccountDetail, Order, PaginatedResponse,
   AdminStats, Card, SystemSettings, ApiResponse, OrderAnalytics,
-  Item, AIReplySettings, ShippingRule, ReplyRule
+  Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply
 } from '../types';
 
 // Auth
@@ -439,3 +439,36 @@ export const deleteMessageNotification = async (notificationId: string): Promise
 export const deleteAccountNotifications = async (cookieId: string): Promise<ApiResponse> => {
   return del(`/message-notifications/account/${cookieId}`);
 }
+
+// Default Reply
+export const getDefaultReplies = async (): Promise<Record<string, DefaultReply>> => {
+  return get('/api/default-replies');
+};
+
+export const getDefaultReply = async (cookieId: string): Promise<DefaultReply> => {
+  const result = await get<any>(`/api/default-reply/${cookieId}`);
+  return {
+    cookie_id: cookieId,
+    enabled: result.enabled || false,
+    reply_content: result.reply_content || '',
+    reply_once: result.reply_once || false,
+    reply_image_url: result.reply_image_url || ''
+  };
+};
+
+export const updateDefaultReply = async (cookieId: string, data: Partial<DefaultReply>): Promise<ApiResponse> => {
+  return put(`/api/default-reply/${cookieId}`, {
+    enabled: data.enabled ?? false,
+    reply_content: data.reply_content || '',
+    reply_once: data.reply_once ?? false,
+    reply_image_url: data.reply_image_url || ''
+  });
+};
+
+export const deleteDefaultReply = async (cookieId: string): Promise<ApiResponse> => {
+  return del(`/api/default-reply/${cookieId}`);
+};
+
+export const clearDefaultReplyRecords = async (cookieId: string): Promise<ApiResponse> => {
+  return post(`/api/default-reply/${cookieId}/clear-records`, {});
+};
