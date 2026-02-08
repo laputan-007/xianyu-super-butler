@@ -264,6 +264,14 @@ class DBManager:
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN version INTEGER DEFAULT 1")
                 logger.info("orders 表 version 列添加完成")
 
+            # 检查并添加 chat_id 列到 orders 表（用于手动发货时发送消息）
+            try:
+                self._execute_sql(cursor, "SELECT chat_id FROM orders LIMIT 1")
+            except sqlite3.OperationalError:
+                logger.info("正在为 orders 表添加 chat_id 列...")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN chat_id TEXT DEFAULT ''")
+                logger.info("orders 表 chat_id 列添加完成")
+
             # 检查并添加 user_id 列（用于数据库迁移）
             try:
                 self._execute_sql(cursor, "SELECT user_id FROM cards LIMIT 1")
@@ -4565,7 +4573,8 @@ class DBManager:
                               amount: str = None, order_status: str = None, cookie_id: str = None,
                               is_bargain: bool = None, created_at: str = None, receiver_name: str = None,
                               receiver_phone: str = None, receiver_address: str = None,
-                              system_shipped: bool = None, expected_version: int = None):
+                              system_shipped: bool = None, expected_version: int = None,
+                              chat_id: str = None):
         """插入或更新订单信息"""
         with self.lock:
             try:
@@ -4631,6 +4640,9 @@ class DBManager:
                     if system_shipped is not None:
                         update_fields.append("system_shipped = ?")
                         update_values.append(1 if system_shipped else 0)
+                    if chat_id is not None:
+                        update_fields.append("chat_id = ?")
+                        update_values.append(chat_id)
 
                     if update_fields:
                         update_fields.append("updated_at = CURRENT_TIMESTAMP")
@@ -4663,25 +4675,25 @@ class DBManager:
                         cursor.execute('''
                         INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
                                           quantity, amount, order_status, cookie_id, is_bargain, created_at,
-                                          receiver_name, receiver_phone, receiver_address, system_shipped)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          receiver_name, receiver_phone, receiver_address, system_shipped, chat_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (order_id, item_id, buyer_id, spec_name, spec_value,
                               quantity, amount, order_status or 'unknown', cookie_id,
                               1 if is_bargain else 0, created_at,
                               receiver_name, receiver_phone, receiver_address,
-                              1 if system_shipped else 0))
+                              1 if system_shipped else 0, chat_id or ''))
                     else:
                         # 使用默认的创建时间（CURRENT_TIMESTAMP，UTC时间）
                         cursor.execute('''
                         INSERT INTO orders (order_id, item_id, buyer_id, spec_name, spec_value,
                                           quantity, amount, order_status, cookie_id, is_bargain,
-                                          receiver_name, receiver_phone, receiver_address, system_shipped)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          receiver_name, receiver_phone, receiver_address, system_shipped, chat_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (order_id, item_id, buyer_id, spec_name, spec_value,
                               quantity, amount, order_status or 'unknown', cookie_id,
                               1 if is_bargain else 0,
                               receiver_name, receiver_phone, receiver_address,
-                              1 if system_shipped else 0))
+                              1 if system_shipped else 0, chat_id or ''))
                     logger.info(f"插入新订单: {order_id}")
 
                 self.conn.commit()
@@ -4700,7 +4712,7 @@ class DBManager:
                 # 先尝试查询包含version的订单
                 cursor.execute('''
                 SELECT order_id, item_id, buyer_id, spec_name, spec_value,
-                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at, version
+                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at, version, chat_id
                 FROM orders WHERE order_id = ?
                 ''', (order_id,))
 
@@ -4721,7 +4733,8 @@ class DBManager:
                         'is_bargain': bool(row[9]) if row[9] is not None else False,
                         'created_at': row[10],
                         'updated_at': row[11],
-                        'version': row[12] if len(row) > 12 else 1  # 默认版本为1
+                        'version': row[12] if len(row) > 12 else 1,  # 默认版本为1
+                        'chat_id': row[13] if len(row) > 13 else ''
                     }
                 return None
 

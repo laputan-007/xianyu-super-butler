@@ -1230,7 +1230,8 @@ class XianyuLive:
                                 from db_manager import db_manager
                                 db_manager.insert_or_update_order(
                                     order_id=order_id,
-                                    system_shipped=True
+                                    system_shipped=True,
+                                    chat_id=chat_id
                                 )
                                 logger.info(f'【{self.cookie_id}】✅ 订单 {order_id} 已标记为系统已发货 (system_shipped=1)')
                             except Exception as db_e:
@@ -7840,7 +7841,8 @@ class XianyuLive:
                                 item_id=item_id,
                                 buyer_id=send_user_id,
                                 cookie_id=self.cookie_id,
-                                is_bargain=True
+                                is_bargain=True,
+                                chat_id=chat_id
                             )
                             logger.info(f'[{msg_time}] 【{self.cookie_id}】✅ 订单 {order_id} 已标记为小刀订单')
                         except Exception as e:

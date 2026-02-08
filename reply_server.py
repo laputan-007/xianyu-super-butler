@@ -6707,43 +6707,28 @@ async def manual_ship_orders(
                         failed_count += 1
                         continue
 
-                    # 获取运行中的实例或创建临时实例
-                    live_instance = XianyuLive.get_instance(cookie_id)
-                    temp_instance = None
+                    # 获取cookies_str用于创建独立session
+                    cookies_str = user_cookies.get(cookie_id)
+                    if not cookies_str:
+                        results.append({
+                            'order_id': order_id,
+                            'success': False,
+                            'message': '无法获取账号Cookie信息'
+                        })
+                        failed_count += 1
+                        continue
 
-                    if not live_instance:
-                        # 没有运行中的实例，创建临时实例
-                        cookies_str = user_cookies.get(cookie_id)
-                        if not cookies_str:
-                            results.append({
-                                'order_id': order_id,
-                                'success': False,
-                                'message': '无法获取账号Cookie信息'
-                            })
-                            failed_count += 1
-                            continue
-
-                        try:
-                            temp_instance = XianyuLive(
-                                cookies_str=cookies_str,
-                                cookie_id=cookie_id,
-                                user_id=user_id
-                            )
-                            await temp_instance.create_session()
-                            live_instance = temp_instance
-                        except Exception as e:
-                            log_with_user('error', f"创建临时实例失败: {str(e)}", current_user)
-                            results.append({
-                                'order_id': order_id,
-                                'success': False,
-                                'message': f'创建临时实例失败: {str(e)}'
-                            })
-                            failed_count += 1
-                            continue
+                    # 创建独立的aiohttp session（避免跨异步上下文问题）
+                    import aiohttp
+                    from secure_confirm_decrypted import SecureConfirm
 
                     try:
-                        # 调用auto_confirm仅修改闲鱼发货状态
-                        confirm_result = await live_instance.auto_confirm(order_id, item_id)
+                        async with aiohttp.ClientSession(
+                            headers={'cookie': cookies_str},
+                            timeout=aiohttp.ClientTimeout(total=30)
+                        ) as session:
+                            confirm = SecureConfirm(session, cookies_str, cookie_id, None)
+                            confirm_result = await confirm.auto_confirm(order_id, item_id)
 
                         if confirm_result and confirm_result.get('success'):
                             # 更新本地数据库状态
@@ -6766,15 +6751,14 @@ async def manual_ship_orders(
                                 'message': f'修改发货状态失败: {error_msg}'
                             })
                             failed_count += 1
-                    finally:
-                        # 清理临时实例
-                        if temp_instance:
-                            try:
-                                if temp_instance.session:
-                                    await temp_instance.session.close()
-                                temp_instance._unregister_instance()
-                            except Exception:
-                                pass
+                    except Exception as e:
+                        log_with_user('error', f"确认发货异常: {str(e)}", current_user)
+                        results.append({
+                            'order_id': order_id,
+                            'success': False,
+                            'message': f'确认发货异常: {str(e)}'
+                        })
+                        failed_count += 1
 
                 elif ship_mode == 'full_delivery':
                     # ====== 完整发货流程：匹配卡券 + 发送卡券 + 修改状态 ======
@@ -6816,8 +6800,10 @@ async def manual_ship_orders(
                         failed_count += 1
                         continue
 
-                    # 查找与买家的chat_id
-                    chat_id = db_manager.find_chat_id_by_buyer(cookie_id, buyer_id)
+                    # 查找与买家的chat_id（优先从订单记录获取，回退到AI对话记录）
+                    chat_id = order.get('chat_id') or ''
+                    if not chat_id:
+                        chat_id = db_manager.find_chat_id_by_buyer(cookie_id, buyer_id)
                     if not chat_id:
                         results.append({
                             'order_id': order_id,
