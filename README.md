@@ -25,6 +25,10 @@
 
 ![订单管理](static/uploads/images/2.png)
 
+### 补发功能 - 立即发货
+
+![补发功能-发货方式选择](static/uploads/images/3.png) ![补发功能-发货中](static/uploads/images/4.png)
+
 ---
 
 ## 📖 简介
@@ -144,6 +148,23 @@ npm run dev
 ---
 
 ## 🔄 更新日志
+
+### ✨ 新增：补发功能 - 立即发货按钮 (2026-02-08)
+- **核心功能**：点击"立即发货"后弹出自定义对话框，提供两种发货方式
+  - **仅修改闲鱼发货状态**：只调用闲鱼API标记已发货，不发卡券（适用于已给客户发过货，只是忘了改状态）
+  - **完整发货（匹配卡券并发送）**：匹配发货规则 → 获取卡券 → 发送给买家 → 标记已发货（适用于订单既没发卡券也没改状态）
+- **Bug 修复**：
+  - 修复 `aiohttp` Timeout 错误 - 不再复用运行实例的 session，改为创建独立的 `aiohttp.ClientSession`，避免跨异步上下文问题
+  - 修复找不到买家 `chat_id` - orders 表新增 `chat_id` 字段，自动发货时自动存储；手动发货优先从订单取，找不到再查 `ai_conversations` 表
+  - `frontend/` 重命名为 `frontend_backup/` - 当前使用的前端目录为 `xy/`
+  - `vite build` 不再删除 `xianyu_js_version_2.js` - 改为 `emptyOutDir: false`，构建时保留 static 目录中的非构建文件
+- **改动文件**：
+  - `reply_server.py` - 重写 `/api/orders/manual-ship` 端点
+  - `db_manager.py` - 新增 `chat_id` 字段、`find_chat_id_by_buyer` 方法
+  - `XianyuAutoAsync.py` - 发货/标记订单时存储 chat_id
+  - `xy/components/OrderList.tsx` - 新增发货方式选择对话框
+  - `xy/services/api.ts` - 更新 API 类型
+  - `xy/vite.config.ts` - `emptyOutDir: false`
 
 ### 🐛 修复前端加载路径问题 (2026-01-19)
 - 修复 Vite 构建资源路径错误导致的白屏问题

@@ -87,10 +87,14 @@ static/uploads/*
 # 项目展示图片
 !static/uploads/images/1.png
 !static/uploads/images/2.png
+!static/uploads/images/3.png
+!static/uploads/images/4.png
 # 忽略其他上传的图片
 static/uploads/images/*.png
 !static/uploads/images/1.png
 !static/uploads/images/2.png
+!static/uploads/images/3.png
+!static/uploads/images/4.png
 
 # 配置文件（包含敏感信息）
 config.local.yml
