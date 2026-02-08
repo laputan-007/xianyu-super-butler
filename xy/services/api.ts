@@ -146,7 +146,7 @@ export const syncOrders = async (cookieId?: string, status?: string): Promise<an
   return response.json();
 };
 
-export const manualShipOrder = async (orderIds: string[], shipMode: 'auto_match' | 'custom', content?: string): Promise<any> => {
+export const manualShipOrder = async (orderIds: string[], shipMode: 'status_only' | 'full_delivery', content?: string): Promise<any> => {
     return post('/api/orders/manual-ship', {
         order_ids: orderIds,
         ship_mode: shipMode,

@@ -47,6 +47,10 @@ const OrderList: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<Partial<Order> | null>(null);
   const [editForm, setEditForm] = useState<Partial<Order>>({});
   const [importText, setImportText] = useState('');
+  const [showShipModal, setShowShipModal] = useState(false);
+  const [shipOrderId, setShipOrderId] = useState<string>('');
+  const [shipLoading, setShipLoading] = useState(false);
+  const [shipResult, setShipResult] = useState<{success: boolean; message: string} | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importFormData, setImportFormData] = useState({
     order_id: '',
@@ -177,10 +181,28 @@ const OrderList: React.FC = () => {
       loadOrders();
   };
 
-  const handleShip = async (id: string) => {
-      if(confirm('确认立即执行自动发货匹配吗？')) {
-          await manualShipOrder([id], 'auto_match');
-          loadOrders();
+  const handleShip = (id: string) => {
+      setShipOrderId(id);
+      setShipResult(null);
+      setShowShipModal(true);
+  };
+
+  const executeShip = async (mode: 'status_only' | 'full_delivery') => {
+      setShipLoading(true);
+      setShipResult(null);
+      try {
+          const res = await manualShipOrder([shipOrderId], mode);
+          const result = res?.results?.[0];
+          if (result?.success) {
+              setShipResult({ success: true, message: result.message });
+              loadOrders();
+          } else {
+              setShipResult({ success: false, message: result?.message || '发货失败' });
+          }
+      } catch (e: any) {
+          setShipResult({ success: false, message: e?.message || '请求失败' });
+      } finally {
+          setShipLoading(false);
       }
   };
 
@@ -523,8 +545,8 @@ const OrderList: React.FC = () => {
                 {selectedOrder.status === 'pending_ship' && (
                   <button
                     onClick={() => {
-                      handleShip(selectedOrder.order_id);
                       setShowDetailModal(false);
+                      handleShip(selectedOrder.order_id);
                     }}
                     className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200"
                   >
@@ -592,6 +614,94 @@ const OrderList: React.FC = () => {
                   导入订单
                 </button>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Ship Modal - 发货方式选择 */}
+      {showShipModal && createPortal(
+        <div className="modal-overlay-centered">
+          <div className="modal-container" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">立即发货</h3>
+                <button
+                  onClick={() => { setShowShipModal(false); setShipResult(null); }}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body space-y-4">
+              <p className="text-sm text-gray-600">请选择发货方式：</p>
+
+              {/* 选项A: 仅修改发货状态 */}
+              <button
+                onClick={() => executeShip('status_only')}
+                disabled={shipLoading}
+                className="w-full text-left p-4 rounded-xl border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Truck className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-900 text-sm">仅修改闲鱼发货状态</div>
+                    <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      不实际扣除或发送卡券，仅在闲鱼平台将订单标记为"已发货"。
+                      适用于已经给客户发过货、只是忘记在闲鱼修改状态的情况。
+                    </div>
+                  </div>
+                </div>
+              </button>
+
+              {/* 选项B: 完整发货流程 */}
+              <button
+                onClick={() => executeShip('full_delivery')}
+                disabled={shipLoading}
+                className="w-full text-left p-4 rounded-xl border-2 border-gray-200 hover:border-[#FFE815] hover:bg-yellow-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <PackageCheck className="w-5 h-5 text-yellow-700" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-900 text-sm">完整发货（匹配卡券并发送）</div>
+                    <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      自动匹配发货规则、获取卡券、发送卡券信息给买家，并修改发货状态。
+                      适用于订单既没有发送卡券给买家、也没有修改发货状态的情况。
+                    </div>
+                  </div>
+                </div>
+              </button>
+
+              {/* 加载状态 */}
+              {shipLoading && (
+                <div className="flex items-center justify-center gap-2 py-3">
+                  <RefreshCw className="w-4 h-4 animate-spin text-gray-500" />
+                  <span className="text-sm text-gray-500">正在处理中...</span>
+                </div>
+              )}
+
+              {/* 结果显示 */}
+              {shipResult && (
+                <div className={`p-3 rounded-xl text-sm ${shipResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                  {shipResult.success ? '✓ ' : '✗ '}{shipResult.message}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                onClick={() => { setShowShipModal(false); setShipResult(null); }}
+                className="w-full px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+              >
+                {shipResult?.success ? '完成' : '取消'}
+              </button>
             </div>
           </div>
         </div>,

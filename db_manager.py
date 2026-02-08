@@ -2095,6 +2095,25 @@ class DBManager:
             except Exception as e:
                 logger.error(f"清空默认回复记录失败: {e}")
 
+    def find_chat_id_by_buyer(self, cookie_id: str, buyer_id: str) -> str:
+        """根据买家ID查找最近的chat_id（从AI对话记录中查找）"""
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT chat_id FROM ai_conversations
+                    WHERE cookie_id = ? AND user_id = ?
+                    AND chat_id IS NOT NULL AND chat_id != ''
+                    ORDER BY id DESC LIMIT 1
+                ''', (cookie_id, buyer_id))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+                return None
+            except Exception as e:
+                logger.error(f"查找chat_id失败: {e}")
+                return None
+
     def delete_default_reply(self, cookie_id: str) -> bool:
         """删除指定账号的默认回复设置"""
         with self.lock:
