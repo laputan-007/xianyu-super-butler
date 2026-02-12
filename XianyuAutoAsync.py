@@ -4491,6 +4491,7 @@ class XianyuLive:
                                 spec_value=spec_value,
                                 quantity=quantity,
                                 amount=amount,
+                                order_status=result.get('order_status'),  # 添加订单状态
                                 cookie_id=self.cookie_id,
                                 created_at=order_time,
                                 receiver_name=receiver_name,

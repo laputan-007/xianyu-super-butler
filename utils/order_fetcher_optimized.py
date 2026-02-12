@@ -50,7 +50,8 @@ class OrderFetcherOptimized:
         self,
         order_id: str,
         timeout: int = 30,
-        headless: bool = True
+        headless: bool = True,
+        force_refresh: bool = False  # 强制刷新，跳过缓存检查
     ) -> Optional[Dict[str, Any]]:
         """
         获取完整的订单信息（优化版：一次浏览器访问）
@@ -71,8 +72,7 @@ class OrderFetcherOptimized:
         order_lock = self._order_locks[order_id]
 
         async with order_lock:
-            logger.info(f"🔒 获取订单 {order_id} 的锁，开始处理...")
-            print(f"🔍 开始获取订单完整信息: {order_id}")
+            logger.info(f"获取订单 {order_id} 的锁，开始处理...")
 
             try:
                 # 首先查询数据库中是否已存在该订单
@@ -97,10 +97,10 @@ class OrderFetcherOptimized:
                     receiver_phone = existing_order.get('receiver_phone', '')
                     receiver_address = existing_order.get('receiver_address', '')
 
-                    # 只有金额有效时才使用缓存（不再检查收货人信息）
-                    if amount_valid:
-                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效，直接返回缓存数据")
-                        print(f"✅ 订单 {order_id} 使用缓存数据")
+                    # 只有在非强制刷新且金额有效时才使用缓存（状态检测需要真实访问页面）
+                    if amount_valid and not force_refresh:
+                        logger.info(f"[CLIPBOARD] 订单 {order_id} 已存在于数据库中且金额有效，直接返回缓存数据")
+                        print(f"[OK] 订单 {order_id} 使用缓存数据")
 
                         result = {
                             'order_id': existing_order['order_id'],
@@ -127,12 +127,12 @@ class OrderFetcherOptimized:
                         return result
                     else:
                         if not amount_valid:
-                            logger.info(f"📋 订单 {order_id} 金额无效({amount})，需要重新获取")
-                            print(f"⚠️ 订单 {order_id} 金额无效，重新获取...")
+                            logger.info(f"[CLIPBOARD] 订单 {order_id} 金额无效({amount})，需要重新获取")
+                            print(f"[WARNING] Order {order_id} amount invalid, refetching...")
 
                 # 获取浏览器实例（使用浏览器池或创建新实例）
                 if self.use_pool:
-                    logger.info(f"🌐 从浏览器池获取浏览器实例...")
+                    logger.info(f"从浏览器池获取浏览器实例...")
                     browser_pool = get_browser_pool()
                     result = await browser_pool.get_browser(self.cookie_id, self.cookie_string, headless)
 
@@ -175,7 +175,7 @@ class OrderFetcherOptimized:
                 # 访问订单详情页面
                 url = f"https://www.goofish.com/order-detail?orderId={order_id}&role=seller"
                 logger.info(f"访问订单详情页面: {url}")
-                print(f"🌐 访问页面: {url}")
+                # print(f"[BROWSER] Accessing page: {url}")  # 已移除
 
                 response = await self.page.goto(url, wait_until='networkidle', timeout=timeout * 1000)
 
@@ -224,7 +224,20 @@ class OrderFetcherOptimized:
                 }
 
                 # 从API获取的数据
-                result['order_status'] = api_data.get('order_status', 'unknown')
+                # 优先使用DOM检测的状态，API状态作为fallback
+                api_status = api_data.get('order_status', 'unknown')
+                dom_status = dom_data.get('order_status_dom', None)
+
+                # 添加调试信息
+                result['api_status'] = api_status
+                result['dom_status'] = dom_status if dom_status else 'not_detected'
+
+                if dom_status and dom_status != 'unknown':
+                    result['order_status'] = dom_status
+                    logger.info(f"使用DOM检测的订单状态: {dom_status}")
+                else:
+                    result['order_status'] = api_status
+                    logger.info(f"使用API的订单状态: {api_status}")
                 result['status_text'] = api_data.get('status_text', '')
                 result['item_title'] = api_data.get('item_title', '')
                 result['buyer_id'] = api_data.get('buyer_id', '')
@@ -243,13 +256,13 @@ class OrderFetcherOptimized:
                 result['receiver_city'] = api_data.get('receiver_city', '')
 
                 logger.info(f"订单 {order_id} 完整信息获取成功")
-                print(f"✅ 订单 {order_id} 信息获取成功")
+                # print(f"[OK] 订单 {order_id} 信息获取成功")  # 已移除
 
                 return result
 
             except Exception as e:
                 logger.error(f"获取订单完整信息失败: {e}")
-                print(f"❌ 获取订单 {order_id} 失败: {e}")
+                # print(f"[FAIL] 获取订单 {order_id} 失败: {e}")  # 已移除
                 return None
             finally:
                 # 清理：关闭页面（因为浏览器池为每个请求创建新页面）
@@ -274,8 +287,34 @@ class OrderFetcherOptimized:
         result = {}
 
         try:
+            # 定义状态码映射（与 reply_server.py 保持一致）
+            STATUS_CODE_MAP = {
+                '1': 'processing',
+                '2': 'pending_ship',
+                '3': 'shipped',
+                '4': 'completed',
+                '7': 'refunding',
+                '8': 'cancelled',
+                '9': 'refunding',
+                '10': 'cancelled',
+                '11': 'completed',  # 交易完成
+                '12': 'cancelled',  # 交易关闭
+            }
+
             # 提取订单状态
-            result['order_status'] = order_data.get('status', 'unknown')
+            status_code = order_data.get('status', 'unknown')
+            # 如果是字符串状态，直接使用；如果是数字，映射到字符串
+            if isinstance(status_code, str):
+                if status_code in ['processing', 'pending_ship', 'shipped', 'completed', 'cancelled', 'refunding', 'unknown']:
+                    result['order_status'] = status_code
+                elif status_code.isdigit():
+                    result['order_status'] = STATUS_CODE_MAP.get(status_code, 'unknown')
+                else:
+                    result['order_status'] = status_code
+            else:
+                # 是数字，需要映射
+                result['order_status'] = STATUS_CODE_MAP.get(str(status_code), 'unknown')
+
             result['status_text'] = order_data.get('utArgs', {}).get('orderStatusName', '')
 
             # 提取商品信息
@@ -386,6 +425,10 @@ class OrderFetcherOptimized:
             if 'quantity' not in result:
                 result['quantity'] = '1'
 
+            # 获取订单状态（使用JavaScript分析页面）
+            result['order_status_dom'] = await self._get_order_status()
+            logger.info(f"DOM检测到的订单状态: {result['order_status_dom']}")
+
         except Exception as e:
             logger.error(f"解析DOM内容失败: {e}")
 
@@ -477,6 +520,109 @@ class OrderFetcherOptimized:
         except Exception as e:
             logger.error(f"获取收货人信息失败: {e}")
 
+    async def _get_order_status(self) -> str:
+        """使用JavaScript分析页面获取订单状态"""
+        try:
+            status_info = await self.page.evaluate('''() => {
+                // 定义状态关键词映射 - 优先级高的放前面
+                const statusMap = [
+                    // 交易关闭 - 最长最具体的优先
+                    {text: '买家取消了订单', status: 'cancelled', priority: 100},
+                    {text: '卖家取消了订单', status: 'cancelled', priority: 100},
+                    {text: '交易关闭', status: 'cancelled', priority: 90},
+                    {text: '订单已关闭', status: 'cancelled', priority: 90},
+                    // 已发货
+                    {text: '卖家已发货，待买家确认收货', status: 'shipped', priority: 85},
+                    {text: '已发货，待买家确认收货', status: 'shipped', priority: 80},
+                    {text: '卖家已发货', status: 'shipped', priority: 75},
+                    {text: '已发货', status: 'shipped', priority: 70},
+                    {text: '待买家确认收货', status: 'shipped', priority: 65},
+                    // 待发货
+                    {text: '买家已付款，请尽快发货', status: 'pending_ship', priority: 60},
+                    {text: '买家已付款', status: 'pending_ship', priority: 55},
+                    {text: '待发货', status: 'pending_ship', priority: 50},
+                    {text: '等待卖家发货', status: 'pending_ship', priority: 45},
+                    // 已完成
+                    {text: '交易成功', status: 'completed', priority: 40},
+                    {text: '订单完成', status: 'completed', priority: 35},
+                    {text: '交易完成', status: 'completed', priority: 30},
+                    // 退款
+                    {text: '退款中', status: 'refunding', priority: 25},
+                    {text: '申请退款', status: 'refunding', priority: 20},
+                    // 处理中
+                    {text: '处理中', status: 'processing', priority: 10},
+                ];
+
+                // 查找所有文本节点
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+
+                let bestMatch = null;
+                let bestScore = -1;
+                let nodeCount = 0;
+                const maxNodes = 5000;
+
+                let node;
+                while((node = walker.nextNode()) && nodeCount < maxNodes) {
+                    nodeCount++;
+                    const text = node.textContent?.trim();
+                    if(!text || text.length < 2 || text.length > 100) continue;
+
+                    // 检查每个状态关键词
+                    for(const item of statusMap) {
+                        if(text.includes(item.text)) {
+                            const parent = node.parentElement;
+                            if(parent) {
+                                const style = window.getComputedStyle(parent);
+                                const fontSize = parseInt(style.fontSize) || 0;
+                                const fontWeight = parseInt(style.fontWeight) || 0;
+
+                                // 计算分数：关键词优先级 + 字体大小加分 + 字体粗细加分
+                                const score = item.priority + fontSize + (fontWeight > 500 ? 5 : 0);
+
+                                if(score > bestScore) {
+                                    bestMatch = {
+                                        text: text,
+                                        status: item.status,
+                                        fontSize: fontSize,
+                                        fontWeight: fontWeight,
+                                        class: parent.className,
+                                        score: score
+                                    };
+                                    bestScore = score;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                return {
+                    match: bestMatch,
+                    nodesScanned: nodeCount
+                };
+            }''')
+
+            logger.info(f"订单状态分析结果: {status_info}")
+
+            match_info = status_info.get('match')
+            if match_info:
+                match_text = match_info.get('text', '').encode('utf-8', errors='ignore').decode('utf-8')
+                logger.info(f"找到订单状态: {match_info['status']} (文本: {match_text}, 分数: {match_info.get('score', 0)})")
+                return match_info['status']
+            else:
+                logger.warning(f"未能找到订单状态，扫描了 {status_info.get('nodesScanned', 0)} 个节点")
+                return 'unknown'
+
+        except Exception as e:
+            logger.error(f"获取订单状态失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return 'unknown'
+
 
 async def fetch_order_complete(
     order_id: str,
@@ -484,7 +630,8 @@ async def fetch_order_complete(
     cookie_string: str,
     timeout: int = 30,
     headless: bool = True,
-    use_pool: bool = True
+    use_pool: bool = True,
+    force_refresh: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     获取完整的订单信息（便捷函数）
@@ -501,7 +648,7 @@ async def fetch_order_complete(
         完整的订单信息字典，失败返回None
     """
     fetcher = OrderFetcherOptimized(cookie_id, cookie_string, use_pool)
-    return await fetcher.fetch_order_complete(order_id, timeout, headless)
+    return await fetcher.fetch_order_complete(order_id, timeout, headless, force_refresh)
 
 
 async def process_orders_batch(
@@ -511,7 +658,8 @@ async def process_orders_batch(
     max_concurrent: int = 5,
     timeout: int = 30,
     headless: bool = True,
-    use_pool: bool = True
+    use_pool: bool = True,
+    force_refresh: bool = False
 ) -> List[Dict[str, Any]]:
     """
     并发批量处理订单
@@ -526,12 +674,13 @@ async def process_orders_batch(
         timeout: 超时时间（秒）
         headless: 是否无头模式
         use_pool: 是否使用浏览器池
+        force_refresh: 是否强制刷新（跳过缓存检查）
 
     Returns:
         订单信息字典列表（包含成功和失败的结果）
     """
     logger.info(f"开始批量处理 {len(order_ids)} 个订单，最大并发数: {max_concurrent}")
-    print(f"🚀 批量处理 {len(order_ids)} 个订单（并发数: {max_concurrent}）")
+    # print(f"[BATCH] Processing {len(order_ids)} orders (concurrent: {max_concurrent})")  # 已移除
 
     # 创建信号量控制并发数
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -550,7 +699,7 @@ async def process_orders_batch(
         async with semaphore:
             try:
                 logger.info(f"[{index + 1}/{len(order_ids)}] 开始处理订单: {order_id}")
-                print(f"[{index + 1}/{len(order_ids)}] 处理订单: {order_id}")
+                # print(f"[{index + 1}/{len(order_ids)}] 处理订单: {order_id}")  # 已移除
 
                 result = await fetch_order_complete(
                     order_id=order_id,
@@ -558,16 +707,17 @@ async def process_orders_batch(
                     cookie_string=cookie_string,
                     timeout=timeout,
                     headless=headless,
-                    use_pool=use_pool
+                    use_pool=use_pool,
+                    force_refresh=force_refresh
                 )
 
                 if result:
                     logger.info(f"[{index + 1}/{len(order_ids)}] 订单 {order_id} 处理成功")
-                    print(f"✅ [{index + 1}/{len(order_ids)}] 订单 {order_id} 成功")
+                    # print(f"[OK] [{index + 1}/{len(order_ids)}] 订单 {order_id} 成功")  # 已移除
                     return result
                 else:
                     logger.warning(f"[{index + 1}/{len(order_ids)}] 订单 {order_id} 处理失败")
-                    print(f"❌ [{index + 1}/{len(order_ids)}] 订单 {order_id} 失败")
+                    # print(f"[FAIL] [{index + 1}/{len(order_ids)}] 订单 {order_id} 失败")  # 已移除
                     return {
                         'order_id': order_id,
                         'success': False,
@@ -576,7 +726,7 @@ async def process_orders_batch(
 
             except Exception as e:
                 logger.error(f"[{index + 1}/{len(order_ids)}] 订单 {order_id} 处理异常: {e}")
-                print(f"❌ [{index + 1}/{len(order_ids)}] 订单 {order_id} 异常: {e}")
+                # print(f"[FAIL] [{index + 1}/{len(order_ids)}] 订单 {order_id} 异常: {e}")  # 已移除
                 return {
                     'order_id': order_id,
                     'success': False,
@@ -611,9 +761,9 @@ async def process_orders_batch(
     fail_count = len(processed_results) - success_count
 
     logger.info(f"批量处理完成: 成功 {success_count}，失败 {fail_count}")
-    print(f"\n📊 批量处理完成:")
-    print(f"   ✅ 成功: {success_count}")
-    print(f"   ❌ 失败: {fail_count}")
+    # print(f"\n[CHART] 批量处理完成:")  # 已移除
+    # print(f"   [OK] 成功: {success_count}")  # 已移除
+    # print(f"   [FAIL] 失败: {fail_count}")  # 已移除
 
     return processed_results
 
@@ -652,10 +802,10 @@ async def process_orders_in_batches(
     total_batches = (total_orders + batch_size - 1) // batch_size
 
     logger.info(f"开始分批处理 {total_orders} 个订单，分为 {total_batches} 批，每批 {batch_size} 个，批内并发 {max_concurrent}")
-    print(f"🔄 分批处理 {total_orders} 个订单:")
-    print(f"   📦 总批次: {total_batches}")
-    print(f"   📊 每批: {batch_size} 个")
-    print(f"   ⚡ 批内并发: {max_concurrent}")
+    print(f"[REFRESH] 分批处理 {total_orders} 个订单:")
+    print(f"   [BOX] 总批次: {total_batches}")
+    print(f"   [CHART] 每批: {batch_size} 个")
+    print(f"   [BOLT] 批内并发: {max_concurrent}")
 
     all_results = []
 
@@ -665,7 +815,7 @@ async def process_orders_in_batches(
         batch_order_ids = order_ids[start_idx:end_idx]
 
         logger.info(f"\n批次 {batch_index + 1}/{total_batches}: 处理订单 {start_idx + 1}-{end_idx}")
-        print(f"\n📦 批次 {batch_index + 1}/{total_batches} ({len(batch_order_ids)} 个订单)")
+        print(f"\n[BOX] 批次 {batch_index + 1}/{total_batches} ({len(batch_order_ids)} 个订单)")
 
         # 处理当前批次
         batch_results = await process_orders_batch(
@@ -683,7 +833,7 @@ async def process_orders_in_batches(
         # 批次之间延迟（最后一批不需要延迟）
         if batch_index < total_batches - 1:
             logger.info(f"批次 {batch_index + 1} 完成，等待 {batch_delay} 秒后开始下一批...")
-            print(f"⏳ 等待 {batch_delay} 秒...")
+            print(f"[WAIT] 等待 {batch_delay} 秒...")
             await asyncio.sleep(batch_delay)
 
     # 总体统计
@@ -691,8 +841,8 @@ async def process_orders_in_batches(
     fail_count = len(all_results) - success_count
 
     logger.info(f"\n所有批次处理完成: 成功 {success_count}，失败 {fail_count}")
-    print(f"\n🎉 所有批次处理完成:")
-    print(f"   ✅ 成功: {success_count}/{total_orders}")
-    print(f"   ❌ 失败: {fail_count}/{total_orders}")
+    print(f"\n[PARTY] 所有批次处理完成:")
+    print(f"   [OK] 成功: {success_count}/{total_orders}")
+    print(f"   [FAIL] 失败: {fail_count}/{total_orders}")
 
     return all_results

@@ -6282,25 +6282,10 @@ async def refresh_orders_status(
                     continue
 
                 order_status = order.get('status', 'unknown')
-                buyer_id = order.get('buyer_id', '')
-                amount = order.get('amount', '')
-                receiver_name = order.get('receiver_name', '')
-                receiver_phone = order.get('receiver_phone', '')
-                receiver_address = order.get('receiver_address', '')
 
-                # 判断是否需要刷新：
-                # 1. 非稳定状态订单（非已发货、非交易成功、非已关闭）
-                # 2. 买家ID为空或unknown_user
-                # 3. 金额为空
-                # 4. 收货人信息不完整（姓名、电话、地址任一为空或unknown）
-                needs_refresh = (
-                    order_status not in ['shipped', 'completed', 'cancelled'] or
-                    not buyer_id or buyer_id == 'unknown_user' or
-                    not amount or
-                    not receiver_name or receiver_name == 'unknown' or
-                    not receiver_phone or receiver_phone == 'unknown' or
-                    not receiver_address or receiver_address == 'unknown'
-                )
+                # 判断是否需要刷新：只根据状态判断
+                # 稳定状态（已发货、交易成功、交易关闭）的订单不需要刷新
+                needs_refresh = order_status not in ['shipped', 'completed', 'cancelled']
 
                 if needs_refresh:
                     orders_to_refresh.append({
@@ -6358,7 +6343,8 @@ async def refresh_orders_status(
                 max_concurrent=5,  # 并发5个
                 timeout=30,
                 headless=True,
-                use_pool=True  # 使用浏览器池
+                use_pool=True,  # 使用浏览器池
+                force_refresh=True  # 强制刷新，跳过缓存检查
             )
 
             # 处理结果并更新数据库
@@ -6368,6 +6354,11 @@ async def refresh_orders_status(
                 current_status = order_info['current_status']
 
                 if result and not result.get('error'):
+                    # 调试：打印API和DOM状态
+                    api_status = result.get('api_status', 'N/A')
+                    dom_status = result.get('dom_status', 'N/A')
+                    log_with_user('debug', f"订单 {order_id} - API状态: {api_status}, DOM状态: {dom_status}", current_user)
+
                     # 状态码映射
                     order_status = result.get('order_status', 'unknown')
                     if order_status and str(order_status).isdigit():
@@ -6382,6 +6373,8 @@ async def refresh_orders_status(
                             '8': 'cancelled',
                             '9': 'refunding',
                             '10': 'cancelled',
+                            '11': 'completed',  # 交易完成
+                            '12': 'cancelled',  # 交易关闭
                         }
                         order_status = status_mapping.get(str(order_status), order_status)
 

@@ -240,8 +240,8 @@ class OrderDetailFetcher:
 
                     # 只有金额有效时才使用缓存（不再检查收货人信息是否完整）
                     if amount_valid:
-                        logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
-                        print(f"✅ 订单 {order_id} 使用缓存数据，跳过浏览器获取")
+                        logger.info(f"[CLIPBOARD] 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
+                        print(f"[OK] 订单 {order_id} 使用缓存数据，跳过浏览器获取")
 
                         # 构建返回格式，与浏览器获取的格式保持一致
                         result = {
@@ -272,12 +272,12 @@ class OrderDetailFetcher:
                         return result
                     else:
                         if not amount_valid:
-                            logger.info(f"📋 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
-                            print(f"⚠️ 订单 {order_id} 金额无效，重新获取详情...")
+                            logger.info(f"[CLIPBOARD] 订单 {order_id} 存在于数据库中但金额无效({amount})，需要重新获取")
+                            print(f"[WARNING]️ 订单 {order_id} 金额无效，重新获取详情...")
 
                 # 只有在数据库中没有有效数据时才初始化浏览器
                 logger.info(f"🌐 订单 {order_id} 需要浏览器获取，开始初始化浏览器...")
-                print(f"🔍 订单 {order_id} 开始浏览器获取详情...")
+                print(f"[SEARCH] 订单 {order_id} 开始浏览器获取详情...")
 
                 # 确保浏览器准备就绪
                 if not await self._ensure_browser_ready():
@@ -359,6 +359,7 @@ class OrderDetailFetcher:
                     'order_id': order_id,
                     'url': url,
                     'title': title,
+                    'order_status': sku_info.get('order_status', 'unknown') if sku_info else 'unknown',  # 订单状态
                     'sku_info': sku_info,  # 包含解析后的规格信息
                     'spec_name': sku_info.get('spec_name', '') if sku_info else '',
                     'spec_value': sku_info.get('spec_value', '') if sku_info else '',
@@ -377,6 +378,9 @@ class OrderDetailFetcher:
                     logger.info(f"规格信息 - 名称: {result['spec_name']}, 值: {result['spec_value']}")
                     logger.info(f"数量: {result['quantity']}, 金额: {result['amount']}")
                     logger.info(f"收货人: {result['receiver_name']}, 电话: {result['receiver_phone']}")
+                    logger.info(f"[ORDER_STATUS_DETECTED] 浏览器检测到的订单状态: {result['order_status']}")
+                else:
+                    logger.warning("[ORDER_STATUS_DETECTED] sku_info 为空，无法获取订单状态")
                 return result
 
             except Exception as e:
@@ -438,7 +442,7 @@ class OrderDetailFetcher:
             sku_elements = await self.page.query_selector_all(sku_selector)
 
             logger.info(f"找到 {len(sku_elements)} 个 sku--u_ddZval 元素")
-            print(f"🔍 找到 {len(sku_elements)} 个 sku--u_ddZval 元素")
+            print(f"[SEARCH] 找到 {len(sku_elements)} 个 sku--u_ddZval 元素")
 
             # 获取金额信息
             amount_selector = '.boldNum--JgEOXfA3'
@@ -449,11 +453,11 @@ class OrderDetailFetcher:
                 if amount_text:
                     amount = amount_text.strip()
                     logger.info(f"找到金额: {amount}")
-                    print(f"💰 金额: {amount}")
+                    print(f"[MONEY] 金额: {amount}")
                     result['amount'] = amount
             else:
                 logger.warning("未找到金额元素")
-                print("⚠️ 未找到金额信息")
+                print("[WARNING]️ 未找到金额信息")
 
             # 获取订单创建时间
             await self._get_order_time(result)
@@ -465,28 +469,28 @@ class OrderDetailFetcher:
             if len(sku_elements) == 2:
                 # 有两个元素：第一个是规格，第二个是数量
                 logger.info("检测到两个 sku--u_ddZval 元素，第一个为规格，第二个为数量")
-                print("📋 检测到两个元素：第一个为规格，第二个为数量")
+                print("[CLIPBOARD] 检测到两个元素：第一个为规格，第二个为数量")
 
                 # 处理规格（第一个元素）
                 spec_content = await sku_elements[0].text_content()
                 if spec_content:
                     spec_content = spec_content.strip()
                     logger.info(f"规格原始内容: {spec_content}")
-                    print(f"🛍️ 规格原始内容: {spec_content}")
+                    print(f"[NOTEBOOK]️ 规格原始内容: {spec_content}")
 
                     # 解析规格内容
                     parsed_spec = self._parse_sku_content(spec_content)
                     if parsed_spec:
                         result.update(parsed_spec)
-                        print(f"📋 规格名称: {parsed_spec['spec_name']}")
-                        print(f"📝 规格值: {parsed_spec['spec_value']}")
+                        print(f"[CLIPBOARD] 规格名称: {parsed_spec['spec_name']}")
+                        print(f"[EDIT] 规格值: {parsed_spec['spec_value']}")
 
                 # 处理数量（第二个元素）
                 quantity_content = await sku_elements[1].text_content()
                 if quantity_content:
                     quantity_content = quantity_content.strip()
                     logger.info(f"数量原始内容: {quantity_content}")
-                    print(f"📦 数量原始内容: {quantity_content}")
+                    print(f"[BOX] 数量原始内容: {quantity_content}")
 
                     # 从数量内容中提取数量值（使用冒号分割，取后面的值）
                     if ':' in quantity_content:
@@ -496,30 +500,30 @@ class OrderDetailFetcher:
                             quantity_value = quantity_value[1:]
                         result['quantity'] = quantity_value
                         logger.info(f"提取到数量: {quantity_value}")
-                        print(f"🔢 数量: {quantity_value}")
+                        print(f"[KEYPAD] 数量: {quantity_value}")
                     else:
                         # 去掉数量值前面的 'x' 符号（如 "x2" -> "2"）
                         if quantity_content.startswith('x'):
                             quantity_content = quantity_content[1:]
                         result['quantity'] = quantity_content
                         logger.info(f"数量内容无冒号，直接使用: {quantity_content}")
-                        print(f"🔢 数量: {quantity_content}")
+                        print(f"[KEYPAD] 数量: {quantity_content}")
 
             elif len(sku_elements) == 1:
                 # 只有一个元素：判断是否包含"数量"
                 logger.info("检测到一个 sku--u_ddZval 元素，判断是规格还是数量")
-                print("📋 检测到一个元素，判断是规格还是数量")
+                print("[CLIPBOARD] 检测到一个元素，判断是规格还是数量")
 
                 content = await sku_elements[0].text_content()
                 if content:
                     content = content.strip()
                     logger.info(f"元素原始内容: {content}")
-                    print(f"🛍️ 元素原始内容: {content}")
+                    print(f"[NOTEBOOK]️ 元素原始内容: {content}")
 
                     if '数量' in content:
                         # 这是数量信息
                         logger.info("判断为数量信息")
-                        print("📦 判断为数量信息")
+                        print("[BOX] 判断为数量信息")
 
                         if ':' in content:
                             quantity_value = content.split(':', 1)[1].strip()
@@ -528,33 +532,33 @@ class OrderDetailFetcher:
                                 quantity_value = quantity_value[1:]
                             result['quantity'] = quantity_value
                             logger.info(f"提取到数量: {quantity_value}")
-                            print(f"🔢 数量: {quantity_value}")
+                            print(f"[KEYPAD] 数量: {quantity_value}")
                         else:
                             # 去掉数量值前面的 'x' 符号（如 "x2" -> "2"）
                             if content.startswith('x'):
                                 content = content[1:]
                             result['quantity'] = content
                             logger.info(f"数量内容无冒号，直接使用: {content}")
-                            print(f"🔢 数量: {content}")
+                            print(f"[KEYPAD] 数量: {content}")
                     else:
                         # 这是规格信息
                         logger.info("判断为规格信息")
-                        print("📋 判断为规格信息")
+                        print("[CLIPBOARD] 判断为规格信息")
 
                         parsed_spec = self._parse_sku_content(content)
                         if parsed_spec:
                             result.update(parsed_spec)
-                            print(f"📋 规格名称: {parsed_spec['spec_name']}")
-                            print(f"📝 规格值: {parsed_spec['spec_value']}")
+                            print(f"[CLIPBOARD] 规格名称: {parsed_spec['spec_name']}")
+                            print(f"[EDIT] 规格值: {parsed_spec['spec_value']}")
             else:
                 logger.warning(f"未找到或找到异常数量的 sku--u_ddZval 元素: {len(sku_elements)}")
-                print(f"⚠️ 未找到或找到异常数量的元素: {len(sku_elements)}")
+                print(f"[WARNING]️ 未找到或找到异常数量的元素: {len(sku_elements)}")
 
                 # 如果没有找到sku--u_ddZval元素，设置默认数量为1
                 if len(sku_elements) == 0:
                     result['quantity'] = '1'
                     logger.info("未找到sku--u_ddZval元素，数量默认设置为1")
-                    print("📦 数量默认设置为: 1")
+                    print("[BOX] 数量默认设置为: 1")
 
                 # 尝试获取页面的所有class包含sku的元素进行调试
                 all_sku_elements = await self.page.query_selector_all('[class*="sku"]')
@@ -569,18 +573,21 @@ class OrderDetailFetcher:
             if 'quantity' not in result:
                 result['quantity'] = '1'
                 logger.info("未获取到数量信息，默认设置为1")
-                print("📦 数量默认设置为: 1")
+                print("[BOX] 数量默认设置为: 1")
+
+            # 获取订单状态（在获取其他信息之后）
+            await self._get_order_status(result)
 
             # 打印最终结果
             if result:
                 logger.info(f"最终解析结果: {result}")
-                print("✅ 解析结果:")
+                print("[OK] 解析结果:")
                 for key, value in result.items():
                     print(f"   {key}: {value}")
                 return result
             else:
                 logger.warning("未能解析到任何有效信息")
-                print("❌ 未能解析到任何有效信息")
+                print("[FAIL] 未能解析到任何有效信息")
                 # 即使没有其他信息，也要返回默认数量
                 return {'quantity': '0'}
 
@@ -620,7 +627,7 @@ class OrderDetailFetcher:
                                 order_time = time_match.group(1).replace('/', '-')
                                 result['order_time'] = order_time
                                 logger.info(f"找到订单时间: {order_time}")
-                                print(f"⏰ 订单时间: {order_time}")
+                                print(f"[TIME] 订单时间: {order_time}")
                                 return
                 except Exception as e:
                     logger.debug(f"选择器 {selector} 获取时间失败: {e}")
@@ -634,14 +641,14 @@ class OrderDetailFetcher:
                 order_time = time_match.group(1).replace('/', '-')
                 result['order_time'] = order_time
                 logger.info(f"从页面源码中找到订单时间: {order_time}")
-                print(f"⏰ 订单时间: {order_time}")
+                print(f"[TIME] 订单时间: {order_time}")
             else:
                 logger.warning("未能找到订单时间")
-                print("⚠️ 未找到订单时间")
+                print("[WARNING]️ 未找到订单时间")
 
         except Exception as e:
             logger.error(f"获取订单时间失败: {e}")
-            print(f"❌ 获取订单时间失败: {e}")
+            print(f"[FAIL] 获取订单时间失败: {e}")
 
     async def _get_receiver_info(self, result: Dict[str, str]) -> None:
         """获取收货人信息（姓名、手机号、地址）"""
@@ -772,6 +779,113 @@ class OrderDetailFetcher:
         except Exception as e:
             logger.error(f"获取收货人信息失败: {e}")
             print(f"[ERROR] 获取收货人信息失败: {e}")
+
+    async def _get_order_status(self, result: Dict[str, str]) -> None:
+        """获取订单状态"""
+        try:
+            # 使用JavaScript分析页面，获取订单状态
+            status_info = await self.page.evaluate('''() => {
+                // 定义状态关键词映射 - 优先级高的放前面
+                const statusMap = [
+                    // 交易关闭 - 最长最具体的优先
+                    {text: '买家取消了订单', status: 'cancelled', priority: 100},
+                    {text: '卖家取消了订单', status: 'cancelled', priority: 100},
+                    {text: '交易关闭', status: 'cancelled', priority: 90},
+                    {text: '订单已关闭', status: 'cancelled', priority: 90},
+                    // 已发货
+                    {text: '卖家已发货，待买家确认收货', status: 'shipped', priority: 85},
+                    {text: '已发货，待买家确认收货', status: 'shipped', priority: 80},
+                    {text: '卖家已发货', status: 'shipped', priority: 75},
+                    {text: '已发货', status: 'shipped', priority: 70},
+                    {text: '待买家确认收货', status: 'shipped', priority: 65},
+                    // 待发货
+                    {text: '买家已付款，请尽快发货', status: 'pending_ship', priority: 60},
+                    {text: '买家已付款', status: 'pending_ship', priority: 55},
+                    {text: '待发货', status: 'pending_ship', priority: 50},
+                    {text: '等待卖家发货', status: 'pending_ship', priority: 45},
+                    // 已完成
+                    {text: '交易成功', status: 'completed', priority: 40},
+                    {text: '订单完成', status: 'completed', priority: 35},
+                    {text: '交易完成', status: 'completed', priority: 30},
+                    // 退款
+                    {text: '退款中', status: 'refunding', priority: 25},
+                    {text: '申请退款', status: 'refunding', priority: 20},
+                    // 处理中
+                    {text: '处理中', status: 'processing', priority: 10},
+                ];
+
+                // 查找所有文本节点
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+
+                let bestMatch = null;
+                let bestScore = -1;
+                let nodeCount = 0;
+                const maxNodes = 5000; // 限制遍历的节点数量
+
+                let node;
+                while(node = walker.nextNode() && nodeCount < maxNodes) {
+                    nodeCount++;
+                    const text = node.textContent?.trim();
+                    if(!text || text.length < 2 || text.length > 100) continue;
+
+                    // 检查每个状态关键词
+                    for(const item of statusMap) {
+                        if(text.includes(item.text)) {
+                            const parent = node.parentElement;
+                            if(parent) {
+                                const style = window.getComputedStyle(parent);
+                                const fontSize = parseInt(style.fontSize) || 0;
+                                const fontWeight = parseInt(style.fontWeight) || 0;
+
+                                // 计算分数：关键词优先级 + 字体大小加分 + 字体粗细加分
+                                const score = item.priority + fontSize + (fontWeight > 500 ? 5 : 0);
+
+                                if(score > bestScore) {
+                                    bestMatch = {
+                                        text: text,
+                                        status: item.status,
+                                        fontSize: fontSize,
+                                        fontWeight: fontWeight,
+                                        class: parent.className,
+                                        score: score
+                                    };
+                                    bestScore = score;
+                                }
+                            }
+                            break; // 找到匹配就跳出内层循环
+                        }
+                    }
+                }
+
+                return {
+                    match: bestMatch,
+                    nodesScanned: nodeCount
+                };
+            }''')
+
+            logger.info(f"订单状态分析结果: {status_info}")
+            print(f"[DEBUG] Status analysis result: {status_info}")
+
+            match_info = status_info.get('match')
+            if match_info:
+                result['order_status'] = match_info['status']
+                match_text = match_info.get('text', '').encode('utf-8', errors='ignore').decode('utf-8')
+                logger.info(f"找到订单状态: {match_info['status']} (文本: {match_text}, 分数: {match_info.get('score', 0)})")
+                print(f"[ORDER_STATUS] Order status: {match_info['status']} (text: {match_text})")
+            else:
+                logger.warning(f"未能找到订单状态，扫描了 {status_info.get('nodesScanned', 0)} 个节点")
+                print("[WARNING] Order status not found")
+                result['order_status'] = 'unknown'
+
+        except Exception as e:
+            logger.error(f"获取订单状态失败: {e}")
+            print(f"[ERROR] Failed to get order status: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     async def _check_browser_status(self) -> bool:
         """检查浏览器状态是否正常"""
@@ -921,7 +1035,7 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
 
             # 只有金额有效时才使用缓存（不再检查收货人信息是否完整）
             if amount_valid:
-                logger.info(f"📋 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
+                logger.info(f"[CLIPBOARD] 订单 {order_id} 已存在于数据库中且金额有效({amount})，直接返回缓存数据")
                 print(f"[OK] 订单 {order_id} 使用缓存数据（金额:{amount}）")
 
                 # 构建返回格式（包含收货人信息）
@@ -950,14 +1064,14 @@ async def fetch_order_detail_simple(order_id: str, cookie_string: str = None, he
                 return result
             else:
                 if not amount_valid:
-                    logger.info(f"📋 订单 {order_id} 金额无效({amount})，需要重新获取")
+                    logger.info(f"[CLIPBOARD] 订单 {order_id} 金额无效({amount})，需要重新获取")
                     print(f"[WARN] 订单 {order_id} 金额无效，重新获取详情...")
     except Exception as e:
         logger.warning(f"检查数据库缓存失败: {e}")
 
     # 数据库中没有有效数据，使用浏览器获取
     logger.info(f"🌐 订单 {order_id} 需要浏览器获取，开始初始化浏览器...")
-    print(f"🔍 订单 {order_id} 开始浏览器获取详情...")
+    print(f"[SEARCH] 订单 {order_id} 开始浏览器获取详情...")
 
     fetcher = OrderDetailFetcher(cookie_string, headless)
     try:
@@ -974,21 +1088,21 @@ if __name__ == "__main__":
         # 测试订单ID
         test_order_id = "2856024697612814489"
         
-        print(f"🔍 开始获取订单详情: {test_order_id}")
+        print(f"[SEARCH] 开始获取订单详情: {test_order_id}")
         
         result = await fetch_order_detail_simple(test_order_id, headless=False)
         
         if result:
-            print("✅ 订单详情获取成功:")
-            print(f"📋 订单ID: {result['order_id']}")
+            print("[OK] 订单详情获取成功:")
+            print(f"[CLIPBOARD] 订单ID: {result['order_id']}")
             print(f"🌐 URL: {result['url']}")
             print(f"📄 页面标题: {result['title']}")
-            print(f"🛍️ 规格名称: {result.get('spec_name', '未获取到')}")
-            print(f"📝 规格值: {result.get('spec_value', '未获取到')}")
-            print(f"🔢 数量: {result.get('quantity', '未获取到')}")
-            print(f"💰 金额: {result.get('amount', '未获取到')}")
+            print(f"[NOTEBOOK]️ 规格名称: {result.get('spec_name', '未获取到')}")
+            print(f"[EDIT] 规格值: {result.get('spec_value', '未获取到')}")
+            print(f"[KEYPAD] 数量: {result.get('quantity', '未获取到')}")
+            print(f"[MONEY] 金额: {result.get('amount', '未获取到')}")
         else:
-            print("❌ 订单详情获取失败")
+            print("[FAIL] 订单详情获取失败")
     
     # 运行测试
     asyncio.run(test())
