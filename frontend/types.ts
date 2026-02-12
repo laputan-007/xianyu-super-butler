@@ -157,6 +157,12 @@ export interface OrderAnalytics {
     total_orders: number;
   };
   daily_stats: Array<{ date: string; amount: number }>;
+  item_stats?: Array<{
+    item_id: string;
+    order_count: number;
+    total_amount: number;
+    avg_amount: number;
+  }>;
 }
 
 // Settings

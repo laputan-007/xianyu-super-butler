@@ -191,13 +191,11 @@ export const getOrderAnalytics = async (daysOrParams: number | {start_date: stri
 }
 
 export const getValidOrders = async (dateRange: {start_date: string; end_date: string}): Promise<Order[]> => {
-    const res = await get<any>('/api/orders', {
+    const res = await get<any>('/analytics/orders/valid', {
         start_date: dateRange.start_date,
-        end_date: dateRange.end_date,
-        page: 1,
-        page_size: 1000
+        end_date: dateRange.end_date
     });
-    return res.orders || res.data || [];
+    return res.orders || [];
 }
 
 // Cards
