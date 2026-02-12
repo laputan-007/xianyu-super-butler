@@ -301,9 +301,10 @@ const OrderList: React.FC = () => {
           <div className="flex gap-1 p-1 bg-gray-200/50 rounded-xl overflow-x-auto max-w-full">
              {[
                  {k:'all', v:'全部'},
-                 {k:'pending_ship', v:'待发货'},
                  {k:'shipped', v:'已发货'},
-                 {k:'refunding', v:'售后'}
+                 {k:'pending_ship', v:'待发货'},
+                 {k:'cancelled', v:'已取消'},
+                 {k:'refunding', v:'其他'}
              ].map(opt => (
                  <button
                     key={opt.k}

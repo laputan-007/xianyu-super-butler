@@ -5966,7 +5966,7 @@ def get_user_orders(
                 # 添加 item_title 字段
                 order['item_title'] = item_titles.get(order.get('item_id'), '')
                 # 状态筛选
-                if status and order.get('order_status') != status:
+                if status and order.get('status') != status:
                     continue
                 all_orders.append(order)
 
