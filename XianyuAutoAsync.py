@@ -2802,6 +2802,7 @@ class XianyuLive:
                     'auction_type': item.get('auction_type', ''),
                     'item_status': item.get('item_status', 0),
                     'detail_url': item.get('detail_url', ''),
+                    'web_url': item.get('web_url', ''),  # Web可访问URL
                     'pic_info': item.get('pic_info', {}),
                     'detail_params': item.get('detail_params', {}),
                     'track_params': item.get('track_params', {}),
@@ -8353,8 +8354,11 @@ class XianyuLive:
                         card_data = card.get('cardData', {})
                         if card_data:
                             # 提取商品基本信息
+                            detail_params = card_data.get('detailParams', {})
+                            item_id = detail_params.get('itemId', card_data.get('id', ''))
+
                             item_info = {
-                                'id': card_data.get('id', ''),
+                                'id': item_id,
                                 'title': card_data.get('title', ''),
                                 'price': card_data.get('priceInfo', {}).get('price', ''),
                                 'price_text': card_data.get('priceInfo', {}).get('preText', '') + card_data.get('priceInfo', {}).get('price', ''),
@@ -8362,8 +8366,10 @@ class XianyuLive:
                                 'auction_type': card_data.get('auctionType', ''),
                                 'item_status': card_data.get('itemStatus', 0),
                                 'detail_url': card_data.get('detailUrl', ''),
+                                # Web可访问的商品URL（用于浏览器打开）
+                                'web_url': f'https://www.goofish.com/item?id={item_id}',
                                 'pic_info': card_data.get('picInfo', {}),
-                                'detail_params': card_data.get('detailParams', {}),
+                                'detail_params': detail_params,
                                 'track_params': card_data.get('trackParams', {}),
                                 'item_label_data': card_data.get('itemLabelDataVO', {}),
                                 'card_type': card.get('cardType', 0)
