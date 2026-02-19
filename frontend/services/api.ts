@@ -146,6 +146,10 @@ export const syncOrders = async (cookieId?: string, status?: string): Promise<an
   return response.json();
 };
 
+export const syncSingleOrder = async (orderId: string): Promise<any> => {
+  return post(`/api/orders/${orderId}/refresh`);
+};
+
 export const manualShipOrder = async (orderIds: string[], shipMode: 'status_only' | 'full_delivery', content?: string): Promise<any> => {
     return post('/api/orders/manual-ship', {
         order_ids: orderIds,

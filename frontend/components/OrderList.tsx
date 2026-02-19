@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Order, OrderStatus, Item } from '../types';
-import { getOrders, syncOrders, manualShipOrder, updateOrder, importOrders, getItems } from '../services/api';
-import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin, Upload, ExternalLink } from 'lucide-react';
+import { getOrders, syncOrders, syncSingleOrder, manualShipOrder, updateOrder, deleteOrder, importOrders, getItems } from '../services/api';
+import { Search, MoreHorizontal, Truck, RefreshCw, Copy, ChevronLeft, ChevronRight, PackageCheck, Edit, Eye, Plus, Save, X, User as UserIcon, Phone, MapPin, Upload, ExternalLink, Trash2 } from 'lucide-react';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
@@ -63,6 +63,8 @@ const OrderList: React.FC = () => {
     quantity: 1,
     amount: ''
   });
+  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   // 搜索过滤订单
   const filterOrders = (ordersToFilter: Order[]): Order[] => {
@@ -270,6 +272,38 @@ const OrderList: React.FC = () => {
     }
   };
 
+  const handleSyncSingle = async (orderId: string) => {
+    setSyncingOrderId(orderId);
+    try {
+      const result = await syncSingleOrder(orderId);
+      if (result.success) {
+        await loadOrders();
+      } else {
+        alert(result.message || '同步失败');
+      }
+    } catch (error: any) {
+      console.error('同步订单失败:', error);
+      alert(error?.message || '同步失败，请重试');
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
+
+  const handleDelete = async (orderId: string) => {
+    if (!confirm('确认删除该订单吗？删除后无法恢复。')) return;
+    setDeletingOrderId(orderId);
+    try {
+      await deleteOrder(orderId);
+      setAllOrders(prev => prev.filter(o => o.order_id !== orderId));
+    } catch (error: any) {
+      console.error('删除订单失败:', error);
+      alert(error?.message || '删除失败，请重试');
+      await loadOrders();
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
@@ -329,20 +363,20 @@ const OrderList: React.FC = () => {
 
         {/* Table */}
         <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse table-fixed">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
-                <th className="px-8 py-5 w-1/3">订单信息</th>
-                <th className="px-6 py-5">买家信息</th>
-                <th className="px-6 py-5">实付金额</th>
-                <th className="px-6 py-5">当前状态</th>
-                <th className="px-6 py-5 text-right">操作</th>
+                <th className="px-6 py-5" style={{width: '28%'}}>订单信息</th>
+                <th className="px-6 py-5" style={{width: '26%'}}>买家信息</th>
+                <th className="px-6 py-5" style={{width: '11%'}}>实付金额</th>
+                <th className="px-6 py-5" style={{width: '13%'}}>当前状态</th>
+                <th className="px-6 py-5 text-right" style={{width: '22%'}}>操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-[#FFFDE7]/50 transition-colors group">
-                  <td className="px-8 py-5">
+                  <td className="px-6 py-5">
                     <div className="flex items-center gap-5">
                       <div className="w-14 h-14 rounded-xl bg-gray-100 overflow-hidden shadow-sm border border-gray-100 flex-shrink-0">
                         {order.item_image ? (
@@ -415,10 +449,26 @@ const OrderList: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleEdit(order)}
-                      className="text-gray-400 hover:text-black p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                      className="mr-2 text-gray-400 hover:text-black p-2 rounded-xl hover:bg-gray-100 transition-colors"
                       title="编辑订单"
                     >
                       <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleSyncSingle(order.order_id)}
+                      disabled={syncingOrderId === order.order_id}
+                      className="mr-2 text-gray-400 hover:text-green-600 p-2 rounded-xl hover:bg-green-50 transition-colors disabled:opacity-50"
+                      title="同步订单"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${syncingOrderId === order.order_id ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(order.order_id)}
+                      disabled={deletingOrderId === order.order_id}
+                      className="text-gray-400 hover:text-red-500 p-2 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                      title="删除订单"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>

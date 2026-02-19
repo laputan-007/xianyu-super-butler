@@ -6059,6 +6059,106 @@ def delete_order(order_id: str, current_user: Dict[str, Any] = Depends(get_curre
         raise HTTPException(status_code=500, detail=f"删除订单失败: {str(e)}")
 
 
+@app.post('/api/orders/{order_id}/refresh')
+async def refresh_single_order(
+    order_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """刷新单条订单状态"""
+    try:
+        from db_manager import db_manager
+        from utils.order_fetcher_optimized import process_orders_batch
+
+        user_id = current_user['user_id']
+        log_with_user('info', f"刷新单条订单: {order_id}", current_user)
+
+        # 获取用户的所有Cookie
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        # 验证订单存在且属于当前用户
+        order = db_manager.get_order_by_id(order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="订单不存在")
+
+        cookie_id = order.get('cookie_id')
+        if not cookie_id or cookie_id not in user_cookies:
+            raise HTTPException(status_code=403, detail="无权刷新此订单")
+
+        cookies_str = user_cookies[cookie_id]
+        if not cookies_str:
+            raise HTTPException(status_code=400, detail="Cookie无效")
+
+        # 调用批量刷新函数处理单条订单
+        batch_results = await process_orders_batch(
+            order_ids=[order_id],
+            cookie_id=cookie_id,
+            cookie_string=cookies_str,
+            max_concurrent=1,
+            timeout=30,
+            headless=True,
+            use_pool=True,
+            force_refresh=True
+        )
+
+        if not batch_results or len(batch_results) == 0:
+            raise HTTPException(status_code=500, detail="刷新失败")
+
+        result = batch_results[0]
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=f"刷新失败: {result.get('error')}")
+
+        # 状态码映射
+        order_status = result.get('order_status', 'unknown')
+        if order_status and str(order_status).isdigit():
+            status_mapping = {
+                '1': 'processing',
+                '2': 'pending_ship',
+                '3': 'shipped',
+                '4': 'completed',
+                '5': 'refunding',
+                '6': 'cancelled',
+                '7': 'refunding',
+                '8': 'cancelled',
+                '9': 'refunding',
+                '10': 'cancelled',
+                '11': 'completed',
+                '12': 'cancelled',
+            }
+            order_status = status_mapping.get(str(order_status), order_status)
+
+        # 更新数据库
+        db_manager.insert_or_update_order(
+            order_id=order_id,
+            item_id=result.get('item_id') or None,
+            buyer_id=result.get('buyer_id') or None,
+            spec_name=result.get('spec_name') or None,
+            spec_value=result.get('spec_value') or None,
+            quantity=result.get('quantity') or None,
+            amount=result.get('amount') or None,
+            order_status=order_status,
+            cookie_id=cookie_id,
+            receiver_name=result.get('receiver_name') or None,
+            receiver_phone=result.get('receiver_phone') or None,
+            receiver_address=result.get('receiver_address') or None,
+        )
+
+        log_with_user('info', f"订单刷新成功: {order_id}, 新状态: {order_status}", current_user)
+        return JSONResponse({
+            "success": True,
+            "message": "订单刷新成功",
+            "data": {
+                "order_id": order_id,
+                "order_status": order_status,
+            }
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_with_user('error', f"刷新订单失败: {str(e)}", current_user)
+        raise HTTPException(status_code=500, detail=f"刷新订单失败: {str(e)}")
+
+
 def check_order_data_completeness(order: Dict[str, Any]) -> bool:
     """
     检查订单数据是否完整
