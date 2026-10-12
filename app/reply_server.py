@@ -15,6 +15,14 @@ import io
 import asyncio
 import sqlite3
 from collections import defaultdict, OrderedDict
+import mimetypes
+
+# Windows 注册表可能把 .js/.mjs 覆盖成 text/plain（部分软件会改写 HKCR），
+# mimetypes.init() 优先读注册表，导致 StaticFiles 以 text/plain 返回 JS。
+# 浏览器对 ES Module 脚本强制校验 MIME 类型，text/plain 会被直接拒绝执行，
+# 前端整页白屏，因此必须在挂载静态目录前显式覆盖回标准类型。
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
