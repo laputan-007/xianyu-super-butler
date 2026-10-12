@@ -205,6 +205,10 @@ class SendCodeRequest(BaseModel):
     # 发邮箱码前必须先通过图形验证码（防刷发件资源）
     captcha_session_id: Optional[str] = None
     captcha_code: Optional[str] = None
+    # 前端 sendVerificationCode 发送的是 session_id + code（不是上面两个
+    # captcha_* 字段），Pydantic 会丢弃未知字段，导致 captcha_code 恒为空、
+    # 注册流程永远被"请先输入图形验证码"拦下。接收旧字段名，端点内做回退。
+    code: Optional[str] = None
 
 
 class SendCodeResponse(BaseModel):
@@ -1087,12 +1091,15 @@ async def send_verification_code(request: SendCodeRequest):
         # 2. 强制图形验证码：一次请求内"先验后发"，
         #    避免两段式留下"验完不发"的绕过窗口。
         #    图形码错在冷却配额之前被拦下，不消耗邮箱发送次数
-        if not request.captcha_session_id or not request.captcha_code:
+        # 兼容前端旧字段名：session_id + code → captcha_session_id + captcha_code
+        captcha_session = request.captcha_session_id or request.session_id
+        captcha_code = request.captcha_code or request.code
+        if not captcha_session or not captcha_code:
             return SendCodeResponse(
                 success=False,
                 message="请先输入图形验证码"
             )
-        if not db_manager.verify_captcha(request.captcha_session_id, request.captcha_code):
+        if not db_manager.verify_captcha(captcha_session, captcha_code):
             return SendCodeResponse(
                 success=False,
                 message="图形验证码错误或已过期"
