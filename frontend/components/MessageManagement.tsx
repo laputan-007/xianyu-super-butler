@@ -39,7 +39,9 @@ import {
   getItems,
   getMessageFilters,
   getQuickPhrases,
+  sendChatImage,
   sendChatMessage,
+  uploadImage,
   useQuickPhrase,
   toggleMessageFilter,
 } from '../services/api';
@@ -50,9 +52,21 @@ type View = 'messages' | 'filters';
 type MobilePane = 'list' | 'chat';
 
 // 轮询间隔。会话列表与消息都要经 WebSocket 透传到闲鱼，频率过高会把账号
-// 打到限流（429 flow controled）；聊天场景 10 秒的延迟是可接受的。
+// 打到限流（429 flow controled）。消息轮询用自适应：会话活跃（近 45 秒
+// 有发送/切换/收到新消息）时 3 秒一轮保证即时性，空闲后退回 10 秒。
 const CONVERSATION_POLL_MS = 10000;
-const MESSAGE_POLL_MS = 10000;
+const MESSAGE_FAST_POLL_MS = 3000;
+const MESSAGE_IDLE_POLL_MS = 10000;
+const ACTIVITY_WINDOW_MS = 45000;
+// 本地乐观消息的保留窗口：服务端历史回显通常在一两秒内跟上，超过 30 秒
+// 仍没对上就视为发送异常，直接交给服务端列表
+const LOCAL_MESSAGE_TTL_S = 30;
+// 表情面板：常用表情 + 生意场景高频符号
+const EMOJI_CHOICES = [
+  '😀', '😄', '😊', '🥰', '😘', '😜', '🤗', '😎',
+  '🙏', '👍', '👌', '💪', '🤝', '✅', '❤️', '🎉',
+  '💰', '🧧', '📦', '🚚', '⭐', '🔥', '😢', '😅',
+];
 const READ_WATERMARKS_STORAGE_KEY = 'xianyu-message-read-watermarks-v2';
 const MAX_READ_WATERMARKS = 500;
 
@@ -201,6 +215,12 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   // 快捷短语：人工客服常用话术
   const [quickPhrases, setQuickPhrases] = useState<QuickPhrase[]>([]);
   const [showPhrases, setShowPhrases] = useState(false);
+  // 表情面板与图片发送
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [imageSending, setImageSending] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  // 消息轮询的活跃标记：发送/切换会话/收到新消息都会刷新它
+  const lastActivityRef = useRef(Date.now());
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -365,7 +385,30 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     if (!silent) setMessagesLoading(true);
     try {
       const result = await getChatMessages(activeAccountId, activeCid);
-      setMessages(result.messages || []);
+      const serverMessages = result.messages || [];
+      // 收到新消息（列表尾部有变化）时刷新活跃标记，让轮询保持快档
+      setMessages((current) => {
+        const serverLast = serverMessages[serverMessages.length - 1];
+        const currentLast = current[current.length - 1];
+        if (serverLast && currentLast && serverLast.messageId !== currentLast.messageId) {
+          lastActivityRef.current = Date.now();
+        }
+        // 合并本地乐观消息：服务端历史回显有延迟，短时间内保留本地已发的
+        // 文本/图片，待服务端出现对应记录（同方向同内容且时间接近）后自然让位
+        const nowSeconds = Date.now() / 1000;
+        const localPending = current.filter((message) => {
+          if (!message.messageId.startsWith('local-')) return false;
+          if (nowSeconds - (message.time || 0) > LOCAL_MESSAGE_TTL_S) return false;
+          const duplicated = serverMessages.some(
+            (server) =>
+              server.isSelf === message.isSelf &&
+              Math.abs((server.time || 0) - (message.time || 0)) < LOCAL_MESSAGE_TTL_S &&
+              (message.type === 'image' ? server.type === 'image' : server.text === message.text)
+          );
+          return !duplicated;
+        });
+        return localPending.length > 0 ? [...serverMessages, ...localPending] : serverMessages;
+      });
     } catch (error) {
       if (!silent) notify(`加载聊天记录失败：${(error as Error).message}`, 'error');
     } finally {
@@ -430,9 +473,19 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
 
   useEffect(() => {
     if (!isActive || view !== 'messages' || !activeAccountId || !activeCid) return undefined;
-    void loadMessages(true);
-    const timer = window.setInterval(() => void loadMessages(true), MESSAGE_POLL_MS);
-    return () => window.clearInterval(timer);
+    // 会话切换即视为活跃，先快轮询
+    lastActivityRef.current = Date.now();
+    // 自适应轮询：活跃（近 45 秒有发送/切换/新消息）3 秒一轮，空闲退回
+    // 10 秒。用自排程 setTimeout 而不是固定 interval，每轮按最新活跃度定间隔。
+    let timer = 0;
+    const tick = () => {
+      void loadMessages(true);
+      const fast = Date.now() - lastActivityRef.current < ACTIVITY_WINDOW_MS;
+      timer = window.setTimeout(tick, fast ? MESSAGE_FAST_POLL_MS : MESSAGE_IDLE_POLL_MS);
+    };
+    timer = window.setTimeout(tick, MESSAGE_FAST_POLL_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, view, activeAccountId, activeCid]);
 
   useEffect(() => {
@@ -473,18 +526,93 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     if (!text || !activeConversation || !activeAccountId || sending) return;
     setSending(true);
     try {
-      await sendChatMessage(activeAccountId, {
+      const result = await sendChatMessage(activeAccountId, {
         cid: activeConversation.cid,
         to_user_id: activeConversation.otherUserId,
         text,
       });
       setDraft('');
-      await Promise.all([loadMessages(true), loadConversations(true)]);
+      lastActivityRef.current = Date.now();
+      // 乐观追加：立即上屏不等服务端历史（历史回显有延迟，原来要等下一轮
+      // 10 秒轮询才能看见自己发的消息）。loadMessages 会做去重合并。
+      setMessages((current) => [
+        ...current,
+        {
+          messageId: result.data?.messageId || `local-${Date.now()}`,
+          senderId: activeAccountId,
+          senderName: '我',
+          isSelf: true,
+          type: 'text' as const,
+          text,
+          images: [],
+          time: Date.now() / 1000,
+        },
+      ]);
       notify('消息已发送', 'success');
+      // 稍等服务端历史跟上后回填权威列表（会话摘要/排序一并刷新）
+      window.setTimeout(() => {
+        void loadMessages(true);
+        void loadConversations(true);
+      }, 1500);
     } catch (error) {
       notify(`发送失败：${(error as Error).message}`, 'error');
     } finally {
       setSending(false);
+    }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    setDraft((current) => current + emoji);
+    setShowEmoji(false);
+  };
+
+  const handleImagePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // 允许连续选择同一张图：选完即清空 value
+    event.target.value = '';
+    if (!file || !activeConversation || !activeAccountId || imageSending) return;
+    if (!file.type.startsWith('image/')) {
+      notify('请选择图片文件', 'warning');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      notify('图片不能超过 5MB', 'warning');
+      return;
+    }
+    setImageSending(true);
+    try {
+      const uploaded = await uploadImage(file);
+      const imageUrl = uploaded.image_url;
+      if (!imageUrl) throw new Error(uploaded.message || '图片上传失败');
+      await sendChatImage(activeAccountId, {
+        cid: activeConversation.cid,
+        to_user_id: activeConversation.otherUserId,
+        image_url: imageUrl,
+      });
+      lastActivityRef.current = Date.now();
+      // 乐观追加：本地路径先上屏（买家收到的是 CDN 地址），随后由服务端历史接管
+      setMessages((current) => [
+        ...current,
+        {
+          messageId: `local-img-${Date.now()}`,
+          senderId: activeAccountId,
+          senderName: '我',
+          isSelf: true,
+          type: 'image' as const,
+          text: '',
+          images: [imageUrl],
+          time: Date.now() / 1000,
+        },
+      ]);
+      notify('图片已发送', 'success');
+      window.setTimeout(() => {
+        void loadMessages(true);
+        void loadConversations(true);
+      }, 1500);
+    } catch (error) {
+      notify(`图片发送失败：${(error as Error).message}`, 'error');
+    } finally {
+      setImageSending(false);
     }
   };
 
@@ -828,17 +956,66 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
 
             <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
               <div className="mb-2 flex items-center gap-4 text-[var(--text-muted)]">
-                <button type="button" title="表情（暂未开放）" className="hover:text-[var(--text)]">
-                  <Smile className="h-5 w-5" />
+                <div className="relative">
+                  <button
+                    type="button"
+                    title="表情"
+                    onClick={() => {
+                      setShowEmoji(value => !value);
+                      setShowPhrases(false);
+                    }}
+                    className={`hover:text-[var(--text)] ${showEmoji ? 'text-[var(--text)]' : ''}`}
+                    aria-label="插入表情"
+                  >
+                    <Smile className="h-5 w-5" />
+                  </button>
+                  {showEmoji && (
+                    <div className="absolute bottom-8 left-0 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
+                      <div className="grid grid-cols-8 gap-1">
+                        {EMOJI_CHOICES.map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => insertEmoji(emoji)}
+                            className="rounded-md p-1.5 text-lg leading-none transition-colors hover:bg-[var(--surface-hover)]"
+                            aria-label={`插入表情 ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 border-t border-[var(--border)] px-1 pt-1.5 text-[11px] text-[var(--text-soft)]">
+                        点击表情插入到输入框
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  title="发送图片"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={imageSending || !activeAccount?.connected}
+                  className="hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="发送图片"
+                >
+                  {imageSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Image className="h-5 w-5" />}
                 </button>
-                <button type="button" title="图片（暂未开放）" className="hover:text-[var(--text)]">
-                  <Image className="h-5 w-5" />
-                </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={event => void handleImagePick(event)}
+                  aria-label="选择图片"
+                />
                 <div className="relative">
                   <button
                     type="button"
                     title="快捷短语"
-                    onClick={() => setShowPhrases(value => !value)}
+                    onClick={() => {
+                      setShowPhrases(value => !value);
+                      setShowEmoji(false);
+                    }}
                     className={`hover:text-[var(--text)] ${showPhrases ? 'text-[var(--text)]' : ''}`}
                   >
                     <Zap className="h-5 w-5" />

@@ -1272,6 +1272,12 @@ class ChatSendMessageRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
 
 
+class ChatSendImageRequest(BaseModel):
+    cid: str = Field(..., min_length=1, max_length=200)
+    to_user_id: str = Field(..., min_length=1, max_length=100)
+    image_url: str = Field(..., min_length=1, max_length=2000)
+
+
 def verify_api_key(api_key: str) -> bool:
     """验证API秘钥"""
     try:
@@ -1576,6 +1582,34 @@ async def send_chat_message(
         f"会话={request.cid}, 对方={request.to_user_id}, 长度={len(request.text)}"
     )
     return {"success": True, "message": "发送成功", "data": {"messageId": message_id}}
+
+
+@app.post("/chat/send-image/{cookie_id}")
+async def send_chat_image(
+    cookie_id: str,
+    request: ChatSendImageRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """人工发送图片消息：复用自动发货的图片链路，
+    本地 /static/uploads/ 路径会先上传到闲鱼 CDN 再发送。"""
+    _get_owned_chat_account(cookie_id, current_user)
+    image_url = request.image_url.strip()
+    if not image_url.startswith("/static/uploads/"):
+        raise HTTPException(status_code=400, detail="仅支持发送本地上传的图片")
+    await _run_on_account_loop(
+        cookie_id,
+        lambda instance: instance.send_image_msg(
+            instance.ws,
+            request.cid.strip(),
+            request.to_user_id.strip(),
+            image_url,
+        ),
+    )
+    logger.info(
+        f"【{cookie_id}】后台用户 {current_user.get('username')} 人工发送闲鱼图片，"
+        f"会话={request.cid}, 对方={request.to_user_id}"
+    )
+    return {"success": True, "message": "发送成功"}
 
 
 @app.post('/send-message', response_model=SendMessageResponse)

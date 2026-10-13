@@ -1240,6 +1240,13 @@ export const sendChatMessage = async (
   return post(`/chat/send/${encodeURIComponent(cookieId)}`, data);
 };
 
+export const sendChatImage = async (
+  cookieId: string,
+  data: { cid: string; to_user_id: string; image_url: string }
+): Promise<{ success: boolean; message: string }> => {
+  return post(`/chat/send-image/${encodeURIComponent(cookieId)}`, data);
+};
+
 // Default Reply
 export const getDefaultReplies = async (): Promise<Record<string, DefaultReply>> => {
   return get('/default-replies');
