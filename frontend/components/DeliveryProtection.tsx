@@ -57,8 +57,10 @@ const DeliveryProtection: React.FC<DeliveryProtectionProps> = ({
         getDeliveryBlockRules(selectedAccount),
         getPersonalBlacklist(selectedAccount),
       ]);
-      setRules(ruleData);
-      setBlacklist(blacklistData);
+      // 后端异常形状（如代理漏配拿到 HTML）时兜底为空数组，
+      // 避免 undefined 进入 state 导致 rules.map 渲染崩溃白屏
+      setRules(Array.isArray(ruleData) ? ruleData : []);
+      setBlacklist(Array.isArray(blacklistData) ? blacklistData : []);
     } catch (error) {
       notify(`加载发货保护配置失败：${(error as Error).message}`);
     } finally {
