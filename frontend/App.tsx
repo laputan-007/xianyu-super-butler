@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
+import gsap from 'gsap';
 import Sidebar from './components/Sidebar';
 import GlobalFeedback from './components/GlobalFeedback';
 import AnnouncementBanner from './components/AnnouncementBanner';
@@ -7,7 +8,7 @@ import CaptchaInput from './components/CaptchaInput';
 import { useCaptcha } from './lib/useCaptcha';
 import { validateEmail, validatePassword, validateUsername } from './lib/authValidation';
 import { login, verifyToken, getPublicSettings, register, sendVerificationCode } from './services/api';
-import { ShieldCheck, ArrowRight, Loader2, User, Lock, Menu, Mail, KeyRound, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Loader2, User, Lock, Menu, Mail, KeyRound, CheckCircle2, Zap, MessageCircle, Users, Eye, EyeOff, Package, Bell } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const AccountList = lazy(() => import('./components/AccountList'));
@@ -57,6 +58,7 @@ const App: React.FC = () => {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   // 注册成功后回到登录页时的提示
@@ -70,6 +72,7 @@ const App: React.FC = () => {
   const [allowRegister, setAllowRegister] = useState(false);
   const [needEmailCode, setNeedEmailCode] = useState(true);
   const [regForm, setRegForm] = useState({ username: '', email: '', password: '', code: '' });
+  const [showRegPassword, setShowRegPassword] = useState(false);
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
   const [regNotice, setRegNotice] = useState('');
@@ -219,6 +222,144 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
+  const loginRootRef = useRef<HTMLDivElement>(null);
+
+  // 登录页动效总编排：入场、循环动效、鼠标视差。
+  // - 入场 tween 用 clearProps 收尾，避免残留行内样式压制 CSS hover 过渡
+  // - 视差的 quickTo 建在 context 里随 revert 一起回收；DOM 监听手动增删
+  // - prefers-reduced-motion 时跳过全部装饰性动效（错误抖动等功能反馈保留）
+  useEffect(() => {
+    if (isLoggedIn || checkingAuth || !loginRootRef.current) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    let parallaxLayers: Array<{ qx: (v: number) => void; qy: (v: number) => void; depth: number }> = [];
+    const ctx = gsap.context(() => {
+      if (reduced) return;
+      gsap
+        .timeline({ defaults: { ease: 'power3.out', clearProps: 'all' } })
+        // 表单区最先出现：用户的等待感在表单，别让封面演完才轮到它
+        .from('.login-brand, .login-form-header', { y: 16, opacity: 0, duration: 0.45, stagger: 0.08 }, 0)
+        .from('.login-cover-logo-wrap', { y: -28, opacity: 0, duration: 0.7 }, 0.1)
+        .from('.login-hero', {
+          y: 36,
+          opacity: 0,
+          rotation: -8,
+          filter: 'blur(10px)',
+          duration: 0.8,
+          ease: 'back.out(1.5)',
+        }, 0.2)
+        .from('.login-eyebrow', { x: -22, opacity: 0, duration: 0.5 }, 0.5)
+        .from('.login-title-char', {
+          y: 64,
+          opacity: 0,
+          rotate: (i: number) => (i % 2 === 0 ? -9 : 9),
+          filter: 'blur(10px)',
+          stagger: 0.05,
+          duration: 0.85,
+          ease: 'back.out(1.6)',
+        }, 0.6)
+        .from('.login-slogan', { y: 18, opacity: 0, duration: 0.6 }, 1.05)
+        .from('.login-chip', { y: 16, opacity: 0, stagger: 0.07, duration: 0.5, ease: 'back.out(1.7)' }, 1.15)
+        // 底部信息压轴逐个进场
+        .from('.login-extras', { y: 14, opacity: 0, duration: 0.5 }, 1.5)
+        .from('.login-trust', { y: 10, opacity: 0, duration: 0.45 }, 1.7);
+
+      // 循环动效：logo 漂浮、光环呼吸、光晕呼吸、吉祥物游动
+      gsap.to('.login-cover-logo', { y: 10, duration: 2.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      gsap.to('.login-logo-glow', { scale: 1.3, opacity: 0.5, duration: 2.8, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      gsap.utils.toArray<HTMLElement>('.login-glow').forEach((el, i) => {
+        gsap.to(el, { scale: 1.18, duration: 4 + i * 1.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      });
+      gsap.utils.toArray<HTMLElement>('.login-floaty').forEach((el, i) => {
+        gsap.to(el, {
+          y: 16 + i * 7,
+          x: i % 2 ? 10 : -8,
+          rotation: i % 2 ? 6 : -5,
+          duration: 3.2 + i * 0.9,
+          yoyo: true,
+          repeat: -1,
+          ease: 'sine.inOut',
+        });
+      });
+      gsap.to('.login-mascot-watermark', { rotation: 4, duration: 9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      // 主视觉插画：缓慢漂浮 + 轻微摇摆
+      gsap.to('.login-hero', { y: 7, rotation: 2.5, duration: 3.4, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+
+      // 鼠标视差：封面各层按深度位移，quickTo 平滑跟手
+      const layers: Array<[string, number]> = [
+        ['.login-mascot-watermark', 24],
+        ['.login-hero-layer', 14],
+        ['.login-floaty-layer', 16],
+        ['.login-glow', 10],
+        ['.login-cover-content', 6],
+      ];
+      parallaxLayers = layers.flatMap(([sel, depth]) =>
+        Array.from(loginRootRef.current?.querySelectorAll(sel) ?? []).map(el => ({
+          qx: gsap.quickTo(el, 'x', { duration: 0.8, ease: 'power3.out' }),
+          qy: gsap.quickTo(el, 'y', { duration: 0.8, ease: 'power3.out' }),
+          depth,
+        }))
+      );
+    }, loginRootRef);
+
+    // 视差事件监听挂在封面上，卸载时手动移除
+    const cover = loginRootRef.current?.querySelector('aside');
+    const onPointerMove = (ev: MouseEvent) => {
+      const rect = cover?.getBoundingClientRect();
+      if (!rect) return;
+      const dx = (ev.clientX - rect.left) / rect.width - 0.5;
+      const dy = (ev.clientY - rect.top) / rect.height - 0.5;
+      parallaxLayers.forEach(({ qx, qy, depth }) => {
+        qx(dx * depth * 2);
+        qy(dy * depth * 2);
+      });
+    };
+    const onPointerLeave = () => parallaxLayers.forEach(({ qx, qy }) => { qx(0); qy(0); });
+    if (!reduced && cover) {
+      cover.addEventListener('mousemove', onPointerMove);
+      cover.addEventListener('mouseleave', onPointerLeave);
+    }
+    return () => {
+      if (cover) {
+        cover.removeEventListener('mousemove', onPointerMove);
+        cover.removeEventListener('mouseleave', onPointerLeave);
+      }
+      ctx.revert();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, checkingAuth]);
+
+  // 表单字段入场：登录/注册切换时随表单重新挂载而重放
+  useEffect(() => {
+    if (isLoggedIn || checkingAuth || !loginRootRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.from('.login-field', { y: 14, opacity: 0, stagger: 0.06, duration: 0.45, ease: 'power2.out', clearProps: 'all' });
+      gsap.from('.login-submit', { y: 10, opacity: 0, duration: 0.5, delay: 0.3, ease: 'power2.out', clearProps: 'all' });
+    }, loginRootRef);
+    return () => ctx.revert();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, checkingAuth, authMode]);
+
+  // 登录/注册失败时抖一下表单卡片：错误出现即触发（清空再报错会重新抖）
+  useEffect(() => {
+    if (!loginError || isLoggedIn || !loginRootRef.current) return;
+    gsap.fromTo(loginRootRef.current.querySelector('.login-form-card'), { x: 0 }, {
+      keyframes: { x: [0, -12, 12, -8, 8, -4, 4, 0] },
+      duration: 0.55,
+      ease: 'power2.out',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginError]);
+
+  useEffect(() => {
+    if (!regError || isLoggedIn || !loginRootRef.current) return;
+    gsap.fromTo(loginRootRef.current.querySelector('.login-form-card'), { x: 0 }, {
+      keyframes: { x: [0, -12, 12, -8, 8, -4, 4, 0] },
+      duration: 0.55,
+      ease: 'power2.out',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regError]);
+
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
       setLoginLoading(true);
@@ -267,67 +408,166 @@ const App: React.FC = () => {
   // Login Screen Component
   if (!isLoggedIn) {
     return (
-      <div className="relative min-h-screen bg-[var(--app-bg)] p-4 font-sans text-[var(--text)] sm:p-6">
-        <ThemeToggle compact className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6" />
-        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-5xl items-center justify-center sm:min-h-[calc(100vh-3rem)]">
-          <div className="grid w-full overflow-hidden rounded-3xl bg-[var(--surface)] lg:grid-cols-[1.05fr_0.95fr]"
-               style={{ border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
-            {/* 品牌侧：黄色渐变作为整站第一印象 */}
+      <div ref={loginRootRef} className="flex min-h-screen bg-[var(--app-bg)] font-sans text-[var(--text)]">
+        {/* 左侧封面：暗色底衬托闲鱼黄 logo，与右侧表单形成分屏布局 */}
+        <aside
+          className="relative hidden w-[44%] shrink-0 select-none flex-col overflow-hidden lg:flex"
+          style={{ background: 'linear-gradient(165deg, #241f13 0%, #17130a 55%, #0d0b06 100%)' }}
+        >
+          {/* 左上柔光：呼应 logo 位置，让画面有主光方向 */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse 60% 50% at 12% 0%, rgba(255,229,0,0.08) 0%, transparent 70%)' }}
+          />
+          {/* 点阵纹理：上密下疏的径向蒙版，比均匀铺满更有设计感 */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              backgroundImage: 'radial-gradient(rgba(255,229,0,0.16) 1px, transparent 1px)',
+              backgroundSize: '22px 22px',
+              maskImage: 'radial-gradient(ellipse 75% 65% at 28% 18%, black 25%, transparent 95%)',
+              WebkitMaskImage: 'radial-gradient(ellipse 75% 65% at 28% 18%, black 25%, transparent 95%)',
+            }}
+          />
+          {/* 呼吸光晕：左下角一团，插画身后一团（兼作插画光环） */}
+          <div
+            className="login-glow pointer-events-none absolute -bottom-44 -left-28 h-[24rem] w-[24rem] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(255,213,0,0.12) 0%, transparent 70%)' }}
+          />
+          <div
+            className="login-glow pointer-events-none absolute right-1 top-5 h-48 w-48 rounded-full opacity-80"
+            style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.22) 0%, transparent 65%)' }}
+          />
+          {/* 吉祥物水印：右下角超大半透明剪影，撑住画面重心 */}
+          <img
+            src="/static/login-mascot.png"
+            alt=""
+            draggable={false}
+            className="login-mascot-watermark pointer-events-none absolute -bottom-14 -right-12 h-72 w-72 opacity-[0.07]"
+          />
+          {/* 星点：错峰闪烁，打破暗背景的静 */}
+          {[
+            { top: '14%', left: '30%', size: 'h-1.5 w-1.5', delay: '0s', opacity: 0.7 },
+            { top: '9%', left: '58%', size: 'h-1 w-1', delay: '1.3s', opacity: 0.5 },
+            { top: '46%', left: '84%', size: 'h-1.5 w-1.5', delay: '0.7s', opacity: 0.6 },
+            { top: '72%', left: '88%', size: 'h-1 w-1', delay: '1.9s', opacity: 0.45 },
+          ].map(s => (
+            <span
+              key={`${s.top}-${s.left}`}
+              className={`login-sparkle pointer-events-none absolute ${s.size} animate-pulse rounded-full bg-[#ffe566]`}
+              style={{ top: s.top, left: s.left, opacity: s.opacity, animationDelay: s.delay }}
+            />
+          ))}
+          {/* 金色接缝：与右侧表单的分界线，一缕从上到下的渐变金线 */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-[#ffe566]/30 to-transparent" />
+          {/* 封面主视觉：闲鱼插画，缓慢漂浮，悬停弹跳 */}
+          <div className="login-hero-layer absolute right-8 top-12">
+            <img
+              src="/static/login-art.png"
+              alt="闲鱼"
+              draggable={false}
+              className="login-hero h-36 w-36 drop-shadow-[0_14px_32px_rgba(255,213,0,0.35)]"
+              onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.1, duration: 0.35, ease: 'back.out(2)' })}
+              onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
+            />
+          </div>
+          {/* 小吉祥物：中右区域游动 */}
+          <div className="login-floaty-layer absolute right-44 top-72">
+            <img
+              src="/static/login-mascot.png"
+              alt=""
+              draggable={false}
+              className="login-floaty h-9 w-9 opacity-50"
+              onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.4, duration: 0.35, ease: 'back.out(2)' })}
+              onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
+            />
+          </div>
+
+          <div className="login-cover-content relative flex h-full flex-col justify-between p-12">
             <div
-              className="theme-brand-panel hidden min-h-[560px] flex-col justify-between p-10 lg:flex"
-              style={{ background: 'linear-gradient(155deg, #fff8d1 0%, #ffe566 55%, #ffe100 100%)' }}
+              className="login-cover-logo-wrap relative h-20 w-20"
+              onMouseEnter={e => {
+                const logo = e.currentTarget.querySelector('.login-cover-logo');
+                if (logo) gsap.to(logo, { keyframes: { rotation: [0, -8, 6, -3, 0] }, duration: 0.7, ease: 'power2.out' });
+              }}
             >
-              <div>
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/70 backdrop-blur">
-                  <span className="text-2xl font-black text-[#2a2416]">闲</span>
-                </div>
-                <p className="mt-7 text-xs font-bold tracking-widest text-[#8a6300]">XIANYU SUPER BUTLER</p>
-                <h1 className="mt-2 max-w-md text-3xl font-extrabold leading-tight text-[#2a2416]">
-                  闲鱼超级管家
-                </h1>
-                <p className="mt-4 max-w-md text-sm leading-7 text-[#6b5200]">
-                  统一处理账号、商品、订单、消息、回复和自动发货。
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {['账号与商品同步', '订单与发货处理', '消息与自动回复', '通知与运行日志'].map(item => (
-                  <div
-                    key={item}
-                    className="rounded-2xl bg-white/70 px-4 py-3 text-xs font-bold text-[#544c39] backdrop-blur"
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
+              <div
+                className="login-logo-glow absolute -inset-4 rounded-[2rem]"
+                style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.4) 0%, transparent 65%)' }}
+              />
+              <img
+                src="/static/login-cover.png"
+                alt="闲鱼超级管家"
+                className="login-cover-logo relative h-20 w-20"
+                draggable={false}
+              />
             </div>
 
-            <div className="flex min-h-[500px] items-center p-7 sm:p-10">
-              <div className="mx-auto w-full max-w-sm animate-fade-in">
-                <div className="mb-8">
-                  <div
-                    className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl lg:hidden"
-                    style={{
-                      background: 'linear-gradient(140deg, var(--brand-300), var(--brand))',
-                      boxShadow: 'var(--shadow-brand)',
-                    }}
-                  >
-                    <span className="text-xl font-black text-[#2a2416]">闲</span>
-                  </div>
-                  <h2 className="text-2xl font-extrabold text-gray-900">
-                    {authMode === 'login' ? '登录管理后台' : '注册新账号'}
-                  </h2>
-                  <p className="mt-2 text-sm text-gray-500">
-                    {authMode === 'login' ? '使用管理员账号进入工作台' : '创建账号后即可登录工作台'}
-                  </p>
+            <div>
+              <p className="login-eyebrow flex items-center gap-2 text-xs font-bold tracking-[0.3em] text-[#ffe566]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ffe566]" />
+                XIANYU SUPER BUTLER
+                <span className="h-px w-10 bg-gradient-to-r from-[#ffe566]/60 to-transparent" />
+              </p>
+              <h1
+                className="login-title mt-4 bg-gradient-to-b from-white via-white to-[#ffedb0] bg-clip-text text-5xl font-extrabold leading-tight text-transparent"
+                aria-label="闲鱼超级管家"
+              >
+                {'闲鱼超级管家'.split('').map((ch, i) => (
+                  <span key={i} className="login-title-char inline-block">{ch}</span>
+                ))}
+              </h1>
+              <p className="login-slogan mt-5 max-w-md text-sm leading-7 text-white/70">
+                统一处理账号、商品、订单、消息、回复和自动发货，让每一笔闲鱼生意自动运转。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { icon: Users, label: '账号与商品同步' },
+                { icon: Package, label: '订单与发货处理' },
+                { icon: MessageCircle, label: '消息与自动回复' },
+                { icon: Bell, label: '通知与运行日志' },
+              ].map(({ icon: Icon, label }) => (
+                <div
+                  key={label}
+                  className="login-chip flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-white/85 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[#ffe566]/40 hover:bg-white/10"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ffe566]/15 text-[#ffe566]">
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
+                  {label}
                 </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        {/* 右侧登录/注册表单 */}
+        <main className="relative flex min-h-screen flex-1 flex-col">
+          <ThemeToggle compact className="absolute right-5 top-5 z-10" />
+          <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
+            <div className="login-form-card w-full max-w-sm animate-fade-in">
+              <div className="login-brand mb-6 flex items-center gap-2.5">
+                <img src="/static/login-cover.png" alt="闲鱼超级管家" className="h-8 w-8" draggable={false} />
+                <span className="text-sm font-extrabold text-[var(--text)]">闲鱼超级管家</span>
+              </div>
+              <div className="login-form-header mb-8">
+                <h2 className="text-2xl font-extrabold text-[var(--text)]">
+                  {authMode === 'login' ? '登录管理后台' : '注册新账号'}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  {authMode === 'login' ? '使用管理员账号进入工作台' : '创建账号后即可登录工作台'}
+                </p>
+              </div>
 
                 {authMode === 'login' && (
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-4">
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">管理员账号</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">管理员账号</span>
                           <div className="relative group">
-                            <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                            <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                             <input
                                 type="text"
                                 placeholder="请输入账号"
@@ -339,19 +579,27 @@ const App: React.FC = () => {
                             />
                           </div>
                       </label>
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">密码</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">密码</span>
                           <div className="relative group">
-                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                             <input
-                                type="password"
+                                type={showPassword ? 'text' : 'password'}
                                 placeholder="请输入密码"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 autoComplete="current-password"
                                 required
-                                className="ios-input h-11 w-full rounded-md py-2.5 pl-10 pr-4 text-sm"
+                                className="ios-input h-11 w-full rounded-md py-2.5 pl-10 pr-11 text-sm"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(v => !v)}
+                                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
+                            >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
                           </div>
                       </label>
                       {loginCaptcha.required && (
@@ -365,13 +613,13 @@ const App: React.FC = () => {
                   </div>
 
                   {loginNotice && (
-                      <div role="status" className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-700">
+                      <div role="status" className="flex animate-fade-in items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-700">
                           <CheckCircle2 className="h-4 w-4 shrink-0" /> {loginNotice}
                       </div>
                   )}
 
                   {loginError && (
-                      <div role="alert" className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+                      <div role="alert" className="flex animate-fade-in items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
                           <ShieldCheck className="h-4 w-4 shrink-0" /> {loginError}
                       </div>
                   )}
@@ -379,7 +627,7 @@ const App: React.FC = () => {
                   <button
                     type="submit"
                     disabled={loginLoading}
-                    className="ios-btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-md text-sm disabled:opacity-70"
+                    className="ios-btn-primary login-submit flex h-11 w-full items-center justify-center gap-2 rounded-md text-sm disabled:opacity-70"
                   >
                     {loginLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>登录 <ArrowRight className="h-4 w-4" /></>}
                   </button>
@@ -389,10 +637,10 @@ const App: React.FC = () => {
                 {authMode === 'register' && (
                 <form onSubmit={handleRegister} className="space-y-5">
                   <div className="space-y-4">
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">账号</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">账号</span>
                           <div className="relative group">
-                            <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                            <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                             <input
                                 type="text"
                                 placeholder="设置登录账号"
@@ -404,10 +652,10 @@ const App: React.FC = () => {
                             />
                           </div>
                       </label>
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">邮箱</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">邮箱</span>
                           <div className="relative group">
-                            <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                            <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                             <input
                                 type="email"
                                 placeholder="用于找回账号"
@@ -419,19 +667,27 @@ const App: React.FC = () => {
                             />
                           </div>
                       </label>
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">密码</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">密码</span>
                           <div className="relative group">
-                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                             <input
-                                type="password"
+                                type={showRegPassword ? 'text' : 'password'}
                                 placeholder="至少 8 位，含字母和数字"
                                 value={regForm.password}
                                 onChange={e => setRegForm({ ...regForm, password: e.target.value })}
                                 autoComplete="new-password"
                                 required
-                                className="ios-input h-11 w-full rounded-md py-2.5 pl-10 pr-4 text-sm"
+                                className="ios-input h-11 w-full rounded-md py-2.5 pl-10 pr-11 text-sm"
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowRegPassword(v => !v)}
+                                aria-label={showRegPassword ? '隐藏密码' : '显示密码'}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
+                            >
+                                {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
                           </div>
                       </label>
                       {needEmailCode && (
@@ -442,11 +698,11 @@ const App: React.FC = () => {
                           onCodeChange={regCaptcha.setCode}
                           onRefresh={() => void regCaptcha.refresh()}
                       />
-                      <label className="block">
-                          <span className="mb-1.5 block text-xs font-bold text-gray-600">邮箱验证码</span>
+                      <label className="login-field block">
+                          <span className="mb-1.5 block text-xs font-bold text-[var(--text-muted)]">邮箱验证码</span>
                           <div className="flex gap-2">
                             <div className="relative group flex-1">
-                              <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-700" />
+                              <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-soft)] group-focus-within:text-[var(--text)]" />
                               <input
                                   type="text"
                                   placeholder="请输入验证码"
@@ -470,13 +726,13 @@ const App: React.FC = () => {
                   </div>
 
                   {regNotice && (
-                      <div role="status" className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-700">
+                      <div role="status" className="flex animate-fade-in items-center gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-700">
                           <CheckCircle2 className="h-4 w-4 shrink-0" /> {regNotice}
                       </div>
                   )}
 
                   {regError && (
-                      <div role="alert" className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+                      <div role="alert" className="flex animate-fade-in items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
                           <ShieldCheck className="h-4 w-4 shrink-0" /> {regError}
                       </div>
                   )}
@@ -484,7 +740,7 @@ const App: React.FC = () => {
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="ios-btn-primary flex h-11 w-full items-center justify-center gap-2 rounded-md text-sm disabled:opacity-70"
+                    className="ios-btn-primary login-submit flex h-11 w-full items-center justify-center gap-2 rounded-md text-sm disabled:opacity-70"
                   >
                     {regLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>注册 <ArrowRight className="h-4 w-4" /></>}
                   </button>
@@ -492,7 +748,7 @@ const App: React.FC = () => {
                 )}
 
                 {allowRegister && (
-                  <div className="mt-5 text-center text-xs text-gray-500">
+                  <div className="mt-5 text-center text-xs text-[var(--text-muted)]">
                     {authMode === 'login' ? (
                       <>还没有账号？
                         <button
@@ -517,13 +773,33 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <p className="mt-7 border-t border-gray-100 pt-5 text-xs font-medium text-gray-400">
+                <div className="login-extras mt-8 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-6">
+                  {[
+                    { icon: Zap, label: '自动发货' },
+                    { icon: MessageCircle, label: '智能回复' },
+                    { icon: Users, label: '多号托管' },
+                  ].map(({ icon: Icon, label }) => (
+                    <div key={label} className="flex flex-col items-center gap-1.5">
+                      <span
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-50)] text-[var(--brand-text)]"
+                        style={{ border: '1px solid var(--border-brand)' }}
+                      >
+                        <Icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="text-[11px] font-bold text-[var(--text-muted)]">{label}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="login-trust mt-4 flex items-center justify-center gap-1.5 text-[11px] font-medium text-[var(--text-soft)]">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                  本机部署 · 数据本地存储
+                </p>
+                <p className="mt-4 text-center text-[11px] text-[var(--text-soft)]">
                   闲鱼超级管家 · xy.corleom.com
                 </p>
               </div>
             </div>
-          </div>
-        </div>
+        </main>
       </div>
     );
   }

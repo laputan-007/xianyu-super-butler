@@ -1428,3 +1428,26 @@ aside nav:hover::-webkit-scrollbar-thumb {
     overflow-x: auto;
   }
 }
+
+/* 登录/注册提交按钮的悬停扫光 */
+.ios-btn-primary.login-submit {
+  position: relative;
+  overflow: hidden;
+}
+
+.ios-btn-primary.login-submit::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  height: 100%;
+  width: 60%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+
+.ios-btn-primary.login-submit:hover:not(:disabled)::after {
+  left: 150%;
+}
