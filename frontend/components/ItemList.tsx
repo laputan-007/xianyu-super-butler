@@ -176,7 +176,7 @@ const Toggle: React.FC<{
   </button>
 );
 
-const ItemList: React.FC = () => {
+const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -190,6 +190,15 @@ const ItemList: React.FC = () => {
   const [polishing, setPolishing] = useState(false);
   // 商品列表按账号过滤，多账号时避免混在一起看不清归属
   const [listAccountFilter, setListAccountFilter] = useState('');
+  // 顶栏切换「管理的账号」后，发货配置账号与商品列表筛选一并跟随
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    const next = (current: string) => (current === syncedAccountId ? current : syncedAccountId);
+    setSelectedAccount(next);
+    setListAccountFilter(next);
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
   // 商品分页
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -304,7 +313,7 @@ const ItemList: React.FC = () => {
       setCards(cardData);
       setShippingRules(ruleData);
       setDeliveryConfigs(configData);
-      setSelectedAccount(current => current || accountData[0]?.id || '');
+      setSelectedAccount(current => current || syncedAccountId || accountData[0]?.id || '');
     } catch (error) {
       setNotice({
         type: 'error',
@@ -712,6 +721,7 @@ const ItemList: React.FC = () => {
                   setSelectedAccount(event.target.value);
                   setListAccountFilter(event.target.value);
                   setPage(1);
+                  if (event.target.value) onSyncedAccountChange?.(event.target.value);
                 }}
                 aria-label="选择账号"
               >

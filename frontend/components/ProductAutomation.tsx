@@ -113,7 +113,7 @@ const taskNames: Record<string, string> = {
   card_compensation: '卡券补偿',
 };
 
-const ProductAutomation: React.FC = () => {
+const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('materials');
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [materials, setMaterials] = useState<ProductMaterial[]>([]);
@@ -123,6 +123,12 @@ const ProductAutomation: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState('');
   const [accountFilter, setAccountFilter] = useState('');
+  // 顶栏切换「管理的账号」后，素材库的账号筛选跟随
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    setAccountFilter(current => (current === syncedAccountId ? current : syncedAccountId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
   const [materialQuery, setMaterialQuery] = useState('');
   const [editingMaterial, setEditingMaterial] = useState<ProductMaterial | null>(null);
   const [filterForm, setFilterForm] = useState(emptyFilterForm);
@@ -419,7 +425,7 @@ const ProductAutomation: React.FC = () => {
             <div className="toolbar__group flex-1">
               <select
                 value={accountFilter}
-                onChange={(event) => setAccountFilter(event.target.value)}
+                onChange={(event) => { setAccountFilter(event.target.value); if (event.target.value) onSyncedAccountChange?.(event.target.value); }}
                 className="ios-input rounded-md px-3 py-2.5 text-sm sm:w-64"
               >
                 <option value="">全部账号</option>

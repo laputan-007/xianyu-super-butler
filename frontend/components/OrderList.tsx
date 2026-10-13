@@ -32,7 +32,7 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   );
 };
 
-const OrderList: React.FC = () => {
+const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]); // 保存所有订单用于搜索
   const [items, setItems] = useState<Item[]>([]);
@@ -50,6 +50,13 @@ const OrderList: React.FC = () => {
   // 账号维度：多账号时需要区分订单归属
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [accountFilter, setAccountFilter] = useState('');
+  // 顶栏切换「管理的账号」后，订单的账号筛选跟随并回到第一页
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    setAccountFilter(current => (current === syncedAccountId ? current : syncedAccountId));
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -530,7 +537,7 @@ const OrderList: React.FC = () => {
           {accounts.length > 1 && (
             <select
               value={accountFilter}
-              onChange={(e) => { setAccountFilter(e.target.value); setPage(1); }}
+              onChange={(e) => { setAccountFilter(e.target.value); setPage(1); if (e.target.value) onSyncedAccountChange?.(e.target.value); }}
               className="ios-input w-full rounded-md bg-white py-2.5 px-3 md:w-44"
               aria-label="按账号筛选订单"
             >

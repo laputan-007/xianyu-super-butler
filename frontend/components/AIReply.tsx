@@ -41,7 +41,7 @@ const defaultSettings: AIReplySettings = {
   custom_prompts: '',
 };
 
-const AIReply: React.FC = () => {
+const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [settings, setSettings] = useState<AIReplySettings>(defaultSettings);
@@ -61,11 +61,20 @@ const AIReply: React.FC = () => {
     getAccountDetails()
       .then(data => {
         setAccounts(data);
-        setSelectedAccountId(data[0]?.id || '');
+        // 顶栏已有选中账号时优先跟随，否则默认第一个
+        setSelectedAccountId(syncedAccountId || data[0]?.id || '');
       })
       .catch(error => notify(error instanceof Error ? error.message : '账号加载失败', 'error'))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 顶栏切换「管理的账号」后，AI 设置的编辑对象跟随（设置随选中账号自动加载）
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    setSelectedAccountId(current => (current === syncedAccountId ? current : syncedAccountId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -144,7 +153,7 @@ const AIReply: React.FC = () => {
               <span className="field-label">当前账号</span>
               <select
                 value={selectedAccountId}
-                onChange={event => setSelectedAccountId(event.target.value)}
+                onChange={event => { setSelectedAccountId(event.target.value); if (event.target.value) onSyncedAccountChange?.(event.target.value); }}
                 className="ios-input w-full rounded-md px-3 py-2 text-sm font-semibold"
               >
                 {accounts.map(account => (

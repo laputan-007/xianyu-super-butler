@@ -11,6 +11,10 @@ type KeywordsMode = 'reply' | 'delivery';
 
 interface KeywordsProps {
   mode: KeywordsMode;
+  /** 顶栏「管理的账号」选中值：切换后本页的账号选择跟随 */
+  syncedAccountId?: string;
+  /** 本页手动切换账号时回写全局（与顶栏双向联动） */
+  onSyncedAccountChange?: (id: string) => void;
 }
 
 interface Keyword {
@@ -37,7 +41,7 @@ interface DefaultReplyForm {
   reply_image_url: string;
 }
 
-const Keywords: React.FC<KeywordsProps> = ({ mode }) => {
+const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAccountChange }) => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [activeTab, setActiveTab] = useState<ReplyTabType>('reply');
@@ -88,12 +92,21 @@ const Keywords: React.FC<KeywordsProps> = ({ mode }) => {
 
     getAccountDetails().then((data) => {
       setAccounts(data);
-      // 默认选择第一个账号
+      // 默认选择第一个账号（顶栏已有选中值时优先用顶栏的）
       if (data && data.length > 0) {
-        setSelectedAccount((current) => current || data[0].id);
+        setSelectedAccount((current) => current || syncedAccountId || data[0].id);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // 顶栏切换「管理的账号」后，本页的账号选择跟随
+  useEffect(() => {
+    if (mode === 'reply' && syncedAccountId) {
+      setSelectedAccount((current) => (current === syncedAccountId ? current : syncedAccountId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
 
   useEffect(() => {
     if (mode === 'reply' && selectedAccount) {
@@ -409,7 +422,10 @@ const Keywords: React.FC<KeywordsProps> = ({ mode }) => {
                 id="reply-account"
                 className="ios-input rounded-md px-3 py-2.5 text-sm sm:min-w-64"
                 value={selectedAccount}
-                onChange={(event) => setSelectedAccount(event.target.value)}
+                onChange={(event) => {
+                  setSelectedAccount(event.target.value);
+                  if (event.target.value) onSyncedAccountChange?.(event.target.value);
+                }}
               >
                 <option value="">请选择账号</option>
                 {accounts.map((account) => (

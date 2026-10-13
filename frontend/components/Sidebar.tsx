@@ -1,13 +1,12 @@
 import React from 'react';
 import {
-  BellRing,
+  Bell,
   Bot,
-  Box,
   CreditCard,
   LayoutDashboard,
-  ListFilter,
-  LogOut,
+  MessageCircle,
   MessageSquare,
+  Package,
   Settings,
   ShoppingBag,
   Star,
@@ -17,18 +16,25 @@ import {
   X,
   Info,
 } from 'lucide-react';
-import ThemeToggle from './ThemeToggle';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLogout: () => void;
   mobileOpen: boolean;
   onMobileClose: () => void;
   isAdmin?: boolean;
+  /** 收起为图标栏（桌面端） */
+  collapsed?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mobileOpen, onMobileClose, isAdmin = false }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  setActiveTab,
+  mobileOpen,
+  onMobileClose,
+  isAdmin = false,
+  collapsed = false,
+}) => {
   // 系统级页面只对管理员开放：普通用户看不到入口，后端接口也会拒绝其访问。
   // 「通知与日志」保留：通知渠道按用户隔离（页面内系统日志已单独按权限隐藏）。
   const adminOnly = (item: { id: string }) => isAdmin || !['settings', 'users'].includes(item.id);
@@ -44,7 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
       label: '闲鱼业务',
       items: [
         { id: 'accounts', icon: Users, label: '账号管理' },
-        { id: 'items', icon: Box, label: '商品与发货' },
+        { id: 'items', icon: Package, label: '商品与发货' },
         { id: 'orders', icon: ShoppingBag, label: '订单管理' },
         { id: 'buyer-interaction', icon: Star, label: '买家互动' },
         { id: 'cards', icon: CreditCard, label: '卡密库存' },
@@ -53,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
     {
       label: '客户沟通',
       items: [
-        { id: 'messages', icon: ListFilter, label: '消息中心' },
+        { id: 'messages', icon: MessageCircle, label: '消息中心' },
         { id: 'auto-reply', icon: MessageSquare, label: '自动回复' },
         { id: 'ai-reply', icon: Bot, label: 'AI 回复' },
       ],
@@ -68,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
       label: '系统',
       items: [
         { id: 'users', icon: UserCog, label: '用户管理' },
-        { id: 'notifications', icon: BellRing, label: '通知与日志' },
+        { id: 'notifications', icon: Bell, label: '通知与日志' },
         { id: 'settings', icon: Settings, label: '系统设置' },
         { id: 'about', icon: Info, label: '关于' },
       ].filter(adminOnly),
@@ -85,22 +91,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
         aria-label="关闭导航"
       />
     )}
-    <aside className={`fixed left-0 top-0 z-40 flex h-screen w-[248px] flex-col bg-[var(--surface)] transition-transform lg:translate-x-0 ${
-      mobileOpen ? 'translate-x-0' : '-translate-x-full'
-    }`} style={{ borderRight: '1px solid var(--border)' }}>
+    <aside
+      className={`fixed left-0 top-0 z-40 flex h-screen flex-col bg-[var(--surface)] transition-all lg:translate-x-0 ${
+        mobileOpen ? 'translate-x-0' : '-translate-x-full'
+      } ${collapsed ? 'max-lg:w-[248px] lg:w-[72px]' : 'w-[248px]'}`}
+      style={{ borderRight: '1px solid var(--border)' }}
+    >
       <div className="flex min-h-0 flex-1 flex-col">
-        {/* 品牌区：黄色渐变徽标 + 圆角，作为整站视觉锚点 */}
-        <div className="flex h-[76px] shrink-0 items-center gap-3 px-5">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-xl"
-            style={{
-              background: 'linear-gradient(140deg, var(--brand-300), var(--brand))',
-              boxShadow: 'var(--shadow-brand)',
-            }}
-          >
-            <span className="text-lg font-black text-[#2a2416]">闲</span>
-          </div>
-          <div className="min-w-0 flex-1">
+        {/* 品牌区：与登录页同款 logo，作为整站视觉锚点；收起时只留 logo */}
+        <div className={`flex h-[76px] shrink-0 items-center gap-3 ${collapsed ? 'justify-center px-2' : 'px-5'}`}>
+          <span className="relative shrink-0">
+            <span
+              className="login-logo-glow absolute -inset-2.5 rounded-2xl"
+              style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.35) 0%, transparent 65%)' }}
+            />
+            <img
+              src="/static/login-cover.png"
+              alt="闲鱼超级管家"
+              className="relative h-11 w-11"
+              draggable={false}
+            />
+          </span>
+          <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
             <p className="truncate text-base font-extrabold text-[var(--text)]">闲鱼超级管家</p>
             <p className="mt-0.5 text-[11px] font-medium text-[var(--text-soft)]">运营工作台</p>
           </div>
@@ -112,7 +124,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
         <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {menuGroups.map((group, groupIndex) => (
             <div key={group.label} className={groupIndex === 0 ? '' : 'mt-5'}>
-              <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wide text-[var(--text-soft)]">{group.label}</p>
+              <p
+                className={`mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--text-soft)] ${collapsed ? 'px-3 lg:hidden' : 'px-3'}`}
+              >
+                {group.label}
+              </p>
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
@@ -122,7 +138,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
                       key={item.id}
                       type="button"
                       onClick={() => setActiveTab(item.id)}
-                      className={`group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left transition-all ${
+                      title={collapsed ? item.label : undefined}
+                      className={`group flex min-h-11 w-full items-center rounded-xl text-left transition-all ${
+                        collapsed ? 'justify-center px-2 lg:px-2' : 'gap-3 px-3'
+                      } ${
                         isActive
                           ? 'font-bold text-[#2a2416]'
                           : 'font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]'
@@ -133,7 +152,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
                       } : undefined}
                     >
                       <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-[#2a2416]' : 'text-[var(--text-soft)] group-hover:text-[var(--text-muted)]'}`} />
-                      <span className="truncate text-sm">{item.label}</span>
+                      <span className={`truncate text-sm ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
                     </button>
                   );
                 })}
@@ -141,18 +160,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, mo
             </div>
           ))}
         </nav>
-      </div>
-
-      <div className="shrink-0 p-3" style={{ borderTop: '1px solid var(--border)' }}>
-        <ThemeToggle className="mb-2" />
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-[var(--text-muted)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-        >
-          <LogOut className="h-[18px] w-[18px]" />
-          <span className="text-sm font-medium">退出登录</span>
-        </button>
       </div>
     </aside>
     </>

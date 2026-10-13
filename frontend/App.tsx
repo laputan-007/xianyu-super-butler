@@ -1,14 +1,15 @@
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 import GlobalFeedback from './components/GlobalFeedback';
-import AnnouncementBanner from './components/AnnouncementBanner';
 import ThemeToggle from './components/ThemeToggle';
 import CaptchaInput from './components/CaptchaInput';
 import { useCaptcha } from './lib/useCaptcha';
 import { validateEmail, validatePassword, validateUsername } from './lib/authValidation';
-import { login, verifyToken, getPublicSettings, register, sendVerificationCode } from './services/api';
-import { ShieldCheck, ArrowRight, Loader2, User, Lock, Menu, Mail, KeyRound, CheckCircle2, Zap, MessageCircle, Users, Eye, EyeOff, Package, Bell } from 'lucide-react';
+import { login, verifyToken, getPublicSettings, register, sendVerificationCode, getAccountDetails } from './services/api';
+import type { AccountDetail } from './types';
+import { ShieldCheck, ArrowRight, Loader2, User, Lock, Mail, KeyRound, CheckCircle2, Zap, MessageCircle, Users, Eye, EyeOff, Package, Bell } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const AccountList = lazy(() => import('./components/AccountList'));
@@ -199,6 +200,10 @@ const App: React.FC = () => {
                 return;
               }
               setIsAdmin(Boolean(result.is_admin));
+              if (result.username) {
+                setCurrentUsername(result.username);
+                localStorage.setItem('auth_username', result.username);
+              }
               setIsLoggedIn(true);
             })
             .catch(() => localStorage.removeItem('auth_token'))
@@ -206,7 +211,7 @@ const App: React.FC = () => {
       } else {
           setCheckingAuth(false);
       }
-      
+
       const handleLogout = () => setIsLoggedIn(false);
       window.addEventListener('auth:logout', handleLogout);
       return () => window.removeEventListener('auth:logout', handleLogout);
@@ -223,6 +228,56 @@ const App: React.FC = () => {
   }, [isAdmin]);
 
   const loginRootRef = useRef<HTMLDivElement>(null);
+
+  // 当前登录用户（顶栏最右侧展示）：登录或 token 校验时写入，localStorage 兜底
+  const [currentUsername, setCurrentUsername] = useState<string>(
+    () => localStorage.getItem('auth_username') || ''
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => localStorage.getItem('sidebar_collapsed') === '1'
+  );
+
+  useEffect(() => {
+    if (sidebarCollapsed) localStorage.setItem('sidebar_collapsed', '1');
+    else localStorage.removeItem('sidebar_collapsed');
+  }, [sidebarCollapsed]);
+
+  // 全局「管理的账号」：顶栏切换器持有，按账号区分的页面（自动回复、消息中心）跟随选择
+  const [accounts, setAccounts] = useState<AccountDetail[]>([]);
+  const [activeAccountId, setActiveAccountId] = useState<string>(
+    () => localStorage.getItem('active_account_id') || ''
+  );
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let alive = true;
+    const load = () => {
+      getAccountDetails()
+        .then(list => {
+          if (!alive) return;
+          setAccounts(list);
+          // 选中账号被删除时回退到第一个启用的账号
+          setActiveAccountId(current => {
+            if (list.some(account => account.id === current)) return current;
+            const fallback = list.find(account => account.enabled) || list[0];
+            return fallback ? fallback.id : '';
+          });
+        })
+        .catch(() => {});
+    };
+    load();
+    // 与账号管理页的刷新节奏一致；账号增删后顶栏列表最多 30s 内跟上
+    const timer = setInterval(load, 30000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (activeAccountId) localStorage.setItem('active_account_id', activeAccountId);
+    else localStorage.removeItem('active_account_id');
+  }, [activeAccountId]);
 
   // 登录页动效总编排：入场、循环动效。
   // - 入场只用位移/缩放 + 无回弹的缓动，落位干净不"抖"
@@ -307,6 +362,10 @@ const App: React.FC = () => {
           });
           if (res.success && res.token) {
               localStorage.setItem('auth_token', res.token);
+              if (res.username) {
+                setCurrentUsername(res.username);
+                localStorage.setItem('auth_username', res.username);
+              }
               setIsAdmin(Boolean(res.is_admin));
               setIsLoggedIn(true);
           } else {
@@ -778,11 +837,19 @@ const App: React.FC = () => {
     );
   }
 
+  const handleAppLogout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_username');
+    setCurrentUsername('');
+    setIsAdmin(false);
+    setIsLoggedIn(false);
+  };
+
   return (
     <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
       <GlobalFeedback />
-      <Sidebar 
-        activeTab={activeTab} 
+      <Sidebar
+        activeTab={activeTab}
         setActiveTab={(tab) => {
           setActiveTab(tab);
           setMobileMenuOpen(false);
@@ -790,36 +857,29 @@ const App: React.FC = () => {
         mobileOpen={mobileMenuOpen}
         onMobileClose={() => setMobileMenuOpen(false)}
         isAdmin={isAdmin}
-        onLogout={() => {
-            localStorage.removeItem('auth_token');
-            setIsAdmin(false);
-            setIsLoggedIn(false);
-        }} 
+        collapsed={sidebarCollapsed}
       />
-      
-      <main className="min-h-screen min-w-0 flex-1 overflow-y-auto lg:ml-[248px]">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 -ml-2 rounded-md hover:bg-gray-100"
-            title="打开导航"
-            aria-label="打开导航"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold">{pageLabels[activeTab] || '闲鱼超级管家'}</p>
-            <p className="text-[11px] text-gray-400">闲鱼超级管家</p>
-          </div>
-          <ThemeToggle compact className="ml-auto" />
-        </header>
-        {activeTab !== 'messages' && <AnnouncementBanner />}
-        <div className={
-          activeTab === 'messages'
-            ? 'h-[calc(100vh-3.5rem)] lg:h-screen overflow-hidden'
-            : 'mx-auto max-w-[1320px] p-4 pb-10 sm:p-6 lg:p-8'
-        }>
+
+      <main className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[248px]'}`}>
+        <Header
+          pageTitle={pageLabels[activeTab] || '闲鱼超级管家'}
+          accounts={accounts}
+          activeAccountId={activeAccountId}
+          onAccountChange={setActiveAccountId}
+          onLogout={handleAppLogout}
+          onOpenMobileNav={() => setMobileMenuOpen(true)}
+          username={currentUsername}
+          isAdmin={isAdmin}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed(v => !v)}
+        />
+        {/* 应用外壳：header 恒定在顶，内容区在此内部滚动 */}
+        <div className={`min-h-0 flex-1 ${activeTab === 'messages' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={
+            activeTab === 'messages'
+              ? 'h-full'
+              : 'mx-auto max-w-[1320px] p-4 pb-10 sm:p-6 lg:p-8'
+          }>
           <section hidden={activeTab !== 'dashboard'}>
             <Suspense fallback={activeTab === 'dashboard' ? <PageLoader /> : null}><Dashboard /></Suspense>
           </section>
@@ -827,26 +887,26 @@ const App: React.FC = () => {
             <Suspense fallback={activeTab === 'accounts' ? <PageLoader /> : null}><AccountList /></Suspense>
           </section>
           <section hidden={activeTab !== 'items'}>
-            <Suspense fallback={activeTab === 'items' ? <PageLoader /> : null}><ItemList /></Suspense>
+            <Suspense fallback={activeTab === 'items' ? <PageLoader /> : null}><ItemList syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} /></Suspense>
           </section>
           <section hidden={activeTab !== 'product-automation'}>
-            <Suspense fallback={activeTab === 'product-automation' ? <PageLoader /> : null}><ProductAutomation /></Suspense>
+            <Suspense fallback={activeTab === 'product-automation' ? <PageLoader /> : null}><ProductAutomation syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} /></Suspense>
           </section>
           <section hidden={activeTab !== 'orders'}>
-            <Suspense fallback={activeTab === 'orders' ? <PageLoader /> : null}><OrderList /></Suspense>
+            <Suspense fallback={activeTab === 'orders' ? <PageLoader /> : null}><OrderList syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} /></Suspense>
           </section>
           <section hidden={activeTab !== 'cards'}>
             <Suspense fallback={activeTab === 'cards' ? <PageLoader /> : null}><CardList /></Suspense>
           </section>
           <section hidden={activeTab !== 'auto-reply'}>
-            <Suspense fallback={activeTab === 'auto-reply' ? <PageLoader /> : null}><Keywords mode="reply" /></Suspense>
+            <Suspense fallback={activeTab === 'auto-reply' ? <PageLoader /> : null}><Keywords mode="reply" syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} /></Suspense>
           </section>
           <section hidden={activeTab !== 'ai-reply'}>
-            <Suspense fallback={activeTab === 'ai-reply' ? <PageLoader /> : null}><AIReply /></Suspense>
+            <Suspense fallback={activeTab === 'ai-reply' ? <PageLoader /> : null}><AIReply syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} /></Suspense>
           </section>
           <section hidden={activeTab !== 'messages'} className="h-full min-h-0">
             <Suspense fallback={activeTab === 'messages' ? <PageLoader /> : null}>
-              <MessageManagement isActive={activeTab === 'messages'} />
+              <MessageManagement isActive={activeTab === 'messages'} syncedAccountId={activeAccountId} onSyncedAccountChange={setActiveAccountId} />
             </Suspense>
           </section>
           <section hidden={activeTab !== 'notifications'}>
@@ -871,6 +931,7 @@ const App: React.FC = () => {
           <section hidden={activeTab !== 'about'}>
             <Suspense fallback={activeTab === 'about' ? <PageLoader /> : null}><About /></Suspense>
           </section>
+          </div>
         </div>
       </main>
     </div>

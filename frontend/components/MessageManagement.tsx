@@ -118,6 +118,10 @@ const isCoveredByReadWatermark = (
 
 interface MessageManagementProps {
   isActive?: boolean;
+  /** 顶栏「管理的账号」选中值：切换后会话列表的账号筛选跟随 */
+  syncedAccountId?: string;
+  /** 本页手动切换会话账号时回写全局（与顶栏双向联动） */
+  onSyncedAccountChange?: (id: string) => void;
 }
 
 const normalizeImageUrl = (value?: string) => {
@@ -173,7 +177,7 @@ const filterTypeLabel: Record<MessageFilterType, string> = {
   skip_notify: '跳过外部通知',
 };
 
-const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true }) => {
+const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, syncedAccountId, onSyncedAccountChange }) => {
   const [view, setView] = useState<View>('messages');
   const [mobilePane, setMobilePane] = useState<MobilePane>('list');
   const [accounts, setAccounts] = useState<ChatAccount[]>([]);
@@ -213,6 +217,14 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true }
   const [newKeywords, setNewKeywords] = useState('');
   const [selectedFilterIds, setSelectedFilterIds] = useState<number[]>([]);
   const [savingFilters, setSavingFilters] = useState(false);
+
+  // 顶栏切换「管理的账号」后，会话查看账号与过滤规则的账号筛选一起跟随
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    setActiveAccountId((current) => (current === syncedAccountId ? current : syncedAccountId));
+    setFilterAccount((current) => (current === syncedAccountId ? current : syncedAccountId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedAccountId]);
 
   const activeAccount = accounts.find((account) => account.accountId === activeAccountId);
   const activeConversation = conversations.find((conversation) => conversation.cid === activeCid);
@@ -286,6 +298,10 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true }
       setAccounts(data);
       setActiveAccountId((current) => {
         if (current && data.some((account) => account.accountId === current)) return current;
+        // 顶栏已有选中账号时优先跟随
+        if (syncedAccountId && data.some((account) => account.accountId === syncedAccountId)) {
+          return syncedAccountId;
+        }
         return data.find((account) => account.connected)?.accountId || data[0]?.accountId || '';
       });
     } catch (error) {
@@ -553,7 +569,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true }
         <div className="flex h-[68px] shrink-0 items-center gap-3 border-b border-[var(--border)] px-4">
           <select
             value={activeAccountId}
-            onChange={(event) => setActiveAccountId(event.target.value)}
+            onChange={(event) => { setActiveAccountId(event.target.value); if (event.target.value) onSyncedAccountChange?.(event.target.value); }}
             aria-label="消息账号"
             className="h-10 min-w-0 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm font-bold text-[var(--text)] outline-none focus:border-[var(--brand)]"
           >
