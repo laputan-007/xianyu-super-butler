@@ -224,54 +224,25 @@ const App: React.FC = () => {
 
   const loginRootRef = useRef<HTMLDivElement>(null);
 
-  // 登录页动效总编排：入场、循环动效、鼠标视差。
-  // - 入场 tween 用 clearProps 收尾，避免残留行内样式压制 CSS hover 过渡
-  // - 视差的 quickTo 建在 context 里随 revert 一起回收；DOM 监听手动增删
+  // 登录页动效总编排：入场、循环动效。
+  // - 入场只用位移/缩放 + 无回弹的缓动，落位干净不"抖"
   // - prefers-reduced-motion 时跳过全部装饰性动效（错误抖动等功能反馈保留）
   useEffect(() => {
     if (isLoggedIn || checkingAuth || !loginRootRef.current) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    let parallaxLayers: Array<{ qx: (v: number) => void; qy: (v: number) => void; depth: number }> = [];
     const ctx = gsap.context(() => {
       if (reduced) return;
-      gsap
-        .timeline({ defaults: { ease: 'power3.out', clearProps: 'all' } })
-        // 表单区最先出现：用户的等待感在表单，别让封面演完才轮到它
-        .from('.login-brand, .login-form-header', { y: 16, opacity: 0, duration: 0.45, stagger: 0.08 }, 0)
-        .from('.login-cover-logo-wrap', { y: -28, opacity: 0, duration: 0.7 }, 0.1)
-        .from('.login-hero', {
-          y: 36,
-          opacity: 0,
-          rotation: -8,
-          filter: 'blur(10px)',
-          duration: 0.8,
-          ease: 'back.out(1.5)',
-        }, 0.2)
-        .from('.login-eyebrow', { x: -22, opacity: 0, duration: 0.5 }, 0.5)
-        .from('.login-title-char', {
-          y: 64,
-          opacity: 0,
-          rotate: (i: number) => (i % 2 === 0 ? -9 : 9),
-          filter: 'blur(10px)',
-          stagger: 0.05,
-          duration: 0.85,
-          ease: 'back.out(1.6)',
-        }, 0.6)
-        .from('.login-slogan', { y: 18, opacity: 0, duration: 0.6 }, 1.05)
-        .from('.login-chip', { y: 16, opacity: 0, stagger: 0.07, duration: 0.5, ease: 'back.out(1.7)' }, 1.15)
-        // 底部信息压轴逐个进场
-        .from('.login-extras', { y: 14, opacity: 0, duration: 0.5 }, 1.5)
-        .from('.login-trust', { y: 10, opacity: 0, duration: 0.45 }, 1.7);
-
-      // 循环动效：logo 漂浮、光环呼吸、光晕呼吸、吉祥物游动
-      gsap.to('.login-cover-logo', { y: 10, duration: 2.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
-      gsap.to('.login-logo-glow', { scale: 1.3, opacity: 0.5, duration: 2.8, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      // 不做入场编排：页面直接以最终状态呈现，只保留环境循环动效
+      // logo 漂浮、光环呼吸、光晕呼吸、吉祥物游动。
+      // 各自 delay 留出入场窗口，避免与入场 tween 抢同一属性
+      gsap.to('.login-cover-logo', { y: 9, duration: 3, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      gsap.to('.login-logo-glow', { scale: 1.25, opacity: 0.45, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       gsap.utils.toArray<HTMLElement>('.login-glow').forEach((el, i) => {
-        gsap.to(el, { scale: 1.18, duration: 4 + i * 1.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+        gsap.to(el, { scale: 1.15, duration: 4 + i * 1.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       });
       gsap.utils.toArray<HTMLElement>('.login-floaty').forEach((el, i) => {
         gsap.to(el, {
-          y: 16 + i * 7,
+          y: 14 + i * 7,
           x: i % 2 ? 10 : -8,
           rotation: i % 2 ? 6 : -5,
           duration: 3.2 + i * 0.9,
@@ -281,63 +252,22 @@ const App: React.FC = () => {
         });
       });
       gsap.to('.login-mascot-watermark', { rotation: 4, duration: 9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
-      // 主视觉插画：缓慢漂浮 + 轻微摇摆
-      gsap.to('.login-hero', { y: 7, rotation: 2.5, duration: 3.4, yoyo: true, repeat: -1, ease: 'sine.inOut' });
-
-      // 鼠标视差：封面各层按深度位移，quickTo 平滑跟手
-      const layers: Array<[string, number]> = [
-        ['.login-mascot-watermark', 24],
-        ['.login-hero-layer', 14],
-        ['.login-floaty-layer', 16],
-        ['.login-glow', 10],
-        ['.login-cover-content', 6],
-      ];
-      parallaxLayers = layers.flatMap(([sel, depth]) =>
-        Array.from(loginRootRef.current?.querySelectorAll(sel) ?? []).map(el => ({
-          qx: gsap.quickTo(el, 'x', { duration: 0.8, ease: 'power3.out' }),
-          qy: gsap.quickTo(el, 'y', { duration: 0.8, ease: 'power3.out' }),
-          depth,
-        }))
-      );
+      // 主视觉吉祥物：缓慢游动，带 x 轴轻摆更像在游
+      gsap.to('.login-hero', { y: 7, x: 6, rotation: 2.5, duration: 3.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      // 接缝流光：一缕亮光沿金色接缝周期性下行
+      gsap.fromTo('.login-seam-light', { top: '-18%' }, { top: '104%', duration: 2, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.8 });
+      // 标题流光：一道暖金色高光周期性从左向右扫过标题文字
+      // 双层背景：第一层是移动的高光带（260% 宽），第二层是静态的白色-金色渐变底
+      gsap.fromTo('.login-title',
+        { backgroundPosition: '100% 0%, 0% 0%' },
+        { backgroundPosition: '0% 0%, 0% 0%', duration: 2.4, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.6 });
+      // 标题金色光晕缓慢呼吸
+      gsap.to('.login-title', { filter: 'drop-shadow(0px 4px 28px rgba(255,213,0,0.32))', duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
     }, loginRootRef);
 
-    // 视差事件监听挂在封面上，卸载时手动移除
-    const cover = loginRootRef.current?.querySelector('aside');
-    const onPointerMove = (ev: MouseEvent) => {
-      const rect = cover?.getBoundingClientRect();
-      if (!rect) return;
-      const dx = (ev.clientX - rect.left) / rect.width - 0.5;
-      const dy = (ev.clientY - rect.top) / rect.height - 0.5;
-      parallaxLayers.forEach(({ qx, qy, depth }) => {
-        qx(dx * depth * 2);
-        qy(dy * depth * 2);
-      });
-    };
-    const onPointerLeave = () => parallaxLayers.forEach(({ qx, qy }) => { qx(0); qy(0); });
-    if (!reduced && cover) {
-      cover.addEventListener('mousemove', onPointerMove);
-      cover.addEventListener('mouseleave', onPointerLeave);
-    }
-    return () => {
-      if (cover) {
-        cover.removeEventListener('mousemove', onPointerMove);
-        cover.removeEventListener('mouseleave', onPointerLeave);
-      }
-      ctx.revert();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, checkingAuth]);
-
-  // 表单字段入场：登录/注册切换时随表单重新挂载而重放
-  useEffect(() => {
-    if (isLoggedIn || checkingAuth || !loginRootRef.current) return;
-    const ctx = gsap.context(() => {
-      gsap.from('.login-field', { y: 14, opacity: 0, stagger: 0.06, duration: 0.45, ease: 'power2.out', clearProps: 'all' });
-      gsap.from('.login-submit', { y: 10, opacity: 0, duration: 0.5, delay: 0.3, ease: 'power2.out', clearProps: 'all' });
-    }, loginRootRef);
     return () => ctx.revert();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, checkingAuth, authMode]);
+  }, [isLoggedIn, checkingAuth]);
 
   // 登录/注册失败时抖一下表单卡片：错误出现即触发（清空再报错会重新抖）
   useEffect(() => {
@@ -411,7 +341,7 @@ const App: React.FC = () => {
       <div ref={loginRootRef} className="flex min-h-screen bg-[var(--app-bg)] font-sans text-[var(--text)]">
         {/* 左侧封面：暗色底衬托闲鱼黄 logo，与右侧表单形成分屏布局 */}
         <aside
-          className="relative hidden w-[44%] shrink-0 select-none flex-col overflow-hidden lg:flex"
+          className="relative hidden w-3/5 shrink-0 select-none flex-col overflow-hidden lg:flex"
           style={{ background: 'linear-gradient(165deg, #241f13 0%, #17130a 55%, #0d0b06 100%)' }}
         >
           {/* 左上柔光：呼应 logo 位置，让画面有主光方向 */}
@@ -429,6 +359,19 @@ const App: React.FC = () => {
               WebkitMaskImage: 'radial-gradient(ellipse 75% 65% at 28% 18%, black 25%, transparent 95%)',
             }}
           />
+          {/* 胶片颗粒：极低透明度的噪点，弱化渐变底的"数码平"感 */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'%3E%3C/svg%3E\")",
+            }}
+          />
+          {/* 暗角：收拢视觉焦点，压暗四边增加层次（压在背景层上，不遮挡内容和鱼） */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse 92% 88% at 50% 42%, transparent 55%, rgba(0,0,0,0.42) 100%)' }}
+          />
           {/* 呼吸光晕：左下角一团，插画身后一团（兼作插画光环） */}
           <div
             className="login-glow pointer-events-none absolute -bottom-44 -left-28 h-[24rem] w-[24rem] rounded-full"
@@ -438,12 +381,12 @@ const App: React.FC = () => {
             className="login-glow pointer-events-none absolute right-1 top-5 h-48 w-48 rounded-full opacity-80"
             style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.22) 0%, transparent 65%)' }}
           />
-          {/* 吉祥物水印：右下角超大半透明剪影，撑住画面重心 */}
+          {/* 吉祥物水印：右下角半透明剪影，收小避让能力面板 */}
           <img
             src="/static/login-mascot.png"
             alt=""
             draggable={false}
-            className="login-mascot-watermark pointer-events-none absolute -bottom-14 -right-12 h-72 w-72 opacity-[0.07]"
+            className="login-mascot-watermark pointer-events-none absolute -bottom-12 -right-12 h-64 w-64 opacity-[0.07]"
           />
           {/* 星点：错峰闪烁，打破暗背景的静 */}
           {[
@@ -458,21 +401,26 @@ const App: React.FC = () => {
               style={{ top: s.top, left: s.left, opacity: s.opacity, animationDelay: s.delay }}
             />
           ))}
-          {/* 金色接缝：与右侧表单的分界线，一缕从上到下的渐变金线 */}
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-[#ffe566]/30 to-transparent" />
-          {/* 封面主视觉：闲鱼插画，缓慢漂浮，悬停弹跳 */}
+          {/* 金色接缝：与右侧表单的分界线，一缕流光周期性下行 */}
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-[2px] overflow-hidden bg-gradient-to-b from-transparent via-[#ffe566]/40 to-transparent"
+            style={{ boxShadow: '0 0 14px 1px rgba(255,229,102,0.28)' }}
+          >
+            <div className="login-seam-light absolute inset-x-0 h-[16%] bg-gradient-to-b from-transparent via-[#ffe566] to-transparent blur-[1px]" />
+          </div>
+          {/* 封面主视觉：小黄鱼吉祥物，缓慢游动，悬停弹跳 */}
           <div className="login-hero-layer absolute right-8 top-12">
             <img
-              src="/static/login-art.png"
-              alt="闲鱼"
+              src="/static/login-mascot.png"
+              alt="闲鱼吉祥物"
               draggable={false}
-              className="login-hero h-36 w-36 drop-shadow-[0_14px_32px_rgba(255,213,0,0.35)]"
+              className="login-hero h-40 w-40 drop-shadow-[0_16px_36px_rgba(255,213,0,0.4)]"
               onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.1, duration: 0.35, ease: 'back.out(2)' })}
               onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
             />
           </div>
-          {/* 小吉祥物：中右区域游动 */}
-          <div className="login-floaty-layer absolute right-44 top-72">
+          {/* 小吉祥物：主视觉与中部文字之间的空档游动，与主视觉形成"大小鱼同游"的层次 */}
+          <div className="login-floaty-layer absolute right-32 top-56">
             <img
               src="/static/login-mascot.png"
               alt=""
@@ -483,62 +431,83 @@ const App: React.FC = () => {
             />
           </div>
 
-          <div className="login-cover-content relative flex h-full flex-col justify-between p-12">
+          <div className="login-cover-content relative flex h-full flex-col p-12">
+            {/* 顶栏：品牌 logo + 双行字标。替代原悬浮大 logo，避免与主视觉鱼形成双焦点 */}
             <div
-              className="login-cover-logo-wrap relative h-20 w-20"
+              className="login-cover-logo-wrap relative flex items-center gap-3.5"
               onMouseEnter={e => {
                 const logo = e.currentTarget.querySelector('.login-cover-logo');
                 if (logo) gsap.to(logo, { keyframes: { rotation: [0, -8, 6, -3, 0] }, duration: 0.7, ease: 'power2.out' });
               }}
             >
-              <div
-                className="login-logo-glow absolute -inset-4 rounded-[2rem]"
-                style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.4) 0%, transparent 65%)' }}
-              />
-              <img
-                src="/static/login-cover.png"
-                alt="闲鱼超级管家"
-                className="login-cover-logo relative h-20 w-20"
-                draggable={false}
-              />
+              <span className="relative">
+                <span
+                  className="login-logo-glow absolute -inset-3 rounded-2xl"
+                  style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.35) 0%, transparent 65%)' }}
+                />
+                <img
+                  src="/static/login-cover.png"
+                  alt="闲鱼超级管家"
+                  className="login-cover-logo relative h-12 w-12"
+                  draggable={false}
+                />
+              </span>
+              <span className="leading-none">
+                <span className="block text-[15px] font-extrabold tracking-wide text-white">闲鱼超级管家</span>
+                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-[#ffe566]/70">XIANYU SUPER BUTLER</span>
+              </span>
             </div>
 
-            <div>
-              <p className="login-eyebrow flex items-center gap-2 text-xs font-bold tracking-[0.3em] text-[#ffe566]">
+            {/* 主体：单一内容流垂直居中，眉标-标题-口号-能力面板一气呵成，消灭 justify-between 的死区 */}
+            <div className="my-auto max-w-xl pb-8">
+              <span className="login-eyebrow inline-flex items-center gap-2 rounded-full border border-[#ffe566]/25 bg-[#ffe566]/10 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.18em] text-[#ffe566]">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ffe566]" />
-                XIANYU SUPER BUTLER
-                <span className="h-px w-10 bg-gradient-to-r from-[#ffe566]/60 to-transparent" />
-              </p>
+                闲鱼卖家的一体化运营工作台
+              </span>
               <h1
-                className="login-title mt-4 bg-gradient-to-b from-white via-white to-[#ffedb0] bg-clip-text text-5xl font-extrabold leading-tight text-transparent"
+                className="login-title mt-5 text-6xl font-extrabold leading-tight text-transparent drop-shadow-[0_4px_24px_rgba(255,213,0,0.2)]"
                 aria-label="闲鱼超级管家"
+                style={{
+                  backgroundImage: 'linear-gradient(110deg, transparent 38%, rgba(255,244,190,0.95) 50%, transparent 62%), linear-gradient(to bottom, #ffffff 20%, #ffedb0 100%)',
+                  backgroundSize: '260% 100%, 100% 100%',
+                  backgroundPosition: '100% 0%, 0% 0%',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                }}
               >
                 {'闲鱼超级管家'.split('').map((ch, i) => (
                   <span key={i} className="login-title-char inline-block">{ch}</span>
                 ))}
               </h1>
-              <p className="login-slogan mt-5 max-w-md text-sm leading-7 text-white/70">
+              <p className="login-slogan mt-5 max-w-lg text-[15px] leading-8 text-white/65">
                 统一处理账号、商品、订单、消息、回复和自动发货，让每一笔闲鱼生意自动运转。
               </p>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: Users, label: '账号与商品同步' },
-                { icon: Package, label: '订单与发货处理' },
-                { icon: MessageCircle, label: '消息与自动回复' },
-                { icon: Bell, label: '通知与运行日志' },
-              ].map(({ icon: Icon, label }) => (
-                <div
-                  key={label}
-                  className="login-chip flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-white/85 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[#ffe566]/40 hover:bg-white/10"
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ffe566]/15 text-[#ffe566]">
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  {label}
+              {/* 功能条：等宽四列网格，列间发丝竖线，整条与标题同宽 */}
+              <div className="mt-10 border-t border-white/[0.06] pt-7">
+                <div className="mb-4 flex items-center gap-2 text-[10px] font-bold tracking-[0.25em] text-white/30">
+                  <span className="h-px w-4 bg-white/25" />
+                  核心能力
                 </div>
-              ))}
+                <div className="grid grid-cols-4 divide-x divide-white/[0.07]">
+                  {[
+                    { icon: Users, label: '账号同步', sub: '多号托管' },
+                    { icon: Package, label: '订单发货', sub: '卡密自动' },
+                    { icon: MessageCircle, label: '消息回复', sub: '智能应答' },
+                    { icon: Bell, label: '通知日志', sub: '风险提醒' },
+                  ].map(({ icon: Icon, label, sub }) => (
+                    <div key={label} className="login-chip group flex items-start gap-2.5 px-4">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#ffe566]/10 text-[#ffe566] ring-1 ring-inset ring-[#ffe566]/20">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="leading-tight">
+                        <span className="block text-[13px] font-bold text-white/80 transition-colors duration-300 group-hover:text-white">{label}</span>
+                        <span className="mt-1 block text-[11px] font-medium text-white/40">{sub}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </aside>
@@ -546,6 +515,11 @@ const App: React.FC = () => {
         {/* 右侧登录/注册表单 */}
         <main className="relative flex min-h-screen flex-1 flex-col">
           <ThemeToggle compact className="absolute right-5 top-5 z-10" />
+          {/* 顶部品牌色微光：呼应左侧封面，弱化纯色底的平板感 */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-64"
+            style={{ background: 'radial-gradient(ellipse 70% 60% at 50% -10%, rgba(255,213,0,0.05), transparent 70%)' }}
+          />
           <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
             <div className="login-form-card w-full max-w-sm animate-fade-in">
               <div className="login-brand mb-6 flex items-center gap-2.5">
