@@ -22,7 +22,7 @@ import {
 } from '../services/api';
 import { confirmAction, notify } from '../services/feedback';
 import {Power, Edit2, Trash2, QrCode, X, Check, Loader2, MessageSquare, RefreshCw, Save, User, Clock, Key, Eye, EyeOff, Bot, Settings, MapPin, Users, ShieldCheck} from 'lucide-react';
-import { EmptyState, PageHeader, PageLoading } from './ui';
+import { EmptyState, NoticeBanner, PageHeader, PageLoading } from './ui';
 
 type ModalType = 'edit' | 'ai-settings' | null;
 
@@ -554,6 +554,22 @@ const AccountList: React.FC = () => {
 
   return (
     <div className="page-stack animate-fade-in relative">
+      <PageHeader
+        title="账号管理"
+        description="扫码授权闲鱼账号并集中托管：实时查看监听与风控状态，可暂停监听、刷新资料，并按账号配置 AI 回复策略。"
+        icon={Users}
+        badge={<span className="status-badge status-badge-info">{accounts.length} 个账号</span>}
+        actions={(
+          <button
+            onClick={startQRLogin}
+            className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+          >
+            <QrCode className="h-4 w-4" />
+            扫码添加账号
+          </button>
+        )}
+      />
+
       {riskBlocked.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm font-bold text-amber-900">
@@ -581,25 +597,9 @@ const AccountList: React.FC = () => {
         </div>
       )}
 
-      <PageHeader
-        title="账号管理"
-        description="管理闲鱼账号授权、监听状态、基础资料和账号级回复策略。"
-        icon={Users}
-        badge={<span className="status-badge status-badge-info">{accounts.length} 个账号</span>}
-        actions={(
-          <button
-            onClick={startQRLogin}
-            className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
-          >
-            <QrCode className="h-4 w-4" />
-            扫码添加账号
-          </button>
-        )}
-      />
-
-      <p className="text-xs leading-5 text-gray-400">
+      <NoticeBanner type="info">
         提示：挂 VPN、代理或部署在海外服务器时，闲鱼风控会明显收紧，滑块和人脸验证的通过率大幅下降，建议使用国内网络环境登录与运行。
-      </p>
+      </NoticeBanner>
 
       {/* Account Grid */}
       <div className="grid grid-cols-1 gap-3">

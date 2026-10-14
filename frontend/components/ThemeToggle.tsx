@@ -4,6 +4,8 @@ import { ThemePreference, useTheme } from '../theme/ThemeProvider';
 
 interface ThemeToggleProps {
   compact?: boolean;
+  /** 顶栏版：与 Header 的账号切换器、用户卡同高同框 */
+  header?: boolean;
   className?: string;
 }
 
@@ -18,8 +20,11 @@ const themeOptions: Array<{
   { value: 'system', label: '自动', description: '跟随系统外观', icon: Monitor },
 ];
 
-const ThemeToggle: React.FC<ThemeToggleProps> = ({ compact = false, className = '' }) => {
+const ThemeToggle: React.FC<ThemeToggleProps> = ({ compact = false, header = false, className = '' }) => {
   const { theme, resolvedTheme, setTheme } = useTheme();
+  // 顶栏版与紧凑版同为纯图标形态，但互斥使用各自的样式类，避免规则叠加
+  const iconOnly = compact || header;
+  const variantClass = header ? 'theme-picker--header' : compact ? 'theme-picker--compact' : '';
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex = index;
@@ -45,10 +50,10 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ compact = false, className = 
 
   return (
     <div
-      className={`theme-picker ${compact ? 'theme-picker--compact' : ''} ${className}`.trim()}
+      className={`theme-picker ${variantClass} ${className}`.trim()}
       data-resolved-theme={resolvedTheme}
     >
-      {!compact && (
+      {!iconOnly && (
         <div className="theme-picker__heading">
           <span>显示主题</span>
           <span className="theme-picker__status">
@@ -75,7 +80,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ compact = false, className = 
               onKeyDown={(event) => handleKeyDown(event, index)}
             >
               <Icon className="h-3.5 w-3.5" />
-              {!compact && <span>{option.label}</span>}
+              {!iconOnly && <span>{option.label}</span>}
             </button>
           );
         })}

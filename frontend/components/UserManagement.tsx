@@ -41,6 +41,15 @@ const UserManagement: React.FC = () => {
   // 正在重置密码的用户：展开内联输入框，一次只处理一个
   const [resettingUserId, setResettingUserId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  // 用户搜索：按用户名或邮箱实时过滤
+  const [userSearch, setUserSearch] = useState('');
+
+  const searchKeyword = userSearch.trim().toLowerCase();
+  const filteredUsers = searchKeyword
+    ? users.filter(user =>
+        user.username.toLowerCase().includes(searchKeyword) ||
+        (user.email || '').toLowerCase().includes(searchKeyword))
+    : users;
 
   const loadUsers = async () => {
     setLoading(true);
@@ -120,7 +129,7 @@ const UserManagement: React.FC = () => {
     <div className="page-stack">
       <PageHeader
         title="用户管理"
-        description="管理注册用户与登录权限。普通用户仅能操作分配给其名下的账号数据。"
+        description="管理注册用户的启用状态、登录密码与权限边界：管理员可分配账号归属，普通用户仅能操作其名下账号数据。"
         icon={Users}
         actions={
           <button
@@ -164,11 +173,21 @@ const UserManagement: React.FC = () => {
       <section className="section-panel">
         <SectionHeader
           title="用户列表"
-          description={`共 ${users.length} 个用户`}
+          description={`共 ${users.length} 个用户${searchKeyword && filteredUsers.length !== users.length ? `，当前匹配 ${filteredUsers.length} 个` : ''}`}
           icon={Users}
+          actions={(
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(event) => setUserSearch(event.target.value)}
+              placeholder="搜索用户名 / 邮箱..."
+              aria-label="搜索用户"
+              className="ios-input w-48 rounded-md px-3 py-2 text-sm"
+            />
+          )}
         />
         <div className="divide-y divide-[var(--border)]">
-          {users.map((user) => {
+          {filteredUsers.map((user) => {
             const isBuiltinAdmin = user.username === 'admin';
             const disabled = user.is_active === false;
             const busy = busyUserId === user.id;
@@ -273,6 +292,14 @@ const UserManagement: React.FC = () => {
               compact
               title="暂无用户"
               description="开放注册后，新注册的用户会出现在这里。"
+              icon={Users}
+            />
+          )}
+          {!loading && users.length > 0 && filteredUsers.length === 0 && (
+            <EmptyState
+              compact
+              title="没有匹配的用户"
+              description="换个关键字试试，或清空搜索查看全部用户。"
               icon={Users}
             />
           )}

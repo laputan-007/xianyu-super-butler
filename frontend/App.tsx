@@ -506,14 +506,14 @@ const App: React.FC = () => {
                 />
                 <img
                   src="/static/login-cover.png"
-                  alt="闲鱼超级管家"
+                  alt="鱼小铺"
                   className="login-cover-logo relative h-12 w-12"
                   draggable={false}
                 />
               </span>
               <span className="leading-none">
-                <span className="block text-[15px] font-extrabold tracking-wide text-white">闲鱼超级管家</span>
-                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-[#ffe566]/70">XIANYU SUPER BUTLER</span>
+                <span className="block text-[17px] font-extrabold tracking-wide text-white">鱼小铺</span>
+                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-[#ffe566]/70">YU XIAO PU</span>
               </span>
             </div>
 
@@ -525,7 +525,7 @@ const App: React.FC = () => {
               </span>
               <h1
                 className="login-title mt-5 text-6xl font-extrabold leading-tight text-transparent drop-shadow-[0_4px_24px_rgba(255,213,0,0.2)]"
-                aria-label="闲鱼超级管家"
+                aria-label="鱼小铺"
                 style={{
                   backgroundImage: 'linear-gradient(110deg, transparent 38%, rgba(255,244,190,0.95) 50%, transparent 62%), linear-gradient(to bottom, #ffffff 20%, #ffedb0 100%)',
                   backgroundSize: '260% 100%, 100% 100%',
@@ -534,7 +534,7 @@ const App: React.FC = () => {
                   backgroundClip: 'text',
                 }}
               >
-                {'闲鱼超级管家'.split('').map((ch, i) => (
+                {'鱼小铺'.split('').map((ch, i) => (
                   <span key={i} className="login-title-char inline-block">{ch}</span>
                 ))}
               </h1>
@@ -582,8 +582,8 @@ const App: React.FC = () => {
           <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
             <div className="login-form-card w-full max-w-sm animate-fade-in">
               <div className="login-brand mb-6 flex items-center gap-2.5">
-                <img src="/static/login-cover.png" alt="闲鱼超级管家" className="h-8 w-8" draggable={false} />
-                <span className="text-sm font-extrabold text-[var(--text)]">闲鱼超级管家</span>
+                <img src="/static/login-cover.png" alt="鱼小铺" className="h-8 w-8" draggable={false} />
+                <span className="brand-wordmark text-[15px] font-black leading-none">鱼小铺</span>
               </div>
               <div className="login-form-header mb-8">
                 <h2 className="text-2xl font-extrabold text-[var(--text)]">
@@ -828,7 +828,7 @@ const App: React.FC = () => {
                   本机部署 · 数据本地存储
                 </p>
                 <p className="mt-4 text-center text-[11px] text-[var(--text-soft)]">
-                  闲鱼超级管家 · xy.corleom.com
+                  鱼小铺 · xy.corleom.com
                 </p>
               </div>
             </div>
@@ -860,9 +860,9 @@ const App: React.FC = () => {
         collapsed={sidebarCollapsed}
       />
 
-      <main className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[248px]'}`}>
+      <main className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[208px]'}`}>
         <Header
-          pageTitle={pageLabels[activeTab] || '闲鱼超级管家'}
+          pageTitle={pageLabels[activeTab] || '鱼小铺'}
           accounts={accounts}
           activeAccountId={activeAccountId}
           onAccountChange={setActiveAccountId}
@@ -873,12 +873,14 @@ const App: React.FC = () => {
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed(v => !v)}
         />
-        {/* 应用外壳：header 恒定在顶，内容区在此内部滚动 */}
+        {/* 应用外壳：header 恒定在顶，内容区在此内部滚动。
+            内容通栏流式铺满主区域：此前 mx-auto max-w 会在宽屏把内容居中，
+            侧边栏与内容之间出现大块死白；现在左边距对齐顶栏（24px），右侧不留空。 */}
         <div className={`min-h-0 flex-1 ${activeTab === 'messages' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={
             activeTab === 'messages'
               ? 'h-full'
-              : 'mx-auto max-w-[1320px] p-4 pb-10 sm:p-6 lg:p-8'
+              : 'p-4 pb-10 sm:p-6 lg:pb-12'
           }>
           <section hidden={activeTab !== 'dashboard'}>
             <Suspense fallback={activeTab === 'dashboard' ? <PageLoader /> : null}><Dashboard /></Suspense>

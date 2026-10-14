@@ -141,7 +141,7 @@ const BuyerInteraction: React.FC = () => {
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="买家互动"
-        description="评价买家与索要小红花。这两项会对买家产生实际动作，开启前请确认。"
+        description="按账号开启自动评价买家与索要小红花，自定义评价与致谢文案。两项操作会对买家产生实际动作，确认无误后再开启。"
         icon={Star}
         actions={(
           <>

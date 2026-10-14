@@ -269,7 +269,7 @@ const Settings: React.FC = () => {
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="系统设置"
-        description="配置管理端访问、商品同步、默认 AI 参数和邮件服务。"
+        description="配置访问安全、商品与订单同步节奏、默认 AI 参数、邮件服务、快捷短语与公告来源等系统级选项。"
         icon={SettingsIcon}
         actions={(
           <>

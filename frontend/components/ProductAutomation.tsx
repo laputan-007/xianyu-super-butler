@@ -398,7 +398,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="商品自动化"
-        description="管理商品素材、筛选入库、下架预演和历史数据补偿任务。"
+        description="管理商品素材库、筛选入库规则、下架删除计划与历史数据补偿任务，让商品上架与清理按规则自动运转。"
         icon={Workflow}
         actions={(
           <button

@@ -396,9 +396,30 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
       <PageHeader
         title={mode === 'reply' ? '自动回复' : '通用自动发货'}
         description={mode === 'reply'
-          ? '管理账号关键词回复和未命中规则时的默认回复。'
-          : '管理按账号或全部账号生效的关键词兜底发货规则。'}
+          ? '按账号维护关键词自动回复与未命中时的默认回复：命中即答、未命中兜底，减少人工值守。'
+          : '维护按账号或全部账号生效的关键词兜底发货规则：消息命中关键词后自动发出对应卡密。'}
         icon={mode === 'reply' ? MessageSquare : Truck}
+        actions={(
+          <>
+            <button
+              type="button"
+              onClick={refreshCurrent}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
+            >
+              <RefreshCw className="h-4 w-4" />
+              刷新
+            </button>
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={mode === 'reply' && !selectedAccount}
+              className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              {mode === 'delivery' ? '添加通用规则' : activeTab === 'reply' ? '添加关键词' : '编辑默认回复'}
+            </button>
+          </>
+        )}
       />
 
       {mode === 'reply' && (
@@ -440,25 +461,6 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
               商品专属规则在“商品与发货”配置，此处仅处理关键词兜底。
             </p>
           )}
-        </div>
-        <div className="toolbar__group">
-          <button
-            type="button"
-            onClick={refreshCurrent}
-            className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
-          >
-            <RefreshCw className="h-4 w-4" />
-            刷新
-          </button>
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={mode === 'reply' && !selectedAccount}
-            className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            {mode === 'delivery' ? '添加通用规则' : activeTab === 'reply' ? '添加关键词' : '编辑默认回复'}
-          </button>
         </div>
       </div>
 

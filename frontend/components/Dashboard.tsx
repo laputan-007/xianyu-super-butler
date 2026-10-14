@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AdminStats, OrderAnalytics, Order, OrderStatus, Item } from '../types';
 import { getAdminStats, getOrderAnalytics, getValidOrders, getItems } from '../services/api';
-import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw} from 'lucide-react';
+import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw, Percent, Trophy} from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { EmptyState, PageHeader, PageLoading, PageTabs, SectionHeader } from './ui';
 
@@ -439,7 +439,7 @@ const Dashboard: React.FC = () => {
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="运营概览"
-        description="汇总账号、订单、营收和库存数据，快速判断当前经营状态。"
+        description="一屏总览账号、订单、营收与库存：先用指标卡确认经营水位，再从成交趋势、商品销量与下单占比定位爆款，底部订单明细支持关键字检索。"
         icon={BarChart3}
         badge={(
           <span className="status-badge status-badge-success flex items-center gap-1.5">
@@ -483,7 +483,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="metric-grid">
+      <div className="metric-grid metric-grid--six">
         <StatCard
           title="有效成交额 (CNY)"
           value={`¥${analytics.revenue_stats.total_amount.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`}
@@ -594,8 +594,9 @@ const Dashboard: React.FC = () => {
       {/* 商品销量排行和订单来源分布 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 商品销量排行 */}
-        <div className="section-panel p-4 sm:p-5">
-          <h3 className="section-title mb-5">商品销量排行</h3>
+        <div className="section-panel">
+          <SectionHeader title="商品销量排行" description="所选时间范围内下单量最高的商品。" icon={BarChart3} />
+          <div className="p-4 sm:p-5">
           <div className="h-[280px]">
             {productSalesData.length === 0 ? (
               <EmptyState compact title="暂无商品销售数据" description="当前时间范围内没有可统计的商品订单。" icon={Package} />
@@ -635,11 +636,13 @@ const Dashboard: React.FC = () => {
               </ResponsiveContainer>
             )}
           </div>
+          </div>
         </div>
 
         {/* 商品下单占比 */}
-        <div className="section-panel p-4 sm:p-5">
-          <h3 className="section-title mb-5">商品下单占比</h3>
+        <div className="section-panel">
+          <SectionHeader title="商品下单占比" description="订单在商品间的分布比例。" icon={Percent} />
+          <div className="p-4 sm:p-5">
           <div className="h-[280px]">
             {sourceDataData.length === 0 ? (
               <EmptyState compact title="暂无订单状态数据" description="当前时间范围内没有可统计的订单。" icon={ShoppingCart} />
@@ -693,6 +696,7 @@ const Dashboard: React.FC = () => {
               </ResponsiveContainer>
             )}
           </div>
+          </div>
         </div>
       </div>
 
@@ -700,9 +704,11 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* 参与统计的订单列表 */}
         <div className="section-panel flex flex-col lg:col-span-2">
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-4 py-3">
-            <h3 className="section-title">参与统计的订单</h3>
-            <div className="relative">
+          <SectionHeader
+            title="参与统计的订单"
+            description="按订单号、商品或买家实时过滤。"
+            icon={ShoppingCart}
+            actions={(
               <input
                 placeholder="搜索订单号/商品/买家..."
                 value={searchTerm}
@@ -710,11 +716,11 @@ const Dashboard: React.FC = () => {
                 className="ios-input w-48 rounded-md px-3 py-2 text-sm"
                 type="text"
               />
-            </div>
-          </div>
+            )}
+          />
           <div className="overflow-x-auto flex-1 max-h-[400px]">
             {ordersLoading ? (
-              <div className="flex items-center justify-center py-20 text-gray-400">
+              <div className="flex items-center justify-center py-20 text-[var(--text-soft)]">
                 <Activity className="w-6 h-6 animate-spin mr-2" />
                 加载中...
               </div>
@@ -723,9 +729,7 @@ const Dashboard: React.FC = () => {
               order.item_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
               order.buyer_id?.toLowerCase().includes(searchTerm.toLowerCase())
             ).length === 0 ? (
-              <div className="flex items-center justify-center py-20 text-gray-400">
-                暂无订单数据
-              </div>
+              <EmptyState compact title="暂无订单数据" description="当前时间范围或筛选条件下没有匹配的订单。" icon={ShoppingCart} />
             ) : (
               <table className="data-table responsive-data-table min-w-[760px]">
                 <thead>
@@ -792,8 +796,9 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* 商品金额分析 */}
-        <div className="section-panel p-4 sm:p-5">
-          <h3 className="section-title mb-5">商品金额分析（TOP 5）</h3>
+        <div className="section-panel">
+          <SectionHeader title="商品金额分析（TOP 5）" description="成交额最高的前五件商品占比。" icon={Trophy} />
+          <div className="p-4 sm:p-5">
           {categoryDataData.length === 0 ? (
             <EmptyState compact title="暂无商品占比数据" description="当前时间范围内没有可统计的商品销售记录。" icon={Package} />
           ) : (
@@ -850,6 +855,7 @@ const Dashboard: React.FC = () => {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

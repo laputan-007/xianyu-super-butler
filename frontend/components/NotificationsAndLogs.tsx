@@ -518,7 +518,7 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="通知与日志"
-        description="统一管理外部通知渠道、账号绑定、风控事件和系统运行日志。"
+        description="统一配置通知渠道与账号级通知规则，随时追踪风控事件与系统运行日志，异常第一时间送达。"
         icon={BellRing}
         actions={(
           <button

@@ -145,7 +145,7 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="AI 回复"
-        description="按账号配置模型连接、上下文记忆、议价边界和业务回复规则。"
+        description="按账号接入大模型自动回复与议价：配置模型连接、上下文记忆、议价边界和业务规则，并可在线试回复验证效果。"
         icon={Bot}
         actions={(
           <div className="flex min-w-0 flex-wrap items-end gap-2">

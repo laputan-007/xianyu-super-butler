@@ -191,7 +191,7 @@ const CardList: React.FC = () => {
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="卡密库存"
-        description="集中维护自动发货所需的固定文本、批量卡密、图片和 API 数据源。"
+        description="集中维护自动发货所需的固定文本、批量卡密、图片与 API 数据源，按类型分区管理，可随时启停。"
         icon={CreditCard}
         actions={(
           <button

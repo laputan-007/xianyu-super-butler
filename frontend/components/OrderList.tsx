@@ -466,7 +466,7 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="订单管理"
-        description="同步闲鱼交易状态，核对买家与商品信息，并处理人工或完整自动发货。"
+        description="同步闲鱼订单并跟进发货全流程：按状态与账号筛选，支持自动发货、手动补发、买家评价与小红花索要。"
         icon={ClipboardList}
         actions={(
           <>

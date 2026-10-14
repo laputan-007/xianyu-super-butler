@@ -46,7 +46,7 @@ const About: React.FC = () => {
     <div className="page-stack animate-fade-in">
       <PageHeader
         title="关于"
-        description="查看当前版本、检查更新与历史公告。"
+        description="查看当前版本、检查更新、获取联系方式与查看历史公告。"
         icon={Info}
         actions={(
           <button
