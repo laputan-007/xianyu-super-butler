@@ -302,20 +302,18 @@ class NotificationSender:
     async def _send_qmsg(
         self, config: dict[str, Any], message: str, *, request_id: str | None = None
     ) -> NotificationSendReceipt:
-        """推送到 Qmsg酱：消息经 QQ 机器人发到自己的聊天列表。
+        """推送到 Qmsg酱 v3：消息经 QQ 机器人发到绑定者的聊天列表。
 
-        API 为表单提交（msg=内容），与通用 JSON 请求通道不同，这里单独
-        走 form POST。默认推给 KEY 归属者，config.qq 可指定接收人
-        （该 QQ 必须是机器人的好友）。
+        v3 接口（qmsg.zendee.cn/v3/send/<key>）为表单提交、不支持指定
+        接收人 —— 消息固定发给「完成机器人绑定」的那个 QQ（控制台扫码
+        加好友后，把 KEY 作为消息发给机器人完成绑定）。
+        响应用 success 字段判定（code 仅 0/500）。
         """
         key = str(config.get("key") or "").strip()
         if not key:
             raise NotificationChannelConfigError("缺少 Qmsg酱 KEY")
+        url = f"https://qmsg.zendee.cn/v3/send/{key}"
         form: dict[str, str] = {"msg": message}
-        qq = str(config.get("qq") or "").strip()
-        if qq:
-            form["qq"] = qq
-        url = f"https://qmsg.zendee.cn/send/{key}"
         session_context = await self._open_session()
         body: Any = None
         status = 0
@@ -340,11 +338,15 @@ class NotificationSender:
                 result = close()
                 if inspect.isawaitable(result):
                     await result
-        # Qmsg 返回 {"code": 0, "reason": "...", "success": true}
+        if isinstance(body, Mapping):
+            if body.get("success") is True:
+                return NotificationSendReceipt("qq", status, 0)
+            raise NotificationProviderRejected(status)
+        # 非标准响应体时退回 code 判定
         code = _provider_code(body, "code")
         if not _is_success_code(code, {0, "0"}):
             raise NotificationProviderRejected(status)
-        return NotificationSendReceipt("qmsg", status, code)
+        return NotificationSendReceipt("qq", status, code)
 
     async def _send_email(
         self, config: dict[str, Any], message: str, *, request_id: str | None = None

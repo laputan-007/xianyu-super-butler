@@ -132,7 +132,6 @@ const CHANNEL_DEFINITIONS: Record<NotificationChannelType, ChannelDefinition> = 
     label: 'Qmsg酱 (QQ)',
     fields: [
       { key: 'key', label: 'Qmsg KEY', type: 'password', placeholder: 'qmsg.zendee.cn 用 QQ 登录后获取' },
-      { key: 'qq', label: '接收人 QQ', placeholder: '留空则推给 KEY 归属者自己', optional: true },
     ],
     defaults: {},
   },
