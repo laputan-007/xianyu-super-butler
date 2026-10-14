@@ -360,7 +360,8 @@ export type NotificationChannelType =
   | 'email'
   | 'webhook'
   | 'wechat'
-  | 'telegram';
+  | 'telegram'
+  | 'qq';
 
 export interface NotificationChannel {
   id: string;

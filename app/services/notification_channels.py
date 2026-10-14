@@ -15,6 +15,9 @@ NOTIFICATION_CHANNEL_REQUIRED_FIELDS = {
     "webhook": ("webhook_url",),
     "wechat": ("webhook_url",),
     "telegram": ("bot_token", "chat_id"),
+    # Qmsg酱：消息经机器人推到自己的 QQ 聊天列表。复用库表 CHECK 约束里
+    # 遗留的 'qq' 类型位（旧版映射占位，无现行实现），免改表结构。
+    "qq": ("key",),
 }
 
 NOTIFICATION_CHANNEL_TYPE_ALIASES = {

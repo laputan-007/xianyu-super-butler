@@ -158,6 +158,8 @@ class NotificationSender:
             "webhook": self._send_webhook,
             "wechat": self._send_wechat,
             "telegram": self._send_telegram,
+            "qmsg": self._send_qmsg,
+            "qq": self._send_qmsg,
         }
         handler = handlers[normalized_type]
         try:
@@ -296,6 +298,53 @@ class NotificationSender:
         if code is not None and not _is_success_code(code, {200, "200", 0, "0"}):
             raise NotificationProviderRejected(status)
         return NotificationSendReceipt("bark", status, code)
+
+    async def _send_qmsg(
+        self, config: dict[str, Any], message: str, *, request_id: str | None = None
+    ) -> NotificationSendReceipt:
+        """推送到 Qmsg酱：消息经 QQ 机器人发到自己的聊天列表。
+
+        API 为表单提交（msg=内容），与通用 JSON 请求通道不同，这里单独
+        走 form POST。默认推给 KEY 归属者，config.qq 可指定接收人
+        （该 QQ 必须是机器人的好友）。
+        """
+        key = str(config.get("key") or "").strip()
+        if not key:
+            raise NotificationChannelConfigError("缺少 Qmsg酱 KEY")
+        form: dict[str, str] = {"msg": message}
+        qq = str(config.get("qq") or "").strip()
+        if qq:
+            form["qq"] = qq
+        url = f"https://qmsg.zendee.cn/send/{key}"
+        session_context = await self._open_session()
+        body: Any = None
+        status = 0
+        try:
+            async with session_context as session:
+                try:
+                    async with session.post(url, data=form) as response:
+                        status = int(getattr(response, "status", 0) or 0)
+                        try:
+                            body = await response.json(content_type=None)
+                        except (TypeError, ValueError):
+                            body = None
+                except (asyncio.TimeoutError, TimeoutError) as exc:
+                    raise NotificationSendTimeout() from exc
+                except NotificationSendError:
+                    raise
+                except aiohttp.ClientError as exc:
+                    raise NotificationNetworkError() from exc
+        finally:
+            close = getattr(session_context, "close", None)
+            if close:
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+        # Qmsg 返回 {"code": 0, "reason": "...", "success": true}
+        code = _provider_code(body, "code")
+        if not _is_success_code(code, {0, "0"}):
+            raise NotificationProviderRejected(status)
+        return NotificationSendReceipt("qmsg", status, code)
 
     async def _send_email(
         self, config: dict[str, Any], message: str, *, request_id: str | None = None
