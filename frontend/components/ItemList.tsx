@@ -2,18 +2,22 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Box,
+  CirclePause,
   Edit,
   Loader2,
   ListChecks,
   PackageCheck,
   Plus,
   RefreshCw,
+  Rocket,
   Save,
   Settings2,
+  Send,
   ShoppingBag,
   Sparkles,
   ShieldAlert,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -36,9 +40,18 @@ import {
   saveItemDeliveryConfig,
   polishItems,
   syncItemsFromAccount,
-  updateItemDetail,
+  downshelfItem,
+  fetchPublishAddresses,
+  platformDeleteItem,
+  publishItemImage,
+  publishItemToXianyu,
+  publishLocalItem,
+  recommendPublishCategory,
+  republishItem,
+  updateItemInfo,
   updateItemMultiQuantity,
   updateShippingRule,
+  uploadImage,
 } from '../services/api';
 import { confirmAction } from '../services/feedback';
 import DeliveryProtection from './DeliveryProtection';
@@ -108,6 +121,58 @@ const normalizeImageUrl = (url?: string) => {
   return value.startsWith('//') ? `https:${value}` : value;
 };
 
+/** 图片字段：URL 输入 + 本地上传按钮 + 缓略图预览，编辑与手动添加弹窗共用。 */
+const ImageField: React.FC<{
+  id: string;
+  value: string;
+  uploading: boolean;
+  onChange: (value: string) => void;
+  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}> = ({ id, value, uploading, onChange, onUpload }) => {
+  const previewSrc = normalizeImageUrl(value);
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor={id}>商品图片</label>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          className="ios-input min-w-0 flex-1 rounded-md px-3 py-2.5"
+          placeholder="粘贴图片地址，或点右侧按钮上传"
+        />
+        <label
+          className={`ios-btn-secondary flex h-[42px] cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-sm ${
+            uploading ? 'pointer-events-none opacity-70' : ''
+          }`}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          <span className="hidden sm:inline">上传图片</span>
+          <span className="sm:hidden">上传</span>
+          <input type="file" accept="image/*" className="hidden" onChange={onUpload} disabled={uploading} />
+        </label>
+      </div>
+      {previewSrc && (
+        <div className="mt-2 flex items-center gap-3">
+          <img
+            src={previewSrc}
+            alt="商品图片预览"
+            className="h-16 w-16 rounded-md border border-gray-200 bg-gray-100 object-cover"
+            referrerPolicy="no-referrer"
+          />
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-xs font-bold text-red-500 hover:underline"
+          >
+            移除图片
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const cardTypeLabels: Record<Card['type'], string> = {
   api: 'API 动态内容',
   text: '固定文本',
@@ -124,6 +189,15 @@ const getCardStockLabel = (card?: Card) => {
   }
   return cardTypeLabels[card.type];
 };
+
+/** 弹窗内嵌通知：弹窗打开期间页面级横幅会被遮罩盖住，提示必须渲染进弹窗才可见。 */
+const ModalNotice: React.FC<{ notice: Notice; onClose: () => void }> = ({ notice, onClose }) => (
+  notice ? (
+    <div className="mb-4">
+      <NoticeBanner type={notice.type} message={notice.message} onClose={onClose} />
+    </div>
+  ) : null
+);
 
 const ItemImage: React.FC<{ item: Item }> = ({ item }) => {
   const src = normalizeImageUrl(item.item_image);
@@ -206,7 +280,10 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   const [notice, setNotice] = useState<Notice>(null);
 
   const [detailItem, setDetailItem] = useState<Item | null>(null);
-  const [itemDetail, setItemDetail] = useState('');
+  // 商品编辑表单：详情弹窗已升级为全字段编辑（标题/价格/简介/图片/本地详情）
+  const [editForm, setEditForm] = useState({ title: '', price: '', description: '', imageUrl: '', detail: '' });
+  // 图片上传中的态（编辑弹窗与手动添加弹窗共用）
+  const [imageUploading, setImageUploading] = useState(false);
   const [deliveryItem, setDeliveryItem] = useState<Item | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryForm>({
@@ -216,6 +293,35 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   });
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState<ManualItemForm>(emptyManualItem);
+
+  // 商品发布（mtop 直连）：表单 → 识别分类 → 人工确认 → 上架
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishForm, setPublishForm] = useState<{
+    cookieId: string;
+    title: string;
+    price: string;
+    originalPrice: string;
+    shippingMode: 'free' | 'freight' | 'self';
+    images: Array<{ url: string; widthSize: number; heightSize: number; preview: string }>;
+    address: Record<string, string> | null;
+  }>({ cookieId: '', title: '', price: '', originalPrice: '', shippingMode: 'free', images: [], address: null });
+  const [addressOptions, setAddressOptions] = useState<Array<Record<string, string>>>([]);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [publishConfirm, setPublishConfirm] = useState<{
+    /** 当前选中的分类（完整对象，发布时原样传给后端） */
+    category: Record<string, string>;
+    candidates: Array<Record<string, string>>;
+  } | null>(null);
+  // 发布表单内联校验：错误直接标在对应输入框下方，而不是页面级横幅
+  const [publishFieldErrors, setPublishFieldErrors] = useState<{
+    cookieId?: string;
+    title?: string;
+    price?: string;
+    originalPrice?: string;
+    images?: string;
+  }>({});
+  const [publishing, setPublishing] = useState(false);
+  const [publishUploading, setPublishUploading] = useState(false);
 
   const accountNames = useMemo(
     () => new Map(accounts.map(account => [
@@ -259,6 +365,9 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
 
   const isOffShelf = (item: Item) => item.listing_status === 'off_shelf';
 
+  // 本地草稿（手动添加、从未同步）：同步必盖 last_seen_at，手动商品没有
+  const isLocalDraft = (item: Item) => !item.last_seen_at;
+
   const accountScopedItems = useMemo(
     () => (listAccountFilter ? items.filter(item => item.cookie_id === listAccountFilter) : items),
     [items, listAccountFilter],
@@ -270,7 +379,8 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   );
 
   const visibleItems = useMemo(
-    () => (showOffShelf ? accountScopedItems : accountScopedItems.filter(item => !isOffShelf(item))),
+    // 草稿即使被同步误标“已下架”也保持可见——它从未在平台上架过
+    () => (showOffShelf ? accountScopedItems : accountScopedItems.filter(item => !isOffShelf(item) || isLocalDraft(item))),
     [accountScopedItems, showOffShelf],
   );
 
@@ -400,6 +510,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   };
 
   const openManualModal = () => {
+    setNotice(null);
     setManualForm({ ...emptyManualItem, cookieId: selectedAccount || accounts[0]?.id || '' });
     setShowManualModal(true);
   };
@@ -432,21 +543,268 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   };
 
   const openDetail = (item: Item) => {
+    setNotice(null);
     setDetailItem(item);
-    setItemDetail(item.item_detail || '');
+    setEditForm({
+      title: item.item_title || '',
+      price: item.item_price || '',
+      description: item.item_description || '',
+      imageUrl: item.item_image || '',
+      detail: item.item_detail || '',
+    });
+  };
+
+  // ---- 商品发布 ----
+
+  const loadPublishAddresses = async (cookieId: string) => {
+    if (!cookieId) {
+      setAddressOptions([]);
+      return;
+    }
+    setAddressLoading(true);
+    try {
+      const res = await fetchPublishAddresses(cookieId);
+      const options: Array<Record<string, string>> = [];
+      const seen = new Set<string>();
+      for (const addr of [res.data.selectedPoi, ...(res.data.commonAddresses || [])]) {
+        if (!addr || seen.has(String(addr.poiId))) continue;
+        seen.add(String(addr.poiId));
+        options.push(addr);
+      }
+      setAddressOptions(options);
+      return options;
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '地址获取失败' });
+      return [];
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  const openPublishModal = () => {
+    setPublishConfirm(null);
+    setNotice(null);
+    const cookieId = selectedAccount || accounts[0]?.id || '';
+    setPublishForm({
+      cookieId,
+      title: '',
+      price: '',
+      originalPrice: '',
+      shippingMode: 'free',
+      images: [],
+      address: null,
+    });
+    setShowPublishModal(true);
+    void loadPublishAddresses(cookieId).then(options => {
+      if (options.length) {
+        setPublishForm(current => (current.cookieId === cookieId && !current.address
+          ? { ...current, address: options[0] }
+          : current));
+      }
+    });
+  };
+
+  const handlePublishImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const remain = 9 - publishForm.images.length;
+    const picked = files.slice(0, remain);
+    if (picked.length < files.length) {
+      setNotice({ type: 'error', message: '闲鱼最多支持 9 张商品图片' });
+    }
+    if (!picked.length) return;
+    if (!publishForm.cookieId) {
+      setNotice({ type: 'error', message: '请先选择要发布的账号' });
+      return;
+    }
+    setPublishUploading(true);
+    try {
+      for (const file of picked) {
+        const uploaded = await publishItemImage(publishForm.cookieId, file);
+        setPublishForm(current => ({
+          ...current,
+          images: [...current.images, { ...uploaded, preview: URL.createObjectURL(file) }],
+        }));
+        setPublishFieldErrors(current => ({ ...current, images: undefined }));
+      }
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '图片上传失败' });
+    } finally {
+      setPublishUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handlePublishSubmit = async () => {
+    const errors: Record<string, string> = {};
+    if (!publishForm.cookieId) errors.cookieId = '请选择要发布的账号';
+    const title = publishForm.title.trim();
+    if (!title) errors.title = '请填写宝贝描述';
+    if (publishForm.images.length === 0) errors.images = '请至少上传一张商品图片';
+    const price = parseFloat(publishForm.price);
+    if (!Number.isFinite(price) || price <= 0) errors.price = '请填写大于 0 的价格';
+    const originalPrice = parseFloat(publishForm.originalPrice);
+    if (publishForm.originalPrice.trim() && (!Number.isFinite(originalPrice) || originalPrice <= 0)) {
+      errors.originalPrice = '原价需为大于 0 的数字，或留空';
+    }
+    setPublishFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    const platformImages = publishForm.images.map(({ url, widthSize, heightSize }) => ({ url, widthSize, heightSize }));
+
+    setPublishing(true);
+    try {
+      if (!publishConfirm) {
+        // 第一步：识别分类，进入确认视图
+        const res = await recommendPublishCategory({
+          cookie_id: publishForm.cookieId,
+          title,
+          description: title,
+          price,
+          images: platformImages,
+        });
+        setPublishConfirm({ category: res.data.category, candidates: res.data.candidates });
+      } else {
+        // 第二步：确认后真正上架（分类用用户选中的那个）
+        const res = await publishItemToXianyu({
+          cookie_id: publishForm.cookieId,
+          title,
+          description: title,
+          price,
+          quantity: 1,
+          original_price: publishForm.originalPrice.trim() ? originalPrice : null,
+          shipping_mode: publishForm.shippingMode,
+          address: publishForm.address,
+          category: publishConfirm.category,
+          images: platformImages,
+        });
+        setShowPublishModal(false);
+        setNotice({ type: 'success', message: `商品已发布：${res.item_url}` });
+        setItems(await getItems());
+      }
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '发布失败' });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // ---- 平台下架 / 平台删除 / 一键发布 ----
+
+  const onSaleDraftTitle = (item: Item) =>
+    item.listing_status === 'on_sale' ? '从闲鱼平台删除商品' : '删除本地记录';
+
+  const handlePublishLocal = async (item: Item) => {
+    const confirmed = await confirmAction(
+      `确认把本地商品「${item.item_title || item.item_id}」发布到闲鱼？`
+      + '图片会自动转存到闲鱼图片空间，分类自动识别；发布后本地记录与发货配置会迁移为平台新商品 ID。',
+      { title: '一键发布', confirmLabel: '发布' },
+    );
+    if (!confirmed) return;
+    const key = itemKey(item);
+    setSavingKey(key);
+    try {
+      const res = await publishLocalItem(item.cookie_id, item.item_id);
+      setNotice({ type: 'success', message: `${res.message}：${res.item_url}` });
+      setItems(await getItems());
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '发布失败' });
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const handleRepublish = async (item: Item) => {
+    const confirmed = await confirmAction(
+      `确认重新上架「${item.item_title || item.item_id}」？`
+      + '将按原内容重新发布（闲鱼网页端无原生上架接口，发布后商品 ID 会更新），发货配置自动迁移。',
+      { title: '重新上架', confirmLabel: '上架' },
+    );
+    if (!confirmed) return;
+    const key = itemKey(item);
+    setSavingKey(key);
+    try {
+      const res = await republishItem(item.cookie_id, item.item_id);
+      setNotice({ type: 'success', message: `${res.message}：${res.item_url}` });
+      setItems(await getItems());
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '重新上架失败' });
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  const handleDownshelf = async (item: Item) => {
+    if (!await confirmAction(
+      `确认把「${item.item_title || item.item_id}」从闲鱼下架？买家将无法继续浏览购买，本地记录保留。`,
+      { title: '下架商品', confirmLabel: '下架' },
+    )) return;
+    const key = itemKey(item);
+    setSavingKey(key);
+    try {
+      await downshelfItem(item.cookie_id, item.item_id);
+      setItems(current => current.map(currentItem =>
+        itemKey(currentItem) === key ? { ...currentItem, listing_status: 'off_shelf' } : currentItem,
+      ));
+      setNotice({ type: 'success', message: '商品已从闲鱼下架' });
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '下架失败' });
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  // 图片上传：编辑与手动添加共用，上传成功后回填 URL
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, onDone: (url: string) => void) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setNotice({ type: 'error', message: '请选择图片文件' });
+      return;
+    }
+    setImageUploading(true);
+    try {
+      const res = await uploadImage(file);
+      onDone(res.image_url || '');
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : '图片上传失败' });
+    } finally {
+      setImageUploading(false);
+      event.target.value = '';
+    }
   };
 
   const handleSaveDetail = async () => {
     if (!detailItem) return;
+    if (!editForm.title.trim()) {
+      setNotice({ type: 'error', message: '商品标题不能为空' });
+      return;
+    }
     const key = itemKey(detailItem);
     setSavingKey(key);
     try {
-      await updateItemDetail(detailItem.cookie_id, detailItem.item_id, itemDetail);
+      const title = editForm.title.trim();
+      const price = editForm.price.trim();
+      const description = editForm.description.trim();
+      const imageUrl = editForm.imageUrl.trim();
+      await updateItemInfo(detailItem.cookie_id, detailItem.item_id, {
+        title,
+        price,
+        description,
+        image_url: imageUrl,
+        item_detail: editForm.detail,
+      });
       setItems(current => current.map(item =>
-        itemKey(item) === key ? { ...item, item_detail: itemDetail } : item,
+        itemKey(item) === key ? {
+          ...item,
+          item_title: title,
+          item_price: price,
+          item_description: description,
+          item_image: imageUrl,
+          item_detail: editForm.detail,
+        } : item,
       ));
       setDetailItem(null);
-      setNotice({ type: 'success', message: '商品详情已保存' });
+      setNotice({ type: 'success', message: '商品信息已保存' });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : '保存失败' });
     } finally {
@@ -455,6 +813,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   };
 
   const openDelivery = async (item: Item) => {
+    setNotice(null);
     const legacyRule = ruleMap.get(itemKey(item));
     setDeliveryItem(item);
     setDeliveryLoading(true);
@@ -636,19 +995,35 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
   };
 
   const handleDelete = async (item: Item) => {
-    if (!await confirmAction(`确认删除商品“${item.item_title || item.item_id}”的本地记录吗？`)) return;
+    const onSale = item.listing_status === 'on_sale';
+    const confirmed = await confirmAction(
+      onSale
+        ? `确认删除「${item.item_title || item.item_id}」？将同步从闲鱼平台删除商品，并移除本地发货配置，不可恢复。`
+        : `确认删除商品“${item.item_title || item.item_id}”的本地记录吗？（商品已不在闲鱼在售）`,
+      { title: onSale ? '删除商品' : '删除本地记录', confirmLabel: '删除', danger: true },
+    );
+    if (!confirmed) return;
     const key = itemKey(item);
     const rule = ruleMap.get(key);
     setSavingKey(key);
     try {
+      if (onSale) {
+        // 在售商品：先从平台删除（顺带清掉本地记录），失败则中止避免半删状态
+        try {
+          await platformDeleteItem(item.cookie_id, item.item_id);
+        } catch (error) {
+          setNotice({ type: 'error', message: `平台删除失败：${error instanceof Error ? error.message : '未知错误'}` });
+          return;
+        }
+      }
       if (rule) await deleteShippingRule(rule.id);
-      await deleteItem(item.cookie_id, item.item_id);
+      if (!onSale) await deleteItem(item.cookie_id, item.item_id);
       setItems(current => current.filter(currentItem => itemKey(currentItem) !== key));
       setShippingRules(current => current.filter(currentRule => currentRule.id !== rule?.id));
       setDeliveryConfigs(current => current.filter(config =>
         `${config.cookie_id}:${config.item_id}` !== key,
       ));
-      setNotice({ type: 'success', message: '商品及其专属发货配置已删除' });
+      setNotice({ type: 'success', message: onSale ? '商品已从闲鱼平台删除' : '商品及其专属发货配置已删除' });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : '删除失败' });
     } finally {
@@ -683,9 +1058,50 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
     <div ref={rootRef} className="page-stack animate-fade-in">
       <PageHeader
         title="商品与发货"
-        description="同步在售商品并配置自动发货。"
+        description="同步在售商品并为每件商品配置专属自动发货，也可切换到通用发货规则与发货保护，统一托管全部商品的卡密交付。"
         icon={Box}
         badge={<span className="status-badge status-badge-info">{items.length} 件商品</span>}
+        actions={(
+          <>
+            <button
+              type="button"
+              onClick={openPublishModal}
+              className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              title="把商品直接发布上架到闲鱼"
+            >
+              <Send className="h-4 w-4" />
+              发布商品
+            </button>
+            <button
+              type="button"
+              onClick={openManualModal}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              手动添加
+            </button>
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing || !selectedAccount}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              title={selectedAccount ? '从闲鱼拉取该账号的在售商品' : '请先在左侧选择账号'}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? '正在同步' : '同步商品'}
+            </button>
+            <button
+              type="button"
+              onClick={handlePolish}
+              disabled={polishing || items.length === 0}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
+              title="重新获取搜索曝光，平台对每日擦亮次数有限制"
+            >
+              <Sparkles className={`h-4 w-4 ${polishing ? 'animate-pulse' : ''}`} />
+              {polishing ? '正在擦亮' : '一键擦亮'}
+            </button>
+          </>
+        )}
       />
 
       <PageTabs
@@ -699,7 +1115,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
         ariaLabel="商品与发货功能"
       />
 
-      {notice && (
+      {notice && !showPublishModal && !showManualModal && !detailItem && !deliveryItem && (
         <NoticeBanner
           type={notice.type}
           message={notice.message}
@@ -712,8 +1128,8 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
             加上页头、Tab、列表标题，看到商品前要先翻过四层，信息密度太低。
             同步账号与列表筛选账号本就是同一个维度，一并收进工具栏。 */}
         <section className="section-panel">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="toolbar rounded-none border-0 border-b px-4 py-3 shadow-none">
+            <div className="toolbar__group">
               <select
                 className="ios-input rounded-md px-3 py-2 text-sm"
                 value={selectedAccount}
@@ -750,46 +1166,17 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                 </label>
               )}
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={openManualModal}
-                className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
-              >
-                <Plus className="h-4 w-4" />
-                手动添加
-              </button>
-              <button
-                type="button"
-                onClick={handleSync}
-                disabled={syncing || !selectedAccount}
-                className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
-                title={selectedAccount ? '从闲鱼拉取该账号的在售商品' : '请先在左侧选择账号'}
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? '正在同步' : '同步商品'}
-              </button>
-              <button
-                type="button"
-                onClick={handlePolish}
-                disabled={polishing || items.length === 0}
-                className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm"
-                title="重新获取搜索曝光，平台对每日擦亮次数有限制"
-              >
-                <Sparkles className={`h-4 w-4 ${polishing ? 'animate-pulse' : ''}`} />
-                {polishing ? '正在擦亮' : '一键擦亮'}
-              </button>
-            </div>
           </div>
 
           {visibleItems.length > 0 ? (
             <>
-              {/* 各列用固定宽度而非 minmax 压缩：列宽足够时内容不再挤在一起，
-                  窗口放不下就由外层容器左右滚动。表头与行共用同一套列宽定义。 */}
+              {/* 列宽按比例分配（minmax 保底）：固定 px 在通栏布局下右边会留大片空区，
+                  比例列随容器伸缩铺满；保底宽度合计约 1012px，低于此由外层横向滚动兜底，
+                  不再强制 1200px 最小宽（1280 视口会白出一条滚动条）。
+                  表头与行共用同一套列宽定义。 */}
               <div className="overflow-x-auto">
-                <div className="min-w-full xl:min-w-[1200px]">
-                  <div className="hidden grid-cols-[340px_140px_260px_210px_110px] border-b-2 border-gray-300 bg-gray-100 text-xs font-bold text-gray-600 xl:grid [&>span]:border-r [&>span]:border-gray-300 [&>span]:px-4 [&>span]:py-3 [&>span:nth-child(2)]:px-2 [&>span:last-child]:border-r-0">
+                <div className="min-w-full">
+                  <div className="hidden grid-cols-[minmax(320px,2.7fr)_minmax(120px,1fr)_minmax(260px,2.1fr)_minmax(200px,1.5fr)_minmax(112px,auto)] border-b-2 border-gray-300 bg-gray-100 text-xs font-bold text-gray-600 xl:grid [&>span]:border-r [&>span]:border-gray-300 [&>span]:px-4 [&>span]:py-3 [&>span:nth-child(2)]:px-2 [&>span:last-child]:border-r-0">
                     <span>商品信息</span>
                     <span>所属账号</span>
                     <span>专属自动发货</span>
@@ -831,7 +1218,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                   return (
                     <article
                       key={key}
-                      className="grid gap-4 px-4 py-4 transition-colors hover:bg-[#fffdf0] xl:grid-cols-[340px_140px_260px_210px_110px] xl:items-stretch xl:gap-0 xl:px-0 xl:[&>*]:flex xl:[&>*]:min-w-0 xl:[&>*]:flex-col xl:[&>*]:justify-center xl:[&>*]:border-r xl:[&>*]:border-gray-200 xl:[&>*]:px-4 xl:[&>*:first-child]:!flex-row xl:[&>*:first-child]:items-center xl:[&>*:last-child]:border-r-0"
+                      className="grid gap-4 px-4 py-4 transition-colors hover:bg-[#fffdf0] xl:grid-cols-[minmax(320px,2.7fr)_minmax(120px,1fr)_minmax(260px,2.1fr)_minmax(200px,1.5fr)_minmax(112px,auto)] xl:items-stretch xl:gap-0 xl:px-0 xl:[&>*]:flex xl:[&>*]:min-w-0 xl:[&>*]:flex-col xl:[&>*]:justify-center xl:[&>*]:border-r xl:[&>*]:border-gray-200 xl:[&>*]:px-4 xl:[&>*:first-child]:!flex-row xl:[&>*:first-child]:items-center xl:[&>*:last-child]:border-r-0"
                     >
                       <div className="flex min-w-0 gap-3">
                         <div className="h-20 w-20 flex-none overflow-hidden rounded-md border border-gray-200 bg-gray-100">
@@ -840,11 +1227,11 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 flex-wrap items-start gap-2">
                             <h3 className={`min-w-0 flex-1 text-sm font-bold leading-5 ${
-                              isOffShelf(item) ? 'text-gray-400 line-through' : 'text-gray-900'
+                              isOffShelf(item) && !isLocalDraft(item) ? 'text-gray-400 line-through' : 'text-gray-900'
                             }`}>
                               {item.item_title || '未命名商品'}
                             </h3>
-                            {isOffShelf(item) && (
+                            {isOffShelf(item) && !isLocalDraft(item) && (
                               <span
                                 className="status-badge shrink-0 bg-gray-100 text-gray-500"
                                 title={
@@ -854,6 +1241,14 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                                 }
                               >
                                 已下架
+                              </span>
+                            )}
+                            {isLocalDraft(item) && (
+                              <span
+                                className="status-badge shrink-0 bg-purple-50 text-purple-600"
+                                title="本地商品：尚未发布到闲鱼，可用操作列的火箭按钮一键上架"
+                              >
+                                未上架
                               </span>
                             )}
                             <span className={`status-badge shrink-0 ${statusClass}`}>
@@ -965,18 +1360,54 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                             onClick={() => openDetail(item)}
                             disabled={busy}
                             className="rounded-md p-2 text-gray-600 hover:bg-gray-100"
-                            title="编辑本地详情"
-                            aria-label="编辑本地详情"
+                            title="编辑商品信息"
+                            aria-label="编辑商品信息"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
+                          {isLocalDraft(item) && (
+                            <button
+                              type="button"
+                              onClick={() => void handlePublishLocal(item)}
+                              disabled={busy}
+                              className="rounded-md p-2 text-[var(--brand-text)] hover:bg-[var(--brand-soft)]"
+                              title="一键发布到闲鱼（分类自动识别）"
+                              aria-label="一键发布到闲鱼"
+                            >
+                              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                            </button>
+                          )}
+                          {item.listing_status === 'on_sale' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDownshelf(item)}
+                              disabled={busy}
+                              className="rounded-md p-2 text-amber-600 hover:bg-amber-50"
+                              title="从闲鱼下架（本地记录保留）"
+                              aria-label="从闲鱼下架"
+                            >
+                              <CirclePause className="h-4 w-4" />
+                            </button>
+                          )}
+                          {isOffShelf(item) && !isLocalDraft(item) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleRepublish(item)}
+                              disabled={busy}
+                              className="rounded-md p-2 text-[var(--brand-text)] hover:bg-[var(--brand-soft)]"
+                              title="重新上架（原内容重新发布，配置自动迁移）"
+                              aria-label="重新上架"
+                            >
+                              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDelete(item)}
                             disabled={busy}
                             className="rounded-md p-2 text-red-500 hover:bg-red-50"
-                            title="删除本地记录"
-                            aria-label="删除本地记录"
+                            title={onSaleDraftTitle(item)}
+                            aria-label={onSaleDraftTitle(item)}
                           >
                             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </button>
@@ -1077,6 +1508,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
               </button>
             </div>
             <div className="modal-body space-y-5">
+              <ModalNotice notice={notice} onClose={() => setNotice(null)} />
               {deliveryLoading ? (
                 <PageLoading label="正在加载商品发货配置" />
               ) : (
@@ -1301,32 +1733,76 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
 
       {detailItem && createPortal(
         <div className="modal-overlay">
-          <div className="modal-container">
+          <div className="modal-container modal-container-lg">
             <div className="modal-header flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">编辑商品详情</h3>
-                <p className="mt-1 line-clamp-1 text-sm text-gray-500">{detailItem.item_title || detailItem.item_id}</p>
+                <h3 className="text-lg font-bold text-gray-900">编辑商品</h3>
+                <p className="mt-1 line-clamp-1 text-sm text-gray-500">{editForm.title || detailItem.item_id}</p>
               </div>
               <button type="button" onClick={() => setDetailItem(null)} className="rounded-md p-2 hover:bg-gray-100" aria-label="关闭">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="modal-body">
-              <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="item-detail">本地商品详情</label>
-              <textarea
-                id="item-detail"
-                value={itemDetail}
-                onChange={event => setItemDetail(event.target.value)}
-                className="ios-input min-h-64 w-full resize-y rounded-md p-3 font-mono text-sm"
-                placeholder="补充商品说明，供自动回复和发货逻辑读取。"
-              />
+            <div className="modal-body grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {notice && (
+                <div className="sm:col-span-2">
+                  <ModalNotice notice={notice} onClose={() => setNotice(null)} />
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="item-title">商品标题</label>
+                <input
+                  id="item-title"
+                  value={editForm.title}
+                  onChange={event => setEditForm(current => ({ ...current, title: event.target.value }))}
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="item-price">价格（元）</label>
+                <input
+                  id="item-price"
+                  value={editForm.price}
+                  onChange={event => setEditForm(current => ({ ...current, price: event.target.value }))}
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                  placeholder="例如 80"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="item-description">商品简介</label>
+                <input
+                  id="item-description"
+                  value={editForm.description}
+                  onChange={event => setEditForm(current => ({ ...current, description: event.target.value }))}
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <ImageField
+                  id="item-image"
+                  value={editForm.imageUrl}
+                  uploading={imageUploading}
+                  onChange={imageUrl => setEditForm(current => ({ ...current, imageUrl }))}
+                  onUpload={event => void handleImageUpload(event, imageUrl => setEditForm(current => ({ ...current, imageUrl })))}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="item-detail">本地详情</label>
+                <textarea
+                  id="item-detail"
+                  value={editForm.detail}
+                  onChange={event => setEditForm(current => ({ ...current, detail: event.target.value }))}
+                  className="ios-input !min-h-[240px] w-full resize-y rounded-md p-3 font-mono text-sm"
+                  placeholder="补充商品说明，供自动回复和发货逻辑读取。"
+                />
+              </div>
             </div>
             <div className="modal-footer flex justify-end gap-2">
               <button type="button" onClick={() => setDetailItem(null)} className="ios-btn-secondary rounded-md px-4 py-2.5">取消</button>
               <button
                 type="button"
                 onClick={handleSaveDetail}
-                disabled={Boolean(savingKey)}
+                disabled={Boolean(savingKey) || imageUploading}
                 className="ios-btn-primary flex items-center gap-2 rounded-md px-4 py-2.5"
               >
                 {savingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -1351,6 +1827,11 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
               </button>
             </div>
             <div className="modal-body grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {notice && (
+                <div className="sm:col-span-2">
+                  <ModalNotice notice={notice} onClose={() => setNotice(null)} />
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="manual-account">所属账号</label>
                 <select
@@ -1395,13 +1876,12 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="manual-image">图片 URL</label>
-                <input
+                <ImageField
                   id="manual-image"
                   value={manualForm.imageUrl}
-                  onChange={event => setManualForm(current => ({ ...current, imageUrl: event.target.value }))}
-                  className="ios-input w-full rounded-md px-3 py-2.5"
-                  placeholder="https://..."
+                  uploading={imageUploading}
+                  onChange={imageUrl => setManualForm(current => ({ ...current, imageUrl }))}
+                  onUpload={event => void handleImageUpload(event, imageUrl => setManualForm(current => ({ ...current, imageUrl })))}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -1419,7 +1899,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                   id="manual-detail"
                   value={manualForm.detail}
                   onChange={event => setManualForm(current => ({ ...current, detail: event.target.value }))}
-                  className="ios-input min-h-28 w-full resize-y rounded-md p-3"
+                  className="ios-input !min-h-[140px] w-full resize-y rounded-md p-3"
                 />
               </div>
             </div>
@@ -1435,6 +1915,292 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
               >
                 {savingKey === 'manual-item' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 添加商品
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {showPublishModal && createPortal(
+        <div className="modal-overlay">
+          <div className="modal-container modal-container-lg">
+            <div className="modal-header flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{publishConfirm ? '确认发布' : '发布商品'}</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {publishConfirm
+                    ? '核对识别出的分类与商品信息，确认后上架到闲鱼。'
+                    : '直接上架到闲鱼平台：填写描述、上传图片，系统自动识别分类后需确认。'}
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowPublishModal(false)} className="rounded-md p-2 hover:bg-gray-100" aria-label="关闭">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {!publishConfirm ? (
+              <div className="modal-body grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {notice && (
+                  <div className="sm:col-span-2">
+                    <ModalNotice notice={notice} onClose={() => setNotice(null)} />
+                  </div>
+                )}
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-account">发布到账号</label>
+                  <select
+                    id="publish-account"
+                    value={publishForm.cookieId}
+                    onChange={event => {
+                      const cookieId = event.target.value;
+                      setPublishForm(current => ({ ...current, cookieId, address: null }));
+                      setPublishFieldErrors(current => ({ ...current, cookieId: undefined }));
+                      void loadPublishAddresses(cookieId).then(options => {
+                        if (options.length) {
+                          setPublishForm(current => (current.cookieId === cookieId && !current.address
+                            ? { ...current, address: options[0] }
+                            : current));
+                        }
+                      });
+                    }}
+                    className="ios-input w-full rounded-md px-3 py-2.5"
+                  >
+                    <option value="">请选择账号</option>
+                    {accounts.map(account => (
+                      <option key={account.id} value={account.id}>{accountNames.get(account.id)}</option>
+                    ))}
+                  </select>
+                  {publishFieldErrors.cookieId && (
+                    <p className="mt-1.5 text-xs font-bold text-red-500">{publishFieldErrors.cookieId}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-title">宝贝描述（同时作为标题）</label>
+                  <textarea
+                    id="publish-title"
+                    value={publishForm.title}
+                    onChange={event => {
+                      setPublishForm(current => ({ ...current, title: event.target.value.slice(0, 1500) }));
+                      setPublishFieldErrors(current => ({ ...current, title: undefined }));
+                    }}
+                    className="ios-input !min-h-[110px] w-full resize-y rounded-md p-3"
+                    placeholder="描述越具体，分类识别越准（例如：九成新山地自行车，自提优先）"
+                  />
+                  <div className="mt-1 flex items-baseline justify-between gap-2">
+                    {publishFieldErrors.title ? (
+                      <p className="text-xs font-bold text-red-500">{publishFieldErrors.title}</p>
+                    ) : <span />}
+                    <p className="text-xs text-gray-400">{publishForm.title.length}/1500</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-price">价格（元）</label>
+                  <input
+                    id="publish-price"
+                    value={publishForm.price}
+                    onChange={event => {
+                      setPublishForm(current => ({ ...current, price: event.target.value }));
+                      setPublishFieldErrors(current => ({ ...current, price: undefined }));
+                    }}
+                    className="ios-input w-full rounded-md px-3 py-2.5"
+                    placeholder="例如 420"
+                    inputMode="decimal"
+                  />
+                  {publishFieldErrors.price && (
+                    <p className="mt-1.5 text-xs font-bold text-red-500">{publishFieldErrors.price}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-original-price">原价（元，选填）</label>
+                  <input
+                    id="publish-original-price"
+                    value={publishForm.originalPrice}
+                    onChange={event => {
+                      setPublishForm(current => ({ ...current, originalPrice: event.target.value }));
+                      setPublishFieldErrors(current => ({ ...current, originalPrice: undefined }));
+                    }}
+                    className="ios-input w-full rounded-md px-3 py-2.5"
+                    placeholder="划线价，例如 599"
+                    inputMode="decimal"
+                  />
+                  {publishFieldErrors.originalPrice && (
+                    <p className="mt-1.5 text-xs font-bold text-red-500">{publishFieldErrors.originalPrice}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-bold text-gray-700">发货设置</label>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { value: 'free', label: '包邮' },
+                      { value: 'freight', label: '按距离计费' },
+                      { value: 'self', label: '无需邮寄（自提）' },
+                    ] as const).map(option => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setPublishForm(current => ({ ...current, shippingMode: option.value }))}
+                        className={`rounded-md border px-3.5 py-2 text-sm font-bold transition-colors ${
+                          publishForm.shippingMode === option.value
+                            ? 'border-[var(--border-brand)] bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-address">宝贝所在地</label>
+                  <select
+                    id="publish-address"
+                    value={publishForm.address ? String(publishForm.address.poiId || '') : ''}
+                    onChange={event => {
+                      const poiId = event.target.value;
+                      const next = addressOptions.find(addr => String(addr.poiId || '') === poiId) || null;
+                      setPublishForm(current => ({ ...current, address: next }));
+                    }}
+                    className="ios-input w-full rounded-md px-3 py-2.5"
+                    disabled={addressLoading || addressOptions.length === 0}
+                  >
+                    {addressLoading && <option>正在加载地址…</option>}
+                    {!addressLoading && addressOptions.length === 0 && <option>使用账号默认地址</option>}
+                    {addressOptions.map(addr => (
+                      <option key={String(addr.poiId || '')} value={String(addr.poiId || '')}>
+                        {`${addr.prov || ''}${addr.city || ''}${addr.area || ''} · ${addr.poi || addr.aoi || addr.address || ''}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-bold text-gray-700">商品图片（{publishForm.images.length}/9，第一张为主图）</label>
+                  <div className="flex flex-wrap gap-2">
+                    {publishForm.images.map((image, index) => (
+                      <div key={image.url} className="relative h-20 w-20">
+                        <img src={image.preview || image.url} alt="" className="h-full w-full rounded-md border border-gray-200 object-cover" />
+                        {index === 0 && (
+                          <span className="absolute left-0 top-0 rounded-br-md bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-bold text-[#2a2416]">主图</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPublishForm(current => ({
+                            ...current,
+                            images: current.images.filter(img => img.url !== image.url),
+                          }))}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow"
+                          aria-label="移除图片"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {publishForm.images.length < 9 && (
+                      <label className={`flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-gray-300 text-gray-400 hover:border-[var(--border-brand)] hover:text-[var(--brand-text)] ${
+                        publishUploading ? 'pointer-events-none opacity-60' : ''
+                      }`}>
+                        {publishUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+                        <span className="text-[10px] font-bold">{publishUploading ? '上传中' : '添加图片'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={event => void handlePublishImageUpload(event)}
+                          disabled={publishUploading}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400">图片会直接上传到闲鱼图片空间；注意部分分类（如软件服务类）网页端禁止发布。</p>
+                  {publishFieldErrors.images && (
+                    <p className="mt-1.5 text-xs font-bold text-red-500">{publishFieldErrors.images}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="modal-body space-y-4">
+                <ModalNotice notice={notice} onClose={() => setNotice(null)} />
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">商品分类（点选可切换）</p>
+                  <div className="flex flex-wrap gap-2">
+                    {publishConfirm.candidates.map(candidate => {
+                      const selected = String(publishConfirm.category.catId) === String(candidate.catId);
+                      return (
+                        <button
+                          key={String(candidate.catId)}
+                          type="button"
+                          onClick={() => setPublishConfirm(current =>
+                            current ? { ...current, category: candidate } : current)}
+                          className={`rounded-md border px-3.5 py-2 text-sm font-bold transition-colors ${
+                            selected
+                              ? 'border-[var(--border-brand)] bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {candidate.catName}
+                          {selected && <span className="ml-1 text-[10px]">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {publishConfirm.candidates.length <= 1 && (
+                    <p className="mt-1.5 text-xs text-gray-400">闲鱼仅识别出此分类，无可切换项</p>
+                  )}
+                </div>
+                <div className="flex items-start gap-3">
+                  {publishForm.images[0] && (
+                    <img src={publishForm.images[0].preview || publishForm.images[0].url} alt="" className="h-16 w-16 flex-none rounded-md border border-gray-200 object-cover" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="line-clamp-3 text-sm text-gray-800">{publishForm.title}</p>
+                    <p className="mt-1.5 text-lg font-bold text-[#d92d20]">
+                      ¥{publishForm.price}
+                      {publishForm.originalPrice.trim() && (
+                        <span className="ml-1.5 align-middle text-sm font-medium text-gray-400 line-through">¥{publishForm.originalPrice}</span>
+                      )}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {publishForm.images.length} 张图片 · {
+                        { free: '包邮', freight: '按距离计费', self: '无需邮寄（自提）' }[publishForm.shippingMode]
+                      } · 数量 1
+                    </p>
+                    {publishForm.address && (
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        宝贝所在地：{publishForm.address.prov}{publishForm.address.city}{publishForm.address.area} · {publishForm.address.poi || publishForm.address.aoi}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-gray-500">
+                  确认后商品将立即上架到「{accountNames.get(publishForm.cookieId) || publishForm.cookieId}」，
+                  买家即可浏览购买；发布成功后会自动出现在商品列表中。
+                </p>
+              </div>
+            )}
+
+            <div className="modal-footer flex justify-end gap-2">
+              {publishConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setPublishConfirm(null)}
+                  disabled={publishing}
+                  className="ios-btn-secondary rounded-md px-4 py-2.5"
+                >
+                  返回修改
+                </button>
+              ) : (
+                <button type="button" onClick={() => setShowPublishModal(false)} className="ios-btn-secondary rounded-md px-4 py-2.5">
+                  取消
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handlePublishSubmit}
+                disabled={publishing || publishUploading}
+                className="ios-btn-primary flex items-center gap-2 rounded-md px-4 py-2.5"
+              >
+                {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {publishing ? (publishConfirm ? '正在发布' : '正在识别') : publishConfirm ? '确认发布' : '识别分类并预览'}
               </button>
             </div>
           </div>

@@ -5856,6 +5856,364 @@ def create_manual_item(
         raise HTTPException(status_code=500, detail=f"手动添加商品失败: {str(e)}")
 
 
+# ------------------------- 商品发布（mtop 接口直连） -------------------------
+
+class ItemPublishRequest(BaseModel):
+    cookie_id: str
+    title: str
+    description: str
+    price: float
+    quantity: int = 1
+    # 可选原价（划线价），不填则不提交
+    original_price: Optional[float] = None
+    # 发货设置：free=包邮 / freight=按距离计费 / self=无需邮寄（仅自提）
+    shipping_mode: str = 'free'
+    # 宝贝所在地（从 /items/publish/addresses 返回的地址对象，不传用默认地址）
+    address: Optional[Dict[str, Any]] = None
+    # 分类（推荐接口返回的候选对象，用户手动选择时传入，不传取识别首选）
+    category: Optional[Dict[str, Any]] = None
+    # 已上传到闲鱼图片空间的图片：[{url, widthSize, heightSize}]，第一张为主图
+    images: List[Dict[str, Any]]
+
+
+async def _require_publishable_cookie(cookie_id: str, user_id: int) -> str:
+    """校验账号归属并返回可用的 cookies_str。"""
+    if not cookie_id:
+        raise HTTPException(status_code=400, detail="缺少 cookie_id 参数")
+    user_cookies = db_manager.get_all_cookies(user_id)
+    if cookie_id not in user_cookies:
+        raise HTTPException(status_code=403, detail="无权使用该闲鱼账号")
+    cookie_info = db_manager.get_cookie_by_id(cookie_id)
+    if not cookie_info:
+        raise HTTPException(status_code=404, detail="未找到指定的账号信息")
+    cookies_str = cookie_info.get('cookies_str', '')
+    if not cookies_str:
+        raise HTTPException(status_code=400, detail="账号 cookie 信息为空")
+    return cookies_str
+
+
+def _normalize_publish_images(images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """只保留闲鱼图片空间地址，避免把本地地址当平台图发布。"""
+    result = []
+    for image in (images or []):
+        url = str(image.get('url') or '').strip()
+        if url.startswith(('http://', 'https://')):
+            result.append({
+                'url': url,
+                'widthSize': int(image.get('widthSize') or 0),
+                'heightSize': int(image.get('heightSize') or 0),
+            })
+    return result[:9]
+
+
+@app.post("/items/publish/image")
+async def publish_item_image(
+    cookie_id: str = Form(...),
+    image: UploadFile = File(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """把本地图片上传到闲鱼图片空间（发布商品用）。"""
+    if not image.content_type or not image.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="请上传图片文件")
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+    image_data = await image.read()
+    if len(image_data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片不能超过 10MB")
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, upload_publish_image
+    try:
+        async with aiohttp.ClientSession() as session:
+            uploaded = await upload_publish_image(
+                session, cookies_str, image_data,
+                image.filename or 'item.jpg', image.content_type or 'image/jpeg',
+            )
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {"message": "图片已上传到闲鱼图片空间", "data": uploaded}
+
+
+@app.post("/items/publish/recommend")
+async def publish_item_recommend(
+    request: ItemPublishRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """根据描述与图片识别商品分类（发布前的预览确认用）。"""
+    cookies_str = await _require_publishable_cookie(request.cookie_id, current_user['user_id'])
+    images = _normalize_publish_images(request.images)
+    if not request.title.strip():
+        raise HTTPException(status_code=400, detail="请填写商品描述")
+
+    from app.item_publisher import ItemPublishError, run_recommend
+    try:
+        result = await run_recommend(
+            cookies_str, request.cookie_id,
+            title=request.title.strip(), description=request.description.strip(),
+            images=images,
+        )
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"data": result}
+
+
+@app.post("/items/publish")
+async def publish_item_to_xianyu(
+    request: ItemPublishRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """发布商品到闲鱼（mtop 直连）。成功后把商品写入本地列表。"""
+    cookies_str = await _require_publishable_cookie(request.cookie_id, current_user['user_id'])
+    title = request.title.strip()
+    description = request.description.strip() or title
+    images = _normalize_publish_images(request.images)
+    if not title:
+        raise HTTPException(status_code=400, detail="请填写商品描述")
+    if not images:
+        raise HTTPException(status_code=400, detail="请至少上传一张商品图片")
+    if request.price <= 0:
+        raise HTTPException(status_code=400, detail="价格必须大于 0")
+
+    from app.item_publisher import ItemPublishError, run_publish
+    try:
+        result = await run_publish(
+            cookies_str, request.cookie_id,
+            title=title, description=description, price=request.price,
+            images=images, quantity=request.quantity,
+            original_price=request.original_price,
+            shipping_mode=request.shipping_mode,
+            address=request.address,
+            category=request.category,
+        )
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    item_id = result['itemId']
+    # 发布成功即落到本地库，商品列表立刻可见，无需再手动同步
+    try:
+        db_manager.save_item_info(request.cookie_id, item_id, {
+            'title': title,
+            'description': description,
+            'category': result.get('category') or '',
+            'price': f"{request.price:.2f}",
+            'item_image': images[0].get('url', ''),
+            'item_detail': '',
+            'source': 'publish',
+        })
+    except Exception as exc:
+        logger.warning(f"发布成功但本地保存失败: {exc}")
+
+    return {
+        "success": True,
+        "message": f"商品已发布（分类：{result.get('category') or '未知'}）",
+        "item_id": item_id,
+        "item_url": f"https://www.goofish.com/item?id={item_id}",
+        "category": result.get('category'),
+    }
+
+
+@app.get("/items/publish/addresses")
+async def publish_item_addresses(
+    cookie_id: str = Query(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """取账号可用的宝贝所在地（默认地址 + 常用地址）。"""
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, fetch_addresses
+    try:
+        async with aiohttp.ClientSession() as session:
+            data = await fetch_addresses(session, cookies_str)
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "data": {
+            "selectedPoi": data.get('selectedPoi'),
+            "commonAddresses": data.get('commonAddresses') or [],
+        }
+    }
+
+
+@app.post("/items/downshelf")
+async def downshelf_item_route(
+    request: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """把商品从闲鱼平台下架（本地记录保留，标记为已下架）。"""
+    cookie_id = str(request.get('cookie_id') or '')
+    item_id = str(request.get('item_id') or '')
+    if not item_id:
+        raise HTTPException(status_code=400, detail="缺少 item_id 参数")
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, downshelf_item
+    try:
+        async with aiohttp.ClientSession() as session:
+            await downshelf_item(session, cookies_str, item_id)
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    db_manager.update_item_fields(cookie_id, item_id, {'listing_status': 'off_shelf'})
+    return {"success": True, "message": "商品已从闲鱼下架，本地记录已保留"}
+
+
+@app.post("/items/platform-delete")
+async def platform_delete_item_route(
+    request: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """从闲鱼平台删除商品，并移除本地记录。"""
+    cookie_id = str(request.get('cookie_id') or '')
+    item_id = str(request.get('item_id') or '')
+    if not item_id:
+        raise HTTPException(status_code=400, detail="缺少 item_id 参数")
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, delete_platform_item
+    try:
+        async with aiohttp.ClientSession() as session:
+            await delete_platform_item(session, cookies_str, item_id)
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    db_manager.delete_item_info(cookie_id, item_id)
+    return {"success": True, "message": "商品已从闲鱼删除，本地记录已同步移除"}
+
+
+@app.post("/items/publish-local")
+async def publish_local_item_route(
+    request: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """一键发布本地（手动添加、未同步）商品到闲鱼。
+
+    图片自动转存到闲鱼图片空间，发布成功后本地记录迁移为平台新商品 ID，
+    已配置的发货规则/规格跟随迁移。
+    """
+    cookie_id = str(request.get('cookie_id') or '')
+    item_id = str(request.get('item_id') or '')
+    if not item_id:
+        raise HTTPException(status_code=400, detail="缺少 item_id 参数")
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+
+    item = db_manager.get_item_info(cookie_id, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="未找到该本地商品")
+    if item.get('last_seen_at'):
+        # last_seen_at 只有同步过的商品才有；防止把平台在售商品重复发布成新商品
+        raise HTTPException(status_code=400, detail="该商品来自闲鱼平台同步，无需发布；如需重新上架请使用下架/发布流程")
+    title = str(item.get('item_title') or '').strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="商品缺少标题，请先编辑补齐")
+    raw_price = str(item.get('item_price') or '').replace('¥', '').replace('￥', '').strip()
+    try:
+        price = float(raw_price)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="商品价格无效，请先编辑修正")
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="商品价格必须大于 0")
+    image_url = str(item.get('item_image') or '').strip()
+    if not image_url:
+        raise HTTPException(status_code=400, detail="商品缺少图片，请先编辑上传")
+    description = str(item.get('item_description') or '').strip() or title
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, prepare_publish_image, run_publish
+    try:
+        async with aiohttp.ClientSession() as session:
+            uploaded = await prepare_publish_image(session, cookies_str, image_url)
+        result = await run_publish(
+            cookies_str, cookie_id,
+            title=title, description=description, price=price,
+            images=[uploaded], quantity=1,
+            shipping_mode='free',
+        )
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    new_item_id = result['itemId']
+    db_manager.migrate_item_id(
+        cookie_id, item_id, new_item_id,
+        image_url=uploaded['url'], price=f"{price:.2f}",
+    )
+    return {
+        "success": True,
+        "message": f"本地商品已发布上架（分类：{result.get('category') or '未知'}）",
+        "item_id": new_item_id,
+        "item_url": f"https://www.goofish.com/item?id={new_item_id}",
+        "category": result.get('category'),
+    }
+
+
+@app.post("/items/republish")
+async def republish_item_route(
+    request: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """重新上架已下架商品。
+
+    闲鱼网页端没有原生“重新上架”接口（探测与页面均无，是 APP 独占功能），
+    这里用已验证的发布协议以原内容重新上架：生成新的平台商品 ID，
+    本地记录与发货配置整体迁移过去，效果等同于重新上架。
+    """
+    cookie_id = str(request.get('cookie_id') or '')
+    item_id = str(request.get('item_id') or '')
+    if not item_id:
+        raise HTTPException(status_code=400, detail="缺少 item_id 参数")
+    cookies_str = await _require_publishable_cookie(cookie_id, current_user['user_id'])
+
+    item = db_manager.get_item_info(cookie_id, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="未找到该商品")
+    if item.get('listing_status') != 'off_shelf':
+        raise HTTPException(status_code=400, detail="仅已下架的商品需要重新上架")
+    title = str(item.get('item_title') or '').strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="商品缺少标题，请先编辑补齐")
+    raw_price = str(item.get('item_price') or '').replace('¥', '').replace('￥', '').strip()
+    try:
+        price = float(raw_price)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="商品价格无效，请先编辑修正")
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="商品价格必须大于 0")
+    image_url = str(item.get('item_image') or '').strip()
+    if not image_url:
+        raise HTTPException(status_code=400, detail="商品缺少图片，请先编辑上传")
+    description = str(item.get('item_description') or '').strip() or title
+
+    import aiohttp
+    from app.item_publisher import ItemPublishError, prepare_publish_image, run_publish
+    try:
+        async with aiohttp.ClientSession() as session:
+            uploaded = await prepare_publish_image(session, cookies_str, image_url)
+        result = await run_publish(
+            cookies_str, cookie_id,
+            title=title, description=description, price=price,
+            images=[uploaded], quantity=1,
+            shipping_mode='free',
+        )
+    except ItemPublishError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    new_item_id = result['itemId']
+    db_manager.migrate_item_id(
+        cookie_id, item_id, new_item_id,
+        image_url=uploaded['url'], price=f"{price:.2f}",
+    )
+    return {
+        "success": True,
+        "message": f"商品已重新上架（新分类：{result.get('category') or '未知'}）",
+        "item_id": new_item_id,
+        "item_url": f"https://www.goofish.com/item?id={new_item_id}",
+        "category": result.get('category'),
+    }
+
+
 class ProductVariantBindingIn(BaseModel):
     display_name: str = ""
     spec_text: str = ""
@@ -6308,7 +6666,11 @@ def get_item_detail(cookie_id: str, item_id: str, current_user: Dict[str, Any] =
 
 
 class ItemDetailUpdate(BaseModel):
-    item_detail: str
+    item_detail: Optional[str] = None
+    title: Optional[str] = None
+    price: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 @app.put("/items/{cookie_id}/{item_id}")
@@ -6318,7 +6680,7 @@ def update_item_detail(
     update_data: ItemDetailUpdate,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """更新商品详情"""
+    """更新商品信息：至少传一个字段，支持标题/价格/简介/图片/本地详情。"""
     try:
         # 检查cookie是否属于当前用户
         user_id = current_user['user_id']
@@ -6328,15 +6690,19 @@ def update_item_detail(
         if cookie_id not in user_cookies:
             raise HTTPException(status_code=403, detail="无权限操作该Cookie")
 
-        success = db_manager.update_item_detail(cookie_id, item_id, update_data.item_detail)
+        fields = update_data.dict(exclude_unset=True)
+        if not fields:
+            raise HTTPException(status_code=400, detail="未提供任何要更新的字段")
+
+        success = db_manager.update_item_fields(cookie_id, item_id, fields)
         if success:
-            return {"message": "商品详情更新成功"}
+            return {"message": "商品信息更新成功"}
         else:
-            raise HTTPException(status_code=400, detail="更新失败")
+            raise HTTPException(status_code=400, detail="更新失败，商品可能不存在")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新商品详情失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"更新商品信息失败: {str(e)}")
 
 
 @app.delete("/items/{cookie_id}/{item_id}")

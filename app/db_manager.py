@@ -4544,7 +4544,7 @@ class DBManager:
                               smtp_use_tls: bool, smtp_use_ssl: bool) -> tuple:
         """发送一封测试邮件，返回 (是否成功, 面向用户的中文原因)。"""
         import smtplib
-        subject = "闲鱼超级管家 - SMTP 测试邮件"
+        subject = "鱼小铺 - SMTP 测试邮件"
         text_content = (
             "这是一封测试邮件。\n\n"
             "收到本邮件，说明「系统设置 → 邮件服务」中的 SMTP 配置可以正常发信，\n"
@@ -6654,6 +6654,107 @@ class DBManager:
 
         except Exception as e:
             logger.error(f"更新商品详情失败: {e}")
+            self.conn.rollback()
+            return False
+
+    def migrate_item_id(self, cookie_id: str, old_item_id: str, new_item_id: str,
+                        image_url: Optional[str] = None, price: Optional[str] = None) -> bool:
+        """本地商品发布成功后，把本地记录的商品 ID 换成平台返回的新 ID。
+
+        发货/规格等配置表按 (cookie_id, item_id) 跟随迁移；订单、会话、发货
+        流水等历史表不动（本地草稿不应有，用户填了真实平台 ID 时改写历史反而错）。
+        """
+        updates = {"item_id": new_item_id, "listing_status": "on_sale",
+                   "updated_at": "CURRENT_TIMESTAMP",
+                   "last_seen_at": "CURRENT_TIMESTAMP"}
+        if image_url is not None:
+            updates["item_image"] = image_url
+        if price is not None:
+            updates["item_price"] = price
+        set_parts = []
+        values = []
+        for col, val in updates.items():
+            if val == "CURRENT_TIMESTAMP":
+                set_parts.append(f"{col} = CURRENT_TIMESTAMP")
+            else:
+                set_parts.append(f"{col} = ?")
+                values.append(val)
+        set_clause = ', '.join(set_parts)
+
+        config_tables = (
+            'delivery_rules', 'item_delivery_configs', 'product_variants',
+            'delivery_sku_options', 'delivery_sku_rules',
+        )
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    f"UPDATE item_info SET {set_clause} WHERE cookie_id = ? AND item_id = ?",
+                    (*values, cookie_id, old_item_id),
+                )
+                migrated = cursor.rowcount
+                for table in config_tables:
+                    try:
+                        cursor.execute(
+                            f"UPDATE {table} SET item_id = ? WHERE cookie_id = ? AND item_id = ?",
+                            (new_item_id, cookie_id, old_item_id),
+                        )
+                    except sqlite3.OperationalError as exc:
+                        logger.warning(f"迁移 {table} 的 item_id 失败（可能无此列）: {exc}")
+                self.conn.commit()
+                if migrated > 0:
+                    logger.info(f"本地商品 {old_item_id} 已迁移为平台商品 {new_item_id}")
+                    return True
+                logger.warning(f"未找到要迁移的本地商品: {old_item_id}")
+                return False
+        except Exception as exc:
+            logger.error(f"迁移商品 ID 失败: {exc}")
+            self.conn.rollback()
+            return False
+
+    def update_item_fields(self, cookie_id: str, item_id: str, fields: Dict[str, Any]) -> bool:
+        """按字段更新商品信息（标题/价格/简介/图片/详情），只写传入的字段。
+
+        列名来自固定白名单映射，不接受外部拼接，避免 SQL 注入。
+
+        Args:
+            cookie_id: Cookie ID
+            item_id: 商品 ID
+            fields: 允许的键：title / price / description / image_url / item_detail
+
+        Returns:
+            bool: 操作是否成功
+        """
+        column_map = {
+            'title': 'item_title',
+            'price': 'item_price',
+            'description': 'item_description',
+            'image_url': 'item_image',
+            'item_detail': 'item_detail',
+            'listing_status': 'listing_status',
+        }
+        updates = {column_map[key]: value for key, value in fields.items()
+                   if key in column_map and value is not None}
+        if not updates:
+            logger.warning("update_item_fields 未收到任何可更新字段")
+            return False
+        set_clause = ', '.join(f"{column} = ?" for column in updates)
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    f"UPDATE item_info SET {set_clause}, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE cookie_id = ? AND item_id = ?",
+                    (*updates.values(), cookie_id, item_id),
+                )
+                if cursor.rowcount > 0:
+                    self.conn.commit()
+                    logger.info(f"更新商品字段成功: {item_id} -> {list(updates)}")
+                    return True
+                logger.warning(f"未找到要更新的商品: {item_id}")
+                return False
+        except Exception as e:
+            logger.error(f"更新商品字段失败: {e}")
             self.conn.rollback()
             return False
 

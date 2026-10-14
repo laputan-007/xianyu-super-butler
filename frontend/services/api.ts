@@ -546,6 +546,86 @@ export const getItems = async (): Promise<Item[]> => {
     return Array.isArray(res) ? res : (res.items || []);
 }
 
+// ---- 商品发布（mtop 直连闲鱼） ----
+
+/** 发布：把图片上传到闲鱼图片空间，返回平台图地址与尺寸 */
+export const publishItemImage = async (
+  cookieId: string,
+  file: File,
+): Promise<{ url: string; widthSize: number; heightSize: number }> => {
+  const formData = new FormData();
+  formData.append('cookie_id', cookieId);
+  formData.append('image', file);
+  const res = await post<any>('/items/publish/image', formData);
+  return res.data;
+};
+
+/** 发布：根据描述与图片识别商品分类（确认弹窗展示候选供选择） */
+export const recommendPublishCategory = async (data: {
+  cookie_id: string;
+  title: string;
+  description: string;
+  price: number;
+  images: Array<{ url: string; widthSize: number; heightSize: number }>;
+}): Promise<{
+  data: {
+    /** 首选分类与候选分类均为完整对象（catId/catName/channelCatId/leafId/tbCatId） */
+    category: Record<string, string>;
+    candidates: Array<Record<string, string>>;
+  };
+}> => {
+  return post('/items/publish/recommend', data);
+};
+
+/** 发布：把商品上架到闲鱼 */
+export const publishItemToXianyu = async (data: {
+  cookie_id: string;
+  title: string;
+  description: string;
+  price: number;
+  quantity: number;
+  original_price?: number | null;
+  shipping_mode?: 'free' | 'freight' | 'self';
+  address?: Record<string, string> | null;
+  category?: Record<string, string> | null;
+  images: Array<{ url: string; widthSize: number; heightSize: number }>;
+}): Promise<{ success: boolean; message: string; item_id: string; item_url: string; category?: string }> => {
+  return post('/items/publish', data);
+};
+
+/** 发布：取账号可用的宝贝所在地 */
+export const fetchPublishAddresses = async (
+  cookieId: string,
+): Promise<{ data: { selectedPoi: Record<string, string> | null; commonAddresses: Array<Record<string, string>> } }> => {
+  return get(`/items/publish/addresses?cookie_id=${encodeURIComponent(cookieId)}`);
+};
+
+/** 商品从闲鱼平台下架（本地记录保留） */
+export const downshelfItem = async (cookieId: string, itemId: string): Promise<{ success: boolean; message: string }> => {
+  return post('/items/downshelf', { cookie_id: cookieId, item_id: itemId });
+};
+
+/** 从闲鱼平台删除商品（本地记录同步移除） */
+export const platformDeleteItem = async (cookieId: string, itemId: string): Promise<{ success: boolean; message: string }> => {
+  return post('/items/platform-delete', { cookie_id: cookieId, item_id: itemId });
+};
+
+/** 一键发布本地（手动添加、未同步）商品到闲鱼，本地记录迁移为平台新 ID */
+export const publishLocalItem = async (
+  cookieId: string,
+  itemId: string,
+): Promise<{ success: boolean; message: string; item_id: string; item_url: string; category?: string }> => {
+  return post('/items/publish-local', { cookie_id: cookieId, item_id: itemId });
+};
+
+/** 重新上架已下架商品（原内容重新发布，本地记录与发货配置迁移为新 ID） */
+export const republishItem = async (
+  cookieId: string,
+  itemId: string,
+): Promise<{ success: boolean; message: string; item_id: string; item_url: string; category?: string }> => {
+  return post('/items/republish', { cookie_id: cookieId, item_id: itemId });
+};
+
 export const syncItemsFromAccount = async (cookieId: string): Promise<any> => {
     return post('/items/get-all-from-account', { cookie_id: cookieId });
 }
@@ -566,8 +646,19 @@ export const deleteItem = async (cookieId: string, itemId: string): Promise<any>
     return del(`/items/${cookieId}/${itemId}`);
 }
 
-export const updateItemDetail = async (cookieId: string, itemId: string, itemDetail: string): Promise<any> => {
-    return put(`/items/${cookieId}/${itemId}`, { item_detail: itemDetail });
+/** 更新商品信息：只传需要修改的字段（标题/价格/简介/图片/本地详情）。 */
+export const updateItemInfo = async (
+  cookieId: string,
+  itemId: string,
+  data: Partial<{
+    item_detail: string;
+    title: string;
+    price: string;
+    description: string;
+    image_url: string;
+  }>,
+): Promise<any> => {
+    return put(`/items/${cookieId}/${itemId}`, data);
 }
 
 export const updateItemMultiSpec = async (cookieId: string, itemId: string, enabled: boolean): Promise<any> => {
