@@ -36,6 +36,13 @@ request.interceptors.response.use(
         /* no-op (SSR) */
       }
     }
+    // FastAPI 的业务错误在 response.data.detail 里；不提取的话调用方只能拿到
+    // "Request failed with status code 502" 这种无信息报错（如 vite 代理后端
+    // 下线窗口、mtop 业务失败的真实原因都被吞掉）。
+    const detail = (error.response?.data as { detail?: string } | undefined)?.detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return Promise.reject(new Error(detail));
+    }
     return Promise.reject(error);
   },
 );
