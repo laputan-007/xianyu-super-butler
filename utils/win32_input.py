@@ -267,6 +267,30 @@ class ScreenMapper:
         return abs(got[0] - target[0]) <= tolerance_px and abs(got[1] - target[1]) <= tolerance_px
 
 
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = (("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD))
+
+
+def get_idle_seconds() -> float:
+    """用户无输入的时长（秒）。失败返回 -1。
+
+    基于 Win32 GetLastInputInfo：最后一次键盘/鼠标输入距今的时间。
+    用于「智能空闲」策略 —— 只在用户离开电脑时才用硬件注入拖滑块，
+    避免抢夺正在使用中的鼠标。
+    """
+    if not WIND32_AVAILABLE:
+        return -1.0
+    ensure_dpi_aware()
+    lii = LASTINPUTINFO()
+    lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+    if not _user32().GetLastInputInfo(ctypes.byref(lii)):
+        return -1.0
+    # GetTickCount 约 49.7 天回绕一次，差值用无符号减法处理（kernel32 提供）
+    now = ctypes.c_ulong(ctypes.windll.kernel32.GetTickCount()).value
+    elapsed_ms = (now - lii.dwTime) & 0xFFFFFFFF
+    return elapsed_ms / 1000.0
+
+
 def find_chrome_window(page_title: str):
     """按页面标题找到承载它的 Chrome 顶层窗口，返回 hwnd。
 

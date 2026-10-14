@@ -94,6 +94,45 @@ const SettingToggle: React.FC<SettingToggleProps> = ({
   </div>
 );
 
+const SettingStrategy: React.FC<{
+  value: string;
+  options: Array<{ value: string; title: string; description: string }>;
+  onChange: (value: string) => void;
+}> = ({ value, options, onChange }) => (
+  <div className="border-b border-gray-100 px-4 py-3 last:border-b-0">
+    <p className="text-sm font-bold text-gray-900">拖动策略</p>
+    <p className="mt-1 text-xs leading-5 text-gray-500">自动过滑块时模拟鼠标的方式，改动即时生效、无需重启。</p>
+    <div className="mt-3 grid gap-2">
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={value === opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+            value === opt.value
+              ? 'border-[#ffe100] bg-[#fffbdb]'
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <span
+            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+              value === opt.value ? 'border-[#e0c400]' : 'border-gray-300'
+            }`}
+          >
+            {value === opt.value && <span className="h-2 w-2 rounded-full bg-[#ffe100]" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-xs font-bold text-gray-900">{opt.title}</span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-gray-500">{opt.description}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 const Settings: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(false);
@@ -391,12 +430,21 @@ const Settings: React.FC = () => {
             />
             <SettingToggle
               title="自动过滑块"
-              description="开启后账号被风控时自动拉起浏览器拖动滑块（Windows 下使用硬件级鼠标注入，拖动瞬间会短暂接管本机鼠标）。关闭后只记录风控并发通知，请在「账号管理」点人工验证处理。改动即时生效，无需重启。"
+              description="开启后账号被风控时自动拉起浏览器拖动滑块。关闭后只记录风控并发通知，请在「账号管理」点人工验证处理。改动即时生效，无需重启。"
               checked={toBool(settings.slider_auto_enabled, true)}
               onChange={() => setSettings({
                 ...settings,
                 slider_auto_enabled: !toBool(settings.slider_auto_enabled, true),
               })}
+            />
+            <SettingStrategy
+              value={settings.slider_strategy || 'hardware'}
+              options={[
+                { value: 'hardware', title: '硬件级注入（推荐）', description: '通过率最高。拖动瞬间（约 2-5 秒）会短暂接管本机鼠标并置前浏览器窗口。' },
+                { value: 'hardware_idle', title: '智能空闲', description: '只在检测到你已离开电脑（2 分钟无键鼠操作）时才用硬件注入；正在使用时自动改走 CDP 不抢鼠标，空闲后的自动重试会切回硬件通道。' },
+                { value: 'cdp', title: 'CDP 模拟', description: '完全不碰本机鼠标，但通过率明显更低。适合服务器无人值守，或任何不想被弹窗打扰的场景。' },
+              ]}
+              onChange={(v) => setSettings({ ...settings, slider_strategy: v })}
             />
           </section>
 

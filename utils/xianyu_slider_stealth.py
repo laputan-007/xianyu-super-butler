@@ -43,20 +43,49 @@ except ImportError:
     WIN32_INPUT_AVAILABLE = False
 
 
-def resolve_input_mode(headless: bool) -> str:
-    """决定滑块拖动用哪条输入通道。
+# 「智能空闲」策略的空闲判定阈值：无键盘/鼠标输入超过该秒数视为
+# 用户已离开电脑，此时硬件注入不会抢夺任何人正在使用的鼠标。
+SLIDER_IDLE_THRESHOLD_SECONDS = 120
 
-    SLIDER_INPUT_MODE: auto（默认，Windows 有头 → sendinput）/ sendinput / cdp。
-    无头窗口不在真实桌面上，SendInput 打不到，强制回 CDP。
+
+def resolve_input_mode(headless: bool) -> str:
+    """决定滑块拖动用哪条输入通道（每次拖动前调用，网页设置实时生效）。
+
+    优先级：系统设置 slider_strategy > 环境变量 SLIDER_INPUT_MODE > hardware。
+    可选值：
+    - hardware      硬件级注入，通过率最高，拖动瞬间接管本机鼠标
+    - hardware_idle 智能空闲：用户离开电脑时硬件注入；正在使用时走
+                    CDP 不抢鼠标（熔断重试会自然等到空闲时段）
+    - cdp           CDP 模拟，完全不碰鼠标，通过率低
+    历史值 auto/sendinput 映射为 hardware。无头窗口不在真实桌面上，
+    SendInput 打不到，硬件类一律回 CDP。
     """
-    mode = os.getenv('SLIDER_INPUT_MODE', 'auto').strip().lower()
-    if mode not in ('auto', 'sendinput', 'cdp'):
-        mode = 'auto'
-    if mode == 'auto':
-        mode = 'sendinput' if WIN32_INPUT_AVAILABLE else 'cdp'
-    if mode == 'sendinput' and (not WIN32_INPUT_AVAILABLE or headless):
-        mode = 'cdp'
-    return mode
+    raw = ''
+    try:
+        # 拖动是低频路径，允许直读系统设置；延迟导入避免与
+        # cookie_manager → XianyuAutoAsync 的模块环相互锁死
+        from app.db_manager import db_manager
+        raw = (db_manager.get_system_setting('slider_strategy') or '').strip().lower()
+    except Exception:
+        raw = ''
+    if not raw:
+        raw = os.getenv('SLIDER_INPUT_MODE', '').strip().lower()
+    if raw in ('', 'auto', 'sendinput'):
+        raw = 'hardware'
+
+    if raw == 'hardware_idle':
+        idle = win32_input.get_idle_seconds() if win32_input is not None else -1.0
+        if idle >= SLIDER_IDLE_THRESHOLD_SECONDS:
+            raw = 'hardware'
+        else:
+            logger.info(
+                f"智能空闲策略：用户 {idle:.0f}s 内有输入（阈值 {SLIDER_IDLE_THRESHOLD_SECONDS}s），"
+                f"本轮走 CDP 不抢鼠标，空闲后重试自动切回硬件注入"
+            )
+            return 'cdp'
+    if raw == 'hardware' and (not WIN32_INPUT_AVAILABLE or headless):
+        raw = 'cdp'
+    return raw
 
 # 导入配置
 try:
@@ -1202,9 +1231,11 @@ class XianyuSliderStealth:
         try:
             logger.info(f"【{self.pure_user_id}】开始优化滑动模拟...")
 
-            # 优先走硬件级注入（Windows 有头默认启用）：前置不满足时返回
-            # None，自动落回下方 CDP 路径，两条通道共用同一套轨迹与成功判定。
-            if resolve_input_mode(self.headless) == 'sendinput':
+            # 按当前策略选输入通道：hardware 走硬件注入，前置不满足时返回
+            # None 自动落回下方 CDP 路径；两条通道共用同一套轨迹与成功判定。
+            input_mode = resolve_input_mode(self.headless)
+            logger.info(f"【{self.pure_user_id}】滑块输入通道: {input_mode}")
+            if input_mode == 'hardware':
                 sendinput_result = self._try_sendinput_slide(slider_button, trajectory)
                 if sendinput_result is not None:
                     return sendinput_result
