@@ -7858,10 +7858,12 @@ class DBManager:
         try:
             with self.lock:
                 cursor = self.conn.cursor()
+                # created_at/updated_at 显式写本地时间：列默认的
+                # CURRENT_TIMESTAMP 是 UTC，界面显示会差 8 小时
                 cursor.execute('''
                     INSERT INTO risk_control_logs
-                    (cookie_id, event_type, event_description, processing_result, processing_status, error_message)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (cookie_id, event_type, event_description, processing_result, processing_status, error_message, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
                 ''', (cookie_id, event_type, event_description, processing_result, processing_status, error_message))
                 self.conn.commit()
                 return True
@@ -7904,7 +7906,7 @@ class DBManager:
                     params.append(error_message)
 
                 if update_fields:
-                    update_fields.append("updated_at = CURRENT_TIMESTAMP")
+                    update_fields.append("updated_at = datetime('now', 'localtime')")
                     params.append(log_id)
 
                     sql = f"UPDATE risk_control_logs SET {', '.join(update_fields)} WHERE id = ?"
