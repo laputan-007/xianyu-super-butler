@@ -2581,6 +2581,26 @@ class XianyuLive:
         try:
             logger.info(f"【{self.cookie_id}】开始处理滑块验证...")
 
+            # 总开关（系统设置 slider_auto_enabled，网页「设置」页可实时切换）：
+            # 关闭时不启动浏览器、不自动拖动，直接返回 None 走既有的
+            # 熔断 + 「需人工处理」通知分支，由账号页「人工验证」兜底。
+            try:
+                from app.db_manager import db_manager
+                _slider_enabled = (db_manager.get_system_setting('slider_auto_enabled') or 'true').strip().lower() != 'false'
+            except Exception:
+                _slider_enabled = True
+            if not _slider_enabled:
+                logger.info(f"【{self.cookie_id}】自动过滑块已关闭（系统设置），跳过自动验证等待人工处理")
+                log_captcha_event(self.cookie_id, "自动过滑块已关闭，跳过自动验证", False,
+                    "总开关 slider_auto_enabled=false，请在账号管理页人工验证")
+                # 外层失败分支会置 notification_sent=True 抑制重复通知，
+                # 因此这里必须自己发一条，否则用户对风控无感知
+                await self.send_token_refresh_notification(
+                    "账号需要人机验证，自动过滑块已关闭（系统设置）。请在「账号管理」进行人工验证。",
+                    "captcha_disabled_manual_required"
+                )
+                return None
+
             # 获取验证URL
             verification_url = None
 

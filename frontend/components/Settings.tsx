@@ -385,6 +385,23 @@ const Settings: React.FC = () => {
 
           <section className="section-panel">
             <SectionHeader
+              title="滑块与风控"
+              description="闲鱼弹出人机验证（滑块）时的自动处理策略。"
+              icon={ShieldCheck}
+            />
+            <SettingToggle
+              title="自动过滑块"
+              description="开启后账号被风控时自动拉起浏览器拖动滑块（Windows 下使用硬件级鼠标注入，拖动瞬间会短暂接管本机鼠标）。关闭后只记录风控并发通知，请在「账号管理」点人工验证处理。改动即时生效，无需重启。"
+              checked={toBool(settings.slider_auto_enabled, true)}
+              onChange={() => setSettings({
+                ...settings,
+                slider_auto_enabled: !toBool(settings.slider_auto_enabled, true),
+              })}
+            />
+          </section>
+
+          <section className="section-panel">
+            <SectionHeader
               title="商品同步"
               description="设置后台定时获取闲鱼商品的频率和单次范围。"
               icon={Database}

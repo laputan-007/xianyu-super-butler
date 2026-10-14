@@ -33,6 +33,31 @@ except ImportError:
     patchright_sync_playwright = None
     PATCHRIGHT_AVAILABLE = False
 
+# 硬件级鼠标注入（Windows）：把拖动事件打进系统输入栈，绕开 CDP 合成事件
+# 缺少高频子事件密度的天花板。见 utils/win32_input.py 模块注释。
+try:
+    from utils import win32_input
+    WIN32_INPUT_AVAILABLE = win32_input.WIND32_AVAILABLE
+except ImportError:
+    win32_input = None
+    WIN32_INPUT_AVAILABLE = False
+
+
+def resolve_input_mode(headless: bool) -> str:
+    """决定滑块拖动用哪条输入通道。
+
+    SLIDER_INPUT_MODE: auto（默认，Windows 有头 → sendinput）/ sendinput / cdp。
+    无头窗口不在真实桌面上，SendInput 打不到，强制回 CDP。
+    """
+    mode = os.getenv('SLIDER_INPUT_MODE', 'auto').strip().lower()
+    if mode not in ('auto', 'sendinput', 'cdp'):
+        mode = 'auto'
+    if mode == 'auto':
+        mode = 'sendinput' if WIN32_INPUT_AVAILABLE else 'cdp'
+    if mode == 'sendinput' and (not WIN32_INPUT_AVAILABLE or headless):
+        mode = 'cdp'
+    return mode
+
 # 导入配置
 try:
     from app.config import SLIDER_VERIFICATION
@@ -1090,11 +1115,101 @@ class XianyuSliderStealth:
             logger.error(f"【{self.pure_user_id}】生成轨迹时出错: {str(e)}")
             return []
     
+    def _try_sendinput_slide(self, slider_button: ElementHandle, trajectory):
+        """硬件级注入拖动（SendInput）。
+
+        返回 True/False 表示拖动是否执行完成（成功与否由外层
+        check_verification_success_fast 判定）；返回 None 表示前置条件
+        不满足（坐标映射失败/窗口无法置前/自校验不过），调用方回退 CDP。
+        """
+        if win32_input is None:
+            return None
+        try:
+            geo = self.page.evaluate(win32_input.WINDOW_GEOMETRY_JS)
+            mapper = win32_input.ScreenMapper(geo)
+        except Exception as exc:
+            logger.warning(f"【{self.pure_user_id}】SendInput 坐标映射构建失败，回退 CDP: {exc}")
+            return None
+
+        button_box = slider_button.bounding_box()
+        if not button_box:
+            logger.warning(f"【{self.pure_user_id}】SendInput 拿不到滑块按钮位置，回退 CDP")
+            return None
+        start_x = button_box["x"] + button_box["width"] / 2
+        start_y = button_box["y"] + button_box["height"] / 2
+
+        # 光标事件只落在 Z 序最上层的窗口上，必须先把滑块窗口带到前台
+        hwnd = win32_input.find_chrome_window(geo.get("title") or "")
+        if not hwnd or not win32_input.force_foreground(hwnd):
+            logger.warning(f"【{self.pure_user_id}】SendInput 无法确保滑块窗口置前，回退 CDP")
+            return None
+        time.sleep(0.3)  # 等窗口置前、重绘稳定
+
+        if not mapper.verify():
+            logger.warning(f"【{self.pure_user_id}】SendInput 映射自校验未通过（DPI/多屏/缩放），回退 CDP")
+            return None
+        virtual_screen = win32_input.get_virtual_screen()
+
+        # 等用户停下真实鼠标再开拖：硬件鼠标 ~125Hz 的持续上报会实时
+        # 覆盖注入坐标，用户正在动鼠标时拖动轨迹必毁
+        win32_input.wait_cursor_stable(timeout=3.0)
+
+        def move_page(x, y):
+            # 子事件插值：每个轨迹点拆 8 个微步、间隔 1ms（≈800Hz 注入率）。
+            # 实测（真实 Chrome）：子事件密度随注入率上升——CDP 恒为 1、
+            # 250Hz 约 1.2、800Hz 约 2.1（峰值 6）、真人鼠标（250-500Hz，
+            # 页面繁忙时）3-6。轨迹点间隔约 16ms，8×1ms 的微步预算放得下。
+            px, py = mapper.page_to_screen(x, y)
+            prev = getattr(move_page, "_last", None)
+            if prev is not None:
+                dx, dy = px - prev[0], py - prev[1]
+                if dx or dy:
+                    for k in range(1, 8):
+                        win32_input.mouse_move_to(prev[0] + dx * k // 8, prev[1] + dy * k // 8, virtual_screen)
+                        time.sleep(0.001)
+            win32_input.mouse_move_to(px, py, virtual_screen)
+            move_page._last = (px, py)
+
+        try:
+            logger.info(f"【{self.pure_user_id}】SendInput 硬件级注入拖动开始（本机鼠标将被接管数秒）")
+            # 拟人前置动作全部走 SendInput：先移到滑块附近，再对准
+            move_page(start_x + random.uniform(-30, -10), start_y + random.uniform(-15, 15))
+            time.sleep(random.uniform(0.15, 0.3))
+            move_page(start_x, start_y)
+            time.sleep(random.uniform(0.1, 0.25))
+
+            win32_input.mouse_left_down()
+            time.sleep(random.uniform(0.05, 0.15))
+
+            # 复用同一套轨迹与时间轴，只是回放通道换成 SendInput
+            replay_trajectory(trajectory, start_x, start_y, move_page)
+
+            # 松手前停顿：与 CDP 路径一致的拟人节奏
+            time.sleep(random.uniform(0.12, 0.28))
+            win32_input.mouse_left_up()
+            logger.info(f"【{self.pure_user_id}】SendInput 拖动完成，等待风控判定")
+            return True
+        except Exception as exc:
+            logger.error(f"【{self.pure_user_id}】SendInput 拖动异常: {exc}")
+            try:
+                win32_input.mouse_left_up()  # 兜底松开，避免拖住系统输入
+            except Exception:
+                pass
+            return False
+
     def simulate_slide(self, slider_button: ElementHandle, trajectory):
         """模拟滑动 - 优化版本（基于高成功率策略）"""
         try:
             logger.info(f"【{self.pure_user_id}】开始优化滑动模拟...")
-            
+
+            # 优先走硬件级注入（Windows 有头默认启用）：前置不满足时返回
+            # None，自动落回下方 CDP 路径，两条通道共用同一套轨迹与成功判定。
+            if resolve_input_mode(self.headless) == 'sendinput':
+                sendinput_result = self._try_sendinput_slide(slider_button, trajectory)
+                if sendinput_result is not None:
+                    return sendinput_result
+                logger.info(f"【{self.pure_user_id}】SendInput 不可用，回退 CDP 通道执行拖动")
+
             # 等待页面稳定
             time.sleep(random.uniform(0.1, 0.3))
             

@@ -981,7 +981,8 @@ class DBManager:
             ('qq_reply_secret_key', 'xianyu_qq_reply_2024', 'QQ回复消息API秘钥'),
             ('item_sync_enabled', 'true', '是否启用定时自动同步商品'),
             ('item_sync_interval', '600', '商品同步间隔时间（秒）'),
-            ('item_sync_max_pages', '5', '每次最多同步的页数')
+            ('item_sync_max_pages', '5', '每次最多同步的页数'),
+            ('slider_auto_enabled', 'true', '是否自动处理滑块验证（关闭后仅提示人工处理）')
             ''')
 
             # 检查并升级数据库
