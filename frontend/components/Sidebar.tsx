@@ -94,27 +94,27 @@ const Sidebar: React.FC<SidebarProps> = ({
     <aside
       className={`fixed left-0 top-0 z-40 flex h-screen flex-col bg-[var(--surface)] transition-all lg:translate-x-0 ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
-      } ${collapsed ? 'max-lg:w-[248px] lg:w-[72px]' : 'w-[248px]'}`}
+      } ${collapsed ? 'max-lg:w-[208px] lg:w-[72px]' : 'w-[208px]'}`}
       style={{ borderRight: '1px solid var(--border)' }}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         {/* 品牌区：与登录页同款 logo，作为整站视觉锚点；收起时只留 logo */}
-        <div className={`flex h-[76px] shrink-0 items-center gap-3 ${collapsed ? 'justify-center px-2' : 'px-5'}`}>
+        <div className={`flex h-[72px] shrink-0 items-center gap-3 ${collapsed ? 'justify-center px-2' : 'px-5'}`}>
           <span className="relative shrink-0">
             <span
-              className="login-logo-glow absolute -inset-2.5 rounded-2xl"
+              className="login-logo-glow absolute -inset-2 rounded-2xl"
               style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.35) 0%, transparent 65%)' }}
             />
             <img
               src="/static/login-cover.png"
-              alt="闲鱼超级管家"
-              className="relative h-11 w-11"
+              alt="鱼小铺"
+              className="relative h-10 w-10"
               draggable={false}
             />
           </span>
           <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
-            <p className="truncate text-base font-extrabold text-[var(--text)]">闲鱼超级管家</p>
-            <p className="mt-0.5 text-[11px] font-medium text-[var(--text-soft)]">运营工作台</p>
+            <p className="brand-wordmark truncate text-[22px] font-black leading-none tracking-[0.1em]">鱼小铺</p>
+            <p className="mt-1.5 text-[10.5px] font-bold tracking-[0.26em] text-[var(--text-soft)]">运营工作台</p>
           </div>
           <button type="button" onClick={onMobileClose} className="rounded-full p-2 hover:bg-[var(--surface-hover)] lg:hidden" aria-label="关闭导航">
             <X className="w-5 h-5" />

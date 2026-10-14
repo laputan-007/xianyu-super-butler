@@ -63,7 +63,7 @@ class NotificationTestRateLimiter:
 def build_test_message(cookie_id: str) -> str:
     """构造测试消息模板，{request_id} 由服务层填充以便追踪。"""
     return (
-        "【闲鱼超级管家】通知测试\n"
+        "【鱼小铺】通知测试\n"
         f"账号：{cookie_id}\n"
         "追踪 ID：{request_id}\n"
         "收到本消息说明该渠道通知链路畅通。"

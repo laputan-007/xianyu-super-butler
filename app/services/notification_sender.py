@@ -88,7 +88,7 @@ class NotificationSendReceipt:
 
 _MAX_TIMEOUT_SECONDS = 30.0
 _DEFAULT_TIMEOUT_SECONDS = 10.0
-_EMAIL_SUBJECT = "闲鱼超级管家测试通知"
+_EMAIL_SUBJECT = "鱼小铺测试通知"
 
 
 def _safe_url(url: Any) -> str:
