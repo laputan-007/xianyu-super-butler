@@ -810,3 +810,8 @@ frontend/coverage/
 # Wrangler 本地缓存（Cloudflare Worker 部署产生）
 .wrangler/
 deploy/.wrangler/
+
+# 发布协议采集的一次性产物（抓包 JSON/截图）
+scripts/publish_capture*.json
+scripts/publish_*.png
+scripts/publish_addr_panel.txt
