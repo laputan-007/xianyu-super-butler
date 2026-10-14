@@ -10203,6 +10203,25 @@ class XianyuLive:
                 logger.error(f"提取聊天消息信息失败: {self._safe_str(e)}")
                 return
 
+            # 实时推送给网页端（SSE）：消息中心即时上屏，同时覆盖买家来信和
+            # 自己发出消息的回显（含手机端/自动回复）。内容是摘要级（图片等
+            # 富媒体只有占位符），全量保真仍由前端的历史轮询对账兜底
+            try:
+                if message_10.get("sessionType", "1") != "30":
+                    from app.realtime_hub import realtime_hub
+                    realtime_hub.publish_for_cookie(self.cookie_id, {
+                        "type": "chat_message",
+                        "cookie_id": self.cookie_id,
+                        "chat_id": chat_id,
+                        "is_self": str(send_user_id) == str(self.myid),
+                        "sender_user_id": str(send_user_id or ""),
+                        "sender_nick": str(send_user_name or ""),
+                        "content": str(send_message or ""),
+                        "time": create_time,
+                    })
+            except Exception as exc:
+                logger.debug(f"消息实时推送失败: {self._safe_str(exc)}")
+
             # 格式化消息时间
             msg_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(create_time/1000))
 

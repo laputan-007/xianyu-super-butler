@@ -28,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from app import cookie_manager
 from app.db_manager import db_manager
+from app.realtime_hub import realtime_hub
 from app.delivery_template import send_payload as send_delivery_payload
 from app.product_automation import ProductAutomationService
 from app.file_log_collector import setup_file_logging, get_file_log_collector
@@ -1610,6 +1611,52 @@ async def send_chat_image(
         f"会话={request.cid}, 对方={request.to_user_id}"
     )
     return {"success": True, "message": "发送成功"}
+
+
+@app.post("/events/ticket")
+async def create_events_ticket(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """为当前登录用户签发一次性 SSE 连接票据（EventSource 带不了请求头）。"""
+    return {
+        "success": True,
+        "data": {"ticket": realtime_hub.create_ticket(current_user["user_id"])},
+    }
+
+
+@app.get("/events")
+async def events_stream(ticket: str = Query(...), request: Request = None):
+    """浏览器实时事件流（SSE）。票据换取订阅，之后所有事件按用户归属推送。"""
+    user_id = realtime_hub.consume_ticket(ticket)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="票据无效或已过期，请重新换取")
+    queue, unsubscribe = realtime_hub.subscribe(user_id)
+
+    async def stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # 注释行心跳：维持代理/浏览器的连接，也避免 nginx 读超时
+                    yield ": keep-alive\n\n"
+                    continue
+                payload = json.dumps(event, ensure_ascii=False)
+                event_name = str(event.get("type") or "message")
+                yield f"event: {event_name}\ndata: {payload}\n\n"
+        finally:
+            unsubscribe()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # nginx 反代部署时禁用缓冲，否则事件会被攒到缓冲区满才吐给浏览器
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post('/send-message', response_model=SendMessageResponse)
