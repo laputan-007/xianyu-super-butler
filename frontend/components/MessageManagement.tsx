@@ -61,6 +61,9 @@ const ACTIVITY_WINDOW_MS = 45000;
 // 本地乐观消息的保留窗口：服务端历史回显通常在一两秒内跟上，超过 30 秒
 // 仍没对上就视为发送异常，直接交给服务端列表
 const LOCAL_MESSAGE_TTL_S = 30;
+// 回显模糊匹配窗口（毫秒）：放宽到 90 秒以吸收客户端与服务端的时钟偏差。
+// 命中还需同向同内容，窗口偏大最坏只是误吞一条重发的相同文本，有 TTL 兜底
+const ECHO_MATCH_WINDOW_MS = 90_000;
 // 表情面板：常用表情 + 生意场景高频符号
 const EMOJI_CHOICES = [
   '😀', '😄', '😊', '🥰', '😘', '😜', '🤗', '😎',
@@ -155,6 +158,54 @@ const formatTimestamp = (value?: number) => {
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
 };
 
+// 服务端消息时间存在秒/毫秒两种口径，合并与排序前统一归一成毫秒；
+// 本地乐观消息直接用 Date.now()，去重比较才有共同语言
+const toMs = (value?: number) => {
+  const raw = Number(value) || 0;
+  return raw > 0 && raw < 1_000_000_000_000 ? raw * 1000 : raw;
+};
+
+// 把未回显的本地消息插回服务端列表。锚点（发送时刻会话里最后一条服务端
+// 消息）命中的，插在锚点之后——买家在回显窗口内的后续回复就排在它下面；
+// 锚点丢失（超出拉取窗口）或发送时还没有历史的，退化为按时间插入。
+// 全程不重排服务端列表：服务端顺序是权威，createAt 缺失（归一为 0）的
+// 系统消息按时间排会被顶到最顶上
+const mergeLocalMessages = (
+  serverMessages: ChatMessage[],
+  localMessages: ChatMessage[]
+): ChatMessage[] => {
+  const buckets = new Map<string, ChatMessage[]>();
+  const unanchored: ChatMessage[] = [];
+  for (const local of localMessages) {
+    const anchorId = local.anchorId || '';
+    const anchored = Boolean(anchorId)
+      && serverMessages.some((server) => server.messageId === anchorId);
+    if (!anchored) {
+      unanchored.push(local);
+      continue;
+    }
+    const bucket = buckets.get(anchorId);
+    if (bucket) bucket.push(local);
+    else buckets.set(anchorId, [local]);
+  }
+  const merged: ChatMessage[] = [];
+  for (const server of serverMessages) {
+    merged.push(server);
+    for (const local of buckets.get(server.messageId) || []) merged.push(local);
+  }
+  for (const local of unanchored) {
+    // 插到「最后一条时间不晚于本地消息」的元素之后（含已放置的本地消息，
+    // 它们按创建顺序处理、时间递增，这样才能接在其后而不是插到其前面）；
+    // 所有服务端消息都更新则排最前
+    let insertAt = 0;
+    for (let index = 0; index < merged.length; index += 1) {
+      if ((merged[index].time || 0) <= (local.time || 0)) insertAt = index + 1;
+    }
+    merged.splice(insertAt, 0, local);
+  }
+  return merged;
+};
+
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
   const date = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
@@ -223,6 +274,10 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const lastActivityRef = useRef(Date.now());
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // 聊天滚动容器与尾部跟踪：轮询每轮都会替换消息数组引用，若照搬旧逻辑
+  // 无差别 scrollIntoView，正在往上翻历史的用户会每 3 秒被拽回底部
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const lastTailIdRef = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchInputTouchedRef = useRef(false);
   const activeCidRef = useRef('');
@@ -304,6 +359,10 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const openConversation = (conversation: ChatConversation) => {
     rememberConversationRead(conversation);
     activeCidRef.current = conversation.cid;
+    // 切换即清空旧会话消息：乐观合并以当前列表为基准，带着 A 会话的本地
+    // 消息去合并 B 会话会把消息串进错误的聊天里
+    setMessages([]);
+    setMessagesLoading(true);
     setConversations((current) => current.map((item) => (
       item.cid === conversation.cid ? { ...item, unreadCount: 0 } : item
     )));
@@ -382,32 +441,44 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
       setMessages([]);
       return;
     }
+    // 记住本次请求针对的会话：响应回来时会话可能已被切换，过期数据要丢弃
+    const requestCid = activeCid;
+    if (activeCidRef.current !== requestCid) return;
     if (!silent) setMessagesLoading(true);
     try {
-      const result = await getChatMessages(activeAccountId, activeCid);
-      const serverMessages = result.messages || [];
+      const result = await getChatMessages(activeAccountId, requestCid);
+      if (activeCidRef.current !== requestCid) return;
+      const serverMessages = ((result.messages || []) as ChatMessage[]).map((message) => ({
+        ...message,
+        time: toMs(message.time),
+      }));
       // 收到新消息（列表尾部有变化）时刷新活跃标记，让轮询保持快档
       setMessages((current) => {
+        // 竞态防御：请求期间用户切换了会话，不能把旧会话数据写进当前视图
+        if (activeCidRef.current !== requestCid) return current;
         const serverLast = serverMessages[serverMessages.length - 1];
         const currentLast = current[current.length - 1];
         if (serverLast && currentLast && serverLast.messageId !== currentLast.messageId) {
           lastActivityRef.current = Date.now();
         }
         // 合并本地乐观消息：服务端历史回显有延迟，短时间内保留本地已发的
-        // 文本/图片，待服务端出现对应记录（同方向同内容且时间接近）后自然让位
-        const nowSeconds = Date.now() / 1000;
+        // 文本/图片，待服务端出现对应记录（权威 ID 或同向同内容且时间接近）
+        // 后让位。按锚点插回原位而不是拼在尾部——否则回显窗口内买家的
+        // 新回复会渲染在「自己刚发的消息」上方，表现为顺序错乱
+        const nowMs = Date.now();
         const localPending = current.filter((message) => {
           if (!message.messageId.startsWith('local-')) return false;
-          if (nowSeconds - (message.time || 0) > LOCAL_MESSAGE_TTL_S) return false;
-          const duplicated = serverMessages.some(
-            (server) =>
-              server.isSelf === message.isSelf &&
-              Math.abs((server.time || 0) - (message.time || 0)) < LOCAL_MESSAGE_TTL_S &&
-              (message.type === 'image' ? server.type === 'image' : server.text === message.text)
-          );
+          if (nowMs - (message.time || 0) > LOCAL_MESSAGE_TTL_S * 1000) return false;
+          const duplicated = serverMessages.some((server) => {
+            if (message.serverMessageId && server.messageId === message.serverMessageId) return true;
+            if (server.isSelf !== message.isSelf) return false;
+            if (Math.abs((server.time || 0) - (message.time || 0)) >= ECHO_MATCH_WINDOW_MS) return false;
+            return message.type === 'image' ? server.type === 'image' : server.text === message.text;
+          });
           return !duplicated;
         });
-        return localPending.length > 0 ? [...serverMessages, ...localPending] : serverMessages;
+        if (localPending.length === 0) return serverMessages;
+        return mergeLocalMessages(serverMessages, localPending);
       });
     } catch (error) {
       if (!silent) notify(`加载聊天记录失败：${(error as Error).message}`, 'error');
@@ -459,7 +530,13 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   }, [isActive, activeAccountId]);
 
   useEffect(() => {
-    if (isActive) void loadMessages();
+    // 会话/账号切换（含会话列表刷新导致的自动回退）：旧消息连同未回显的
+    // 本地乐观消息一并清空，防止跨会话串消息
+    setMessages([]);
+    if (isActive) {
+      setMessagesLoading(true);
+      void loadMessages();
+    }
   }, [isActive, activeAccountId, activeCid]);
 
   useEffect(() => {
@@ -489,7 +566,23 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   }, [isActive, view, activeAccountId, activeCid]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const tail = messages[messages.length - 1];
+    if (!tail) return;
+    // 只在尾部真的变了（新消息/切换会话/自己的乐观消息）才考虑滚动，
+    // 纯轮询刷新（内容没变）不打扰用户
+    if (tail.messageId === lastTailIdRef.current) return;
+    lastTailIdRef.current = tail.messageId;
+    // 自己刚发出的消息无条件滚到底；收到的消息只在用户本就贴近底部时跟随
+    if (tail.isSelf) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    const container = messagesScrollRef.current;
+    const nearBottom = !container
+      || container.scrollHeight - container.scrollTop - container.clientHeight < 160;
+    if (nearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -524,30 +617,39 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const sendMessage = async () => {
     const text = draft.trim();
     if (!text || !activeConversation || !activeAccountId || sending) return;
+    const conversation = activeConversation;
     setSending(true);
     try {
       const result = await sendChatMessage(activeAccountId, {
-        cid: activeConversation.cid,
-        to_user_id: activeConversation.otherUserId,
+        cid: conversation.cid,
+        to_user_id: conversation.otherUserId,
         text,
       });
       setDraft('');
       lastActivityRef.current = Date.now();
       // 乐观追加：立即上屏不等服务端历史（历史回显有延迟，原来要等下一轮
-      // 10 秒轮询才能看见自己发的消息）。loadMessages 会做去重合并。
-      setMessages((current) => [
-        ...current,
-        {
-          messageId: result.data?.messageId || `local-${Date.now()}`,
+      // 10 秒轮询才能看见自己发的消息）。记录锚点（当前最后一条服务端消息）
+      // 和发送接口返回的权威 messageId，loadMessages 合并时按锚点把这条
+      // 插回正确位置、按权威 ID 精确去重。ID 一律带 local- 前缀——曾经直接
+      // 采用服务端 ID，导致合并把它当服务端消息提前丢掉，消息闪没再闪回
+      setMessages((current) => {
+        if (activeCidRef.current !== conversation.cid) return current;
+        const anchorId = [...current].reverse().find(
+          (message) => !message.messageId.startsWith('local-')
+        )?.messageId || '';
+        return [...current, {
+          messageId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          serverMessageId: result.data?.messageId || '',
+          anchorId,
           senderId: activeAccountId,
           senderName: '我',
           isSelf: true,
           type: 'text' as const,
           text,
           images: [],
-          time: Date.now() / 1000,
-        },
-      ]);
+          time: Date.now(),
+        }];
+      });
       notify('消息已发送', 'success');
       // 稍等服务端历史跟上后回填权威列表（会话摘要/排序一并刷新）
       window.setTimeout(() => {
@@ -581,29 +683,35 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     }
     setImageSending(true);
     try {
+      const conversation = activeConversation;
       const uploaded = await uploadImage(file);
       const imageUrl = uploaded.image_url;
       if (!imageUrl) throw new Error(uploaded.message || '图片上传失败');
       await sendChatImage(activeAccountId, {
-        cid: activeConversation.cid,
-        to_user_id: activeConversation.otherUserId,
+        cid: conversation.cid,
+        to_user_id: conversation.otherUserId,
         image_url: imageUrl,
       });
       lastActivityRef.current = Date.now();
-      // 乐观追加：本地路径先上屏（买家收到的是 CDN 地址），随后由服务端历史接管
-      setMessages((current) => [
-        ...current,
-        {
-          messageId: `local-img-${Date.now()}`,
+      // 乐观追加：本地路径先上屏（买家收到的是 CDN 地址），锚点定位与
+      // 文本消息一致，随后由服务端历史接管
+      setMessages((current) => {
+        if (activeCidRef.current !== conversation.cid) return current;
+        const anchorId = [...current].reverse().find(
+          (message) => !message.messageId.startsWith('local-')
+        )?.messageId || '';
+        return [...current, {
+          messageId: `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          anchorId,
           senderId: activeAccountId,
           senderName: '我',
           isSelf: true,
           type: 'image' as const,
           text: '',
           images: [imageUrl],
-          time: Date.now() / 1000,
-        },
-      ]);
+          time: Date.now(),
+        }];
+      });
       notify('图片已发送', 'success');
       window.setTimeout(() => {
         void loadMessages(true);
@@ -882,7 +990,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
               </span>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--app-bg)] px-4 py-6 sm:px-8">
+            <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-[var(--app-bg)] px-4 py-6 sm:px-8">
               {messagesLoading && messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-[#d6b600]" />

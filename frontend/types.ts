@@ -477,12 +477,17 @@ export interface ChatConversation {
 
 export interface ChatMessage {
   messageId: string;
+  /** 发送接口返回的权威消息 ID：历史回显出现同 ID 时用于精确去重 */
+  serverMessageId?: string;
+  /** 本地乐观消息的插入锚点：创建时会话里最后一条服务端消息的 ID */
+  anchorId?: string;
   senderId: string;
   senderName: string;
   isSelf: boolean;
   type: 'text' | 'image' | 'system' | 'card';
   text: string;
   images: string[];
+  /** 统一毫秒时间戳（服务端的秒级值在入口已归一化） */
   time: number;
 }
 
