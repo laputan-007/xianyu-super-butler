@@ -2542,16 +2542,15 @@ class XianyuLive:
             if not ret_value:
                 return False
 
-            # 检查是否包含需要验证的关键词
+            # 只有服务端的明确验证信号才启动滑块流程。
+            # RGV587_ERROR / 被挤爆 / 请稍后重试是闲鱼服务器忙碌或限流的
+            # 表现，此前也混在这里 —— 服务器只是忙一下就会白白弹浏览器去
+            # 拖一个并不存在的滑块，失败后熔断冷却，加剧风控。这类信号现在
+            # 交给下方通用失败分支的 risk_control 指数退避（等几分钟重试，
+            # 不起浏览器）。
             captcha_keywords = [
-                'FAIL_SYS_USER_VALIDATE',  # 用户验证失败
-                'RGV587_ERROR',            # 风控错误
-                '哎哟喂,被挤爆啦',          # 被挤爆了
-                '哎哟喂，被挤爆啦',         # 被挤爆了（中文逗号）
-                '挤爆了',                  # 挤爆了
-                '请稍后重试',              # 请稍后重试
-                'punish?x5secdata',        # 惩罚页面
-                'captcha',                 # 验证码
+                'FAIL_SYS_USER_VALIDATE',  # 服务端明确要求人机验证
+                'punish?x5secdata',         # 响应文本直接携带惩罚页链接
             ]
 
             error_msg = str(ret_value[0]) if ret_value else ''
