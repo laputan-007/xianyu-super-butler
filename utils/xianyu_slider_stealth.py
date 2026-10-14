@@ -72,6 +72,10 @@ def resolve_input_mode(headless: bool) -> str:
         raw = os.getenv('SLIDER_INPUT_MODE', '').strip().lower()
     if raw in ('', 'auto', 'sendinput'):
         raw = 'hardware'
+    # remote 是执行拓扑（由 XianyuAutoAsync 委托远程节点），不是本地输入
+    # 通道；远程失败回退本地时用硬件通道
+    if raw == 'remote':
+        raw = 'hardware'
 
     if raw == 'hardware_idle':
         idle = win32_input.get_idle_seconds() if win32_input is not None else -1.0

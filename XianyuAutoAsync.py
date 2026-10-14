@@ -2622,7 +2622,6 @@ class XianyuLive:
                 from utils.xianyu_slider_stealth import XianyuSliderStealth
                 logger.info(f"【{self.cookie_id}】XianyuSliderStealth导入成功，使用滑块验证")
 
-                # 创建独立的滑块验证实例（每个用户独立实例，避免并发冲突）
                 # headless 必须为 False：实测同一账号、同一轨迹下，
                 # 无头 0/2 通过，有头 1/3 通过且平台确认解除风控。
                 # Chrome 无头的 WebGL 渲染器、字体列表、navigator.plugins、
@@ -2630,27 +2629,61 @@ class XianyuLive:
                 # 服务器无显示器时用 Xvfb 提供虚拟显示：
                 #   xvfb-run -a --server-args="-screen 0 1920x1080x24" python Start.py
                 slider_headless = os.getenv('SLIDER_HEADLESS', 'false').lower() == 'true'
-                slider_stealth = XianyuSliderStealth(
-                    user_id=f"{self.cookie_id}",
-                    enable_learning=True,  # 启用学习功能
-                    headless=slider_headless
-                )
 
-                # 在线程池中执行滑块验证
-                import asyncio
-                import concurrent.futures
+                success = False
+                cookies = None
 
-                loop = asyncio.get_event_loop()
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    # 执行滑块验证。必须把账号 Cookie 一并传入 ——
-                    # 惩罚页的 x5secdata 绑定账号会话，不带 Cookie 时即使滑块拖过，
-                    # 回收到的也只是空浏览器凭证，风控不会解除。
-                    success, cookies = await loop.run_in_executor(
-                        executor,
-                        slider_stealth.run,
+                # 远程节点策略：把滑块委托给专职节点求解（分离部署架构，
+                # 如 NAS/容器跑主服务、Windows 桌面机专职过滑块），
+                # 节点失败时回退下方本地执行，不影响自动重试链路
+                try:
+                    from utils.slider_remote import get_remote_config, solve_via_remote
+                    remote_cfg = get_remote_config()
+                except Exception:
+                    remote_cfg = {'url': ''}
+                raw_strategy = ''
+                try:
+                    from app.db_manager import db_manager as _dbm
+                    raw_strategy = (_dbm.get_system_setting('slider_strategy') or '').strip().lower()
+                except Exception:
+                    raw_strategy = ''
+                if raw_strategy == 'remote' and remote_cfg.get('url'):
+                    logger.info(f"【{self.cookie_id}】滑块策略 remote：委托远程节点 {remote_cfg['url']}")
+                    remote_resp = await solve_via_remote(
                         verification_url,
-                        self.cookies_str
+                        self.cookies_str if remote_cfg.get('pass_cookies') else '',
                     )
+                    if remote_resp.get('success'):
+                        cookies = (remote_resp.get('data') or {}).get('cookies') or {}
+                        success = bool(cookies)
+                    if not success:
+                        logger.warning(
+                            f"【{self.cookie_id}】远程节点未解决（{remote_resp.get('message', '未知原因')}），回退本地执行"
+                        )
+
+                if not success:
+                    # 创建独立的滑块验证实例（每个用户独立实例，避免并发冲突）
+                    slider_stealth = XianyuSliderStealth(
+                        user_id=f"{self.cookie_id}",
+                        enable_learning=True,  # 启用学习功能
+                        headless=slider_headless
+                    )
+
+                    # 在线程池中执行滑块验证
+                    import asyncio
+                    import concurrent.futures
+
+                    loop = asyncio.get_event_loop()
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        # 执行滑块验证。必须把账号 Cookie 一并传入 ——
+                        # 惩罚页的 x5secdata 绑定账号会话，不带 Cookie 时即使滑块拖过，
+                        # 回收到的也只是空浏览器凭证，风控不会解除。
+                        success, cookies = await loop.run_in_executor(
+                            executor,
+                            slider_stealth.run,
+                            verification_url,
+                            self.cookies_str
+                        )
 
                 if success and cookies:
                     # 边界防御：只有 x5sec 才是通行凭证。x5secdata / x5sectag 是挑战

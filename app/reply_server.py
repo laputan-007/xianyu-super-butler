@@ -9497,6 +9497,38 @@ def classify_verification_event(detail: str, blocked: bool = False, reason: str 
     return 'none', ''
 
 
+class RemoteSliderSolveRequest(BaseModel):
+    """对外过滑块服务的请求体（跨部署调用，秘钥即鉴权）"""
+    secret_key: str = Field(..., min_length=1, max_length=200)
+    # punish 验证链接；留空时服务端凭 cookies 重取新鲜链接
+    url: str = Field(default='', max_length=2000)
+    # 可选账号 Cookie，用于链接过期时重取；跨机传输，仅在可信节点间使用
+    cookies: str = Field(default='', max_length=50000)
+    # 调用方的账号标识，仅用于日志与浏览器实例隔离，本系统不查库
+    account_id: str = Field(default='', max_length=100)
+    # 单次浏览器超时（秒）
+    browser_timeout: int = Field(default=60, ge=20, le=180)
+
+
+@app.post('/api/slider/solve')
+async def slider_solve_service(request: RemoteSliderSolveRequest):
+    """对外过滑块服务：供其他部署把闲鱼滑块委托给本机求解。
+
+    秘钥鉴权（系统设置 slider_service_secret_key，留空即未启用）。
+    只传 punish 链接即可求解；链接过期时凭传入的 Cookie 重取新鲜
+    链接后继续。本接口与「自动过滑块」总开关相互独立 —— 显式的
+    外部调用不受本地自动循环开关影响。
+    """
+    from utils.slider_remote import run_slider_solve_service
+    return await run_slider_solve_service(
+        secret_key=request.secret_key,
+        url=request.url,
+        cookies=request.cookies,
+        account_id=request.account_id,
+        browser_timeout=request.browser_timeout,
+    )
+
+
 @app.post('/api/risk-control/{cookie_id}/fresh-captcha-url')
 async def get_fresh_captcha_url(
     cookie_id: str,

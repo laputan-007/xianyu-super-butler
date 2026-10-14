@@ -983,7 +983,11 @@ class DBManager:
             ('item_sync_interval', '600', '商品同步间隔时间（秒）'),
             ('item_sync_max_pages', '5', '每次最多同步的页数'),
             ('slider_auto_enabled', 'true', '是否自动处理滑块验证（关闭后仅提示人工处理）'),
-            ('slider_strategy', 'hardware', '滑块拖动策略：hardware/hardware_idle/cdp')
+            ('slider_strategy', 'hardware', '滑块拖动策略：hardware/hardware_idle/cdp/remote'),
+            ('slider_service_secret_key', '', '对外过滑块服务秘钥（留空=不启用对外服务）'),
+            ('slider_remote_url', '', '远程过滑块节点地址（如 http://192.168.1.10:8080）'),
+            ('slider_remote_secret_key', '', '远程过滑块节点秘钥'),
+            ('slider_remote_pass_cookies', 'true', '调用远程节点时是否传递账号Cookie（x5sec 绑定账号，通常必须开）')
             ''')
 
             # 检查并升级数据库

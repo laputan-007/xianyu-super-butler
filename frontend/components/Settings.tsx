@@ -442,10 +442,45 @@ const Settings: React.FC = () => {
               options={[
                 { value: 'hardware', title: '硬件级注入（推荐）', description: '通过率最高。拖动瞬间（约 2-5 秒）会短暂接管本机鼠标并置前浏览器窗口。' },
                 { value: 'hardware_idle', title: '智能空闲', description: '只在检测到你已离开电脑（2 分钟无键鼠操作）时才用硬件注入；正在使用时自动改走 CDP 不抢鼠标，空闲后的自动重试会切回硬件通道。' },
+                { value: 'remote', title: '远程节点', description: '把滑块委托给另一台机器求解（如 NAS 跑主服务、Windows 桌面专职过滑块）。需在下方配置节点地址；节点失败自动回退本机拖动。' },
                 { value: 'cdp', title: 'CDP 模拟', description: '完全不碰本机鼠标，但通过率明显更低。适合服务器无人值守，或任何不想被弹窗打扰的场景。' },
               ]}
               onChange={(v) => setSettings({ ...settings, slider_strategy: v })}
             />
+            <div className="grid gap-4 p-4">
+              <label>
+                <span className="field-label">对外过滑块服务秘钥</span>
+                <input
+                  type="text"
+                  value={settings.slider_service_secret_key || ''}
+                  onChange={(event) => setSettings({ ...settings, slider_service_secret_key: event.target.value })}
+                  placeholder="留空 = 不对外提供过滑块服务"
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                />
+                <span className="mt-1 block text-xs text-gray-500">其他部署可通过 POST /api/slider/solve 用此秘钥调用本机过滑块。</span>
+              </label>
+              <label>
+                <span className="field-label">远程过滑块节点地址</span>
+                <input
+                  type="text"
+                  value={settings.slider_remote_url || ''}
+                  onChange={(event) => setSettings({ ...settings, slider_remote_url: event.target.value })}
+                  placeholder="如 http://192.168.1.10:8080（选「远程节点」策略时必填）"
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                />
+              </label>
+              <label>
+                <span className="field-label">远程节点秘钥</span>
+                <input
+                  type="text"
+                  value={settings.slider_remote_secret_key || ''}
+                  onChange={(event) => setSettings({ ...settings, slider_remote_secret_key: event.target.value })}
+                  placeholder="对方机器设置的「对外过滑块服务秘钥」"
+                  className="ios-input w-full rounded-md px-3 py-2.5"
+                />
+                <span className="mt-1 block text-xs text-gray-500">调用时会按开关传递账号 Cookie（x5sec 绑定账号会话，通常必须传递），请只在可信网络与可信节点间使用。</span>
+              </label>
+            </div>
           </section>
 
           <section className="section-panel">
