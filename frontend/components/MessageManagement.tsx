@@ -46,6 +46,7 @@ import {
   toggleMessageFilter,
 } from '../services/api';
 import { confirmAction, notify } from '../services/feedback';
+import { connectRealtimeEvents, ChatMessageEvent } from '../services/events';
 import { EmptyState, SectionHeader } from './ui';
 
 type View = 'messages' | 'filters';
@@ -64,6 +65,14 @@ const LOCAL_MESSAGE_TTL_S = 30;
 // 回显模糊匹配窗口（毫秒）：放宽到 90 秒以吸收客户端与服务端的时钟偏差。
 // 命中还需同向同内容，窗口偏大最坏只是误吞一条重发的相同文本，有 TTL 兜底
 const ECHO_MATCH_WINDOW_MS = 90_000;
+// SSE 在线时的对账轮询间隔：消息由推送即时上屏，轮询只负责权威纠正。
+// 每次轮询都会经账号 WebSocket 透传到闲鱼，放慢直接降低 429 限流风险
+const SSE_MESSAGE_RECONCILE_MS = 30_000;
+const SSE_CONVERSATION_POLL_MS = 60_000;
+// 推送内容是摘要级，占位符上屏没有意义，交给随后的历史刷新渲染真身
+const PUSH_PLACEHOLDERS = new Set([
+  '[图片]', '[语音]', '[视频]', '[卡片消息]', '[链接]', '[位置]', '[系统消息]',
+]);
 // 表情面板：常用表情 + 生意场景高频符号
 const EMOJI_CHOICES = [
   '😀', '😄', '😊', '🥰', '😘', '😜', '🤗', '😎',
@@ -165,6 +174,11 @@ const toMs = (value?: number) => {
   return raw > 0 && raw < 1_000_000_000_000 ? raw * 1000 : raw;
 };
 
+// 本地乐观消息（local-）与 SSE 推送消息（push-）都是临时占位：历史接口
+// 的权威记录一到就让位。两者共用同一套合并/去重/过期规则
+const isEphemeralMessage = (message: ChatMessage) =>
+  message.messageId.startsWith('local-') || message.messageId.startsWith('push-');
+
 // 把未回显的本地消息插回服务端列表。锚点（发送时刻会话里最后一条服务端
 // 消息）命中的，插在锚点之后——买家在回显窗口内的后续回复就排在它下面；
 // 锚点丢失（超出拉取窗口）或发送时还没有历史的，退化为按时间插入。
@@ -250,6 +264,8 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const [items, setItems] = useState<Item[]>([]);
   const [activeAccountId, setActiveAccountId] = useState('');
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  // SSE 实时推送在线状态：在线时消息靠推送上屏，轮询降频为对账模式
+  const [sseOnline, setSseOnline] = useState(false);
   // 按图片地址记录加载失败的头像，避免反复请求同一个取不到的外部地址
   const [failedAvatars, setFailedAvatars] = useState<Set<string>>(new Set());
   const [activeCid, setActiveCid] = useState('');
@@ -282,6 +298,12 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const searchInputTouchedRef = useRef(false);
   const activeCidRef = useRef('');
   const readWatermarksRef = useRef<ReadWatermarks>(loadReadWatermarks());
+  // SSE 事件回调在连接建立时闭包固化，事件到来时要读「最新值」只能走引用
+  const activeAccountIdRef = useRef('');
+  const conversationsRef = useRef<ChatConversation[]>([]);
+  const loadMessagesRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const loadConversationsRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const pushRefreshTimerRef = useRef(0);
 
   const [filters, setFilters] = useState<MessageFilter[]>([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
@@ -331,8 +353,8 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     && filters.every((filter) => selectedFilterIds.includes(filter.id));
 
   const rememberConversationRead = (conversation: ChatConversation) => {
-    if (!activeAccountId || !conversation.cid) return;
-    const key = readWatermarkKey(activeAccountId, conversation.cid);
+    if (!activeAccountIdRef.current || !conversation.cid) return;
+    const key = readWatermarkKey(activeAccountIdRef.current, conversation.cid);
     const nextWatermark: ReadWatermark = {
       lastMessageTime: Number(conversation.lastMessageTime) || 0,
       lastMessageSummary: String(conversation.lastMessageSummary || ''),
@@ -467,7 +489,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
         // 新回复会渲染在「自己刚发的消息」上方，表现为顺序错乱
         const nowMs = Date.now();
         const localPending = current.filter((message) => {
-          if (!message.messageId.startsWith('local-')) return false;
+          if (!isEphemeralMessage(message)) return false;
           if (nowMs - (message.time || 0) > LOCAL_MESSAGE_TTL_S * 1000) return false;
           const duplicated = serverMessages.some((server) => {
             if (message.serverMessageId && server.messageId === message.serverMessageId) return true;
@@ -542,28 +564,139 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   useEffect(() => {
     if (!isActive || view !== 'messages' || !activeAccountId) return undefined;
     void loadConversations(true);
-    // 10 秒一轮。原来 3 秒刷一次，每条请求都要经 WebSocket 转发到闲鱼，
-    // 多开几个标签页就会把账号打到 429（flow controled），表现为消息加载失败。
-    const timer = window.setInterval(() => void loadConversations(true), CONVERSATION_POLL_MS);
+    // SSE 在线时消息靠推送即时上屏，会话列表只需 60 秒慢速对账；掉线回到
+    // 10 秒。原来 3 秒刷一次，每条请求都要经 WebSocket 转发到闲鱼，多开
+    // 几个标签页就会把账号打到 429（flow controled），表现为消息加载失败。
+    const interval = sseOnline ? SSE_CONVERSATION_POLL_MS : CONVERSATION_POLL_MS;
+    const timer = window.setInterval(() => void loadConversations(true), interval);
     return () => window.clearInterval(timer);
-  }, [isActive, view, activeAccountId, mobilePane]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, view, activeAccountId, mobilePane, sseOnline]);
 
   useEffect(() => {
     if (!isActive || view !== 'messages' || !activeAccountId || !activeCid) return undefined;
     // 会话切换即视为活跃，先快轮询
     lastActivityRef.current = Date.now();
-    // 自适应轮询：活跃（近 45 秒有发送/切换/新消息）3 秒一轮，空闲退回
-    // 10 秒。用自排程 setTimeout 而不是固定 interval，每轮按最新活跃度定间隔。
+    // 自适应轮询：SSE 在线时推送负责即时性，轮询退化为 30 秒权威对账；
+    // 掉线回到「活跃（近 45 秒有发送/切换/新消息）3 秒、空闲 10 秒」。
+    // 用自排程 setTimeout 而不是固定 interval，每轮按最新状态定间隔。
     let timer = 0;
     const tick = () => {
       void loadMessages(true);
-      const fast = Date.now() - lastActivityRef.current < ACTIVITY_WINDOW_MS;
-      timer = window.setTimeout(tick, fast ? MESSAGE_FAST_POLL_MS : MESSAGE_IDLE_POLL_MS);
+      let delay: number;
+      if (sseOnline) {
+        delay = SSE_MESSAGE_RECONCILE_MS;
+      } else {
+        const fast = Date.now() - lastActivityRef.current < ACTIVITY_WINDOW_MS;
+        delay = fast ? MESSAGE_FAST_POLL_MS : MESSAGE_IDLE_POLL_MS;
+      }
+      timer = window.setTimeout(tick, delay);
     };
-    timer = window.setTimeout(tick, MESSAGE_FAST_POLL_MS);
+    timer = window.setTimeout(tick, sseOnline ? SSE_MESSAGE_RECONCILE_MS : MESSAGE_FAST_POLL_MS);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, view, activeAccountId, activeCid]);
+  }, [isActive, view, activeAccountId, activeCid, sseOnline]);
+
+  // 各类「最新值」引用：SSE 回调在连接建立时闭包固化，事件到来时要从
+  // 引用读当前账号/会话/函数，而不是过期的闭包值
+  useEffect(() => {
+    activeAccountIdRef.current = activeAccountId;
+    conversationsRef.current = conversations;
+    loadMessagesRef.current = loadMessages;
+    loadConversationsRef.current = loadConversations;
+  });
+
+  const schedulePushRefresh = () => {
+    // 推送即时上屏后防抖拉一次权威历史：补图片真身、修正顺序与未读数
+    window.clearTimeout(pushRefreshTimerRef.current);
+    pushRefreshTimerRef.current = window.setTimeout(() => {
+      void loadMessagesRef.current?.(true);
+    }, 1500);
+  };
+
+  const handleChatMessageEvent = (event: ChatMessageEvent) => {
+    if (event.cookie_id !== activeAccountIdRef.current) return;
+    const conversationsNow = conversationsRef.current;
+    const index = conversationsNow.findIndex((row) => row.cid === event.chat_id);
+    if (index === -1) {
+      // 新会话还没在列表里（买家首次来信），拉一次列表补上
+      void loadConversationsRef.current?.(true);
+      return;
+    }
+    const conversation = conversationsNow[index];
+    const updated: ChatConversation = {
+      ...conversation,
+      lastMessageSummary: event.content || conversation.lastMessageSummary,
+      lastMessageTime: event.time,
+      unreadCount: event.is_self || event.chat_id === activeCidRef.current
+        ? conversation.unreadCount
+        : conversation.unreadCount + 1,
+    };
+    setConversations((current) => {
+      const at = current.findIndex((row) => row.cid === event.chat_id);
+      if (at === -1) return current;
+      const next = [...current];
+      const merged = { ...current[at], ...updated };
+      next.splice(at, 1);
+      next.unshift(merged);
+      return next;
+    });
+    // 引用手动同步：连续多条事件到达时（重放/快速对话）不等重渲染也能读到
+    // 最新行，否则每条都会把上一条刚更新的摘要盖回去
+    conversationsRef.current = [
+      updated,
+      ...conversationsNow.slice(0, index),
+      ...conversationsNow.slice(index + 1),
+    ];
+    // 当前打开的会话：文本即时上屏（与本地乐观/已推送的孪生去重），随后
+    // 防抖拉权威历史；占位符内容不上屏，等历史刷新渲染真身
+    if (event.chat_id !== activeCidRef.current) return;
+    lastActivityRef.current = Date.now();
+    rememberConversationRead(updated);
+    if (!PUSH_PLACEHOLDERS.has(event.content)) {
+      setMessages((current) => {
+        if (activeCidRef.current !== event.chat_id) return current;
+        const twin = current.some((message) =>
+          isEphemeralMessage(message)
+          && message.isSelf === event.is_self
+          && message.text === event.content
+          && Math.abs((message.time || 0) - (event.time || 0)) < ECHO_MATCH_WINDOW_MS
+        );
+        if (twin) return current;
+        return [...current, {
+          messageId: `push-${event.time}-${Math.random().toString(36).slice(2, 6)}`,
+          senderId: event.is_self ? event.cookie_id : event.sender_user_id,
+          senderName: event.is_self ? '我' : (event.sender_nick || ''),
+          isSelf: event.is_self,
+          type: 'text' as const,
+          text: event.content,
+          images: [],
+          time: toMs(event.time),
+        }];
+      });
+    }
+    schedulePushRefresh();
+  };
+
+  // SSE 连接生命周期：随页面激活/离开建断；断线重连由 events.ts 内部按
+  // 退避梯度管理，这里只负责在（重）连成功后立即对账一次，补齐断线窗口
+  // 错过的消息
+  useEffect(() => {
+    if (!isActive || view !== 'messages') return undefined;
+    const disconnect = connectRealtimeEvents(handleChatMessageEvent, (connected) => {
+      setSseOnline(connected);
+      if (connected) {
+        void loadConversationsRef.current?.(true);
+        void loadMessagesRef.current?.(true);
+      }
+    });
+    return () => {
+      disconnect();
+      setSseOnline(false);
+      window.clearTimeout(pushRefreshTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, view]);
 
   useEffect(() => {
     const tail = messages[messages.length - 1];
@@ -635,7 +768,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
       setMessages((current) => {
         if (activeCidRef.current !== conversation.cid) return current;
         const anchorId = [...current].reverse().find(
-          (message) => !message.messageId.startsWith('local-')
+          (message) => !isEphemeralMessage(message)
         )?.messageId || '';
         return [...current, {
           messageId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -698,7 +831,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
       setMessages((current) => {
         if (activeCidRef.current !== conversation.cid) return current;
         const anchorId = [...current].reverse().find(
-          (message) => !message.messageId.startsWith('local-')
+          (message) => !isEphemeralMessage(message)
         )?.messageId || '';
         return [...current, {
           messageId: `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
