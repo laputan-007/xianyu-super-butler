@@ -2601,6 +2601,13 @@ class XianyuLive:
                 )
                 return None
 
+            # 滑块触发即通知：用户要求实时感知每一次风控事件，不等处理结果。
+            # 文案刻意不含链接与长数字串（Qmsg 内容审查会拒发这两类内容）
+            await self.send_token_refresh_notification(
+                "闲鱼账号触发滑块验证（风控拦截），已开始自动处理",
+                "captcha_triggered"
+            )
+
             # 获取验证URL
             verification_url = None
 
@@ -5412,6 +5419,34 @@ class XianyuLive:
         except Exception as e:
             logger.error(f"发送微信通知异常: {self._safe_str(e)}")
 
+    async def _send_qmsg_notification(self, config_data: dict, message: str):
+        """发送 Qmsg酱（QQ）通知，v3 接口。
+
+        Qmsg 内容审查绝对禁止 URL 与连续数字串（通知里的账号 ID、时间戳
+        都会中招），发送前替换：链接换成「[链接]」、长数字串截断加星号。
+        """
+        try:
+            import aiohttp
+
+            key = str(config_data.get('key') or '').strip()
+            if not key:
+                logger.warning("Qmsg通知配置不完整（缺少 KEY）")
+                return
+
+            safe_msg = re.sub(r'https?://\S+', '[链接]', message)
+            safe_msg = re.sub(r'\d{5,}', lambda m: m.group()[:4] + '***', safe_msg)
+
+            api_url = f"https://qmsg.zendee.cn/v3/send/{key}"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, data={'msg': safe_msg}) as response:
+                    if response.status == 200:
+                        logger.info("Qmsg通知发送成功")
+                    else:
+                        logger.warning(f"Qmsg通知发送失败: {response.status}")
+
+        except Exception as e:
+            logger.error(f"发送Qmsg通知异常: {self._safe_str(e)}")
+
     async def _send_telegram_notification(self, config_data: dict, message: str):
         """发送Telegram通知"""
         try:
@@ -5494,6 +5529,27 @@ class XianyuLive:
             notifications = db_manager.get_account_notifications(self.cookie_id)
 
             if not notifications:
+                # 账号级规则未配置时回退到账号归属用户的全局通知渠道
+                # （「通知与日志」页配置的 notification_channels）。此前直接
+                # 跳过，用户配了 QQ/邮箱渠道却收不到滑块、Token 风控通知。
+                try:
+                    owner_user_id = db_manager.get_cookie_owner_user_id(self.cookie_id)
+                    if owner_user_id is not None:
+                        for channel in db_manager.get_notification_channels(owner_user_id) or []:
+                            if not channel.get('enabled', True):
+                                continue
+                            notifications.append({
+                                'channel_name': channel.get('name'),
+                                'channel_type': channel.get('type'),
+                                'channel_config': channel.get('config'),
+                                'enabled': True,
+                            })
+                        if notifications:
+                            logger.info(f"账号级通知规则未配置，回退用户 {owner_user_id} 的全局通知渠道（{len(notifications)} 个）")
+                except Exception as fallback_error:
+                    logger.error(f"回退全局通知渠道失败: {self._safe_str(fallback_error)}")
+
+            if not notifications:
                 logger.warning("未配置消息通知，跳过Token刷新通知")
                 return
 
@@ -5553,6 +5609,9 @@ class XianyuLive:
                             notification_sent = True
                         case 'telegram':
                             await self._send_telegram_notification(config_data, notification_msg)
+                            notification_sent = True
+                        case 'qq':
+                            await self._send_qmsg_notification(config_data, notification_msg)
                             notification_sent = True
                         case _:
                             logger.warning(f"不支持的通知渠道类型: {channel_type}")

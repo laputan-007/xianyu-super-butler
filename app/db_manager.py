@@ -2125,6 +2125,18 @@ class DBManager:
         return cursor.executemany(sql, params_list)
     
     # -------------------- Cookie操作 --------------------
+    def get_cookie_owner_user_id(self, cookie_id: str):
+        """查询账号归属的用户 ID（通知回退全局渠道时用），查不到返回 None"""
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                self._execute_sql(cursor, "SELECT user_id FROM cookies WHERE id = ?", (cookie_id,))
+                row = cursor.fetchone()
+                return row[0] if row and row[0] is not None else None
+            except Exception as e:
+                logger.error(f"查询账号归属用户失败: {e}")
+                return None
+
     def save_cookie(self, cookie_id: str, cookie_value: str, user_id: int = None) -> bool:
         """保存Cookie到数据库，如存在则更新"""
         with self.lock:

@@ -313,7 +313,11 @@ class NotificationSender:
         if not key:
             raise NotificationChannelConfigError("缺少 Qmsg酱 KEY")
         url = f"https://qmsg.zendee.cn/v3/send/{key}"
-        form: dict[str, str] = {"msg": message}
+        # Qmsg 内容审查绝对禁止 URL 与连续数字串（账号 ID、时间戳都会中招）
+        import re as _re
+        safe_message = _re.sub(r"https?://\S+", "[链接]", message)
+        safe_message = _re.sub(r"\d{5,}", lambda m: m.group()[:4] + "***", safe_message)
+        form: dict[str, str] = {"msg": safe_message}
         session_context = await self._open_session()
         body: Any = None
         status = 0
