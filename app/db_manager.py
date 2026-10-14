@@ -4490,7 +4490,14 @@ class DBManager:
 
             msg = MIMEMultipart()
             msg['Subject'] = subject
-            msg['From'] = smtp_from
+            # 发件人显示名若不是邮箱地址，按 RFC5322 组装 "显示名" <地址>。
+            # 原实现把显示名直接当 From 地址写，裸名字会被 QQ SMTP 以
+            # 550 "From header missing or invalid" 拒信。
+            if smtp_from and '@' not in smtp_from:
+                from email.utils import formataddr
+                msg['From'] = formataddr((smtp_from, smtp_user))
+            else:
+                msg['From'] = smtp_from or smtp_user
             msg['To'] = email
 
             msg.attach(MIMEText(text_content, 'plain', 'utf-8'))
