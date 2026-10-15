@@ -2059,8 +2059,51 @@ class DBManager:
     def get_connection(self):
         """获取数据库连接，如果已关闭则重新连接"""
         if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
+            self._apply_connection_pragmas(self.conn)
         return self.conn
+
+    def _apply_connection_pragmas(self, conn):
+        """对新连接统一应用 PRAGMA：WAL / 同步策略 / 忙等待。
+
+        - WAL：读写不互斥，定时备份、第二连接不再撞 "database is locked"；
+          journal_mode 持久化在库文件里，重复执行幂等。
+        - synchronous=NORMAL：WAL 下 commit 不强刷盘，写入成本从毫秒级
+          降到内存级（小内存部署的关键参数），断电最多丢最后一个事务。
+        - busy_timeout=30s：写锁冲突时排队等待而不是立刻报错。
+        """
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=30000")
+        except Exception as e:
+            logger.warning(f"应用数据库PRAGMA失败（忽略，使用默认配置）: {e}")
+
+    def reopen(self, db_path: str = None):
+        """在原对象上重开数据库连接（备份恢复换库文件后专用）。
+
+        绝不能用 db_manager.__init__(...) 重建实例：__init__ 会创建新的
+        RLock 对象，阻塞在旧锁上的线程与新调用者从此不再互斥，两个线程
+        会在 check_same_thread=False 的同一个连接上并发执行 SQL，事务会
+        互相提交/回滚对方的半成品数据（数据损坏的经典路径）。本方法保持
+        self.lock 对象不变，整个重开过程在既有锁保护下完成。
+        RLock 可重入，调用方外层已持锁时直接调用即可。
+
+        Args:
+            db_path: 新的数据库文件路径；None 表示沿用当前 self.db_path。
+        """
+        with self.lock:
+            if db_path is not None:
+                self.db_path = db_path
+            try:
+                if self.conn is not None:
+                    self.conn.close()
+            except Exception as e:
+                logger.warning(f"重开前关闭旧连接失败（忽略）: {e}")
+            # init_db 内部完成连接创建、PRAGMA 应用与表结构补齐
+            #（老版本备份可能缺新表/新列，走 CREATE IF NOT EXISTS 兼容）
+            self.init_db()
+            logger.info(f"数据库连接已在原对象上重开: {self.db_path}")
 
     def _log_sql(self, sql: str, params: tuple = None, operation: str = "EXECUTE"):
         """记录SQL执行日志"""

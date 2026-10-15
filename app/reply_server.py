@@ -8026,10 +8026,44 @@ def download_database_backup(admin_user: Dict[str, Any] = Depends(require_admin)
 
         log_with_user('info', f"开始下载数据库备份: {download_filename}", admin_user)
 
+        # 先用 SQLite 在线备份 API 落一份一致快照，再发送临时文件。
+        # 直接 FileResponse 活库文件会在写入事务进行中拿到撕裂快照，
+        # 下载方恢复时可能得到损坏的库。
+        import sqlite3
+        import tempfile
+        snapshot_fd, snapshot_path = tempfile.mkstemp(suffix='.db', prefix='db_download_')
+        os.close(snapshot_fd)
+        try:
+            src = sqlite3.connect(db_file_path)
+            try:
+                dst = sqlite3.connect(snapshot_path)
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            finally:
+                src.close()
+        except Exception as e:
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
+            log_with_user('error', f"生成数据库下载快照失败: {str(e)}", admin_user)
+            raise HTTPException(status_code=500, detail=f"生成数据库快照失败: {str(e)}")
+
+        # 发送后清理临时快照（FileResponse 的 background 钩子）
+        def _cleanup_snapshot():
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
+
+        from starlette.background import BackgroundTask
         return FileResponse(
-            path=db_file_path,
+            path=snapshot_path,
             filename=download_filename,
-            media_type='application/octet-stream'
+            media_type='application/octet-stream',
+            background=BackgroundTask(_cleanup_snapshot)
         )
 
     except HTTPException:
@@ -8039,9 +8073,13 @@ def download_database_backup(admin_user: Dict[str, Any] = Depends(require_admin)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post('/admin/backup/upload')
-async def upload_database_backup(admin_user: Dict[str, Any] = Depends(require_admin),
-                                backup_file: UploadFile = File(...)):
-    """上传并恢复数据库备份文件（管理员专用）"""
+def upload_database_backup(admin_user: Dict[str, Any] = Depends(require_admin),
+                           backup_file: UploadFile = File(...)):
+    """上传并恢复数据库备份文件（管理员专用）
+
+    同步端点：整个流程是重 IO（读上传、复制、换文件），跑在线程池里，
+    不阻塞其他 Web 请求的事件循环。
+    """
     import os
     import shutil
     import sqlite3
@@ -8056,7 +8094,7 @@ async def upload_database_backup(admin_user: Dict[str, Any] = Depends(require_ad
             raise HTTPException(status_code=400, detail="只支持.db格式的数据库文件")
 
         # 验证文件大小（限制100MB）
-        content = await backup_file.read()
+        content = backup_file.file.read()
         if len(content) > 100 * 1024 * 1024:  # 100MB
             log_with_user('warning', f"备份文件过大: {len(content)} bytes", admin_user)
             raise HTTPException(status_code=400, detail="备份文件大小不能超过100MB")
@@ -8102,33 +8140,56 @@ async def upload_database_backup(admin_user: Dict[str, Any] = Depends(require_ad
         backup_filename = f"xianyu_data_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
         backup_current_path = os.path.join(db_dir, backup_filename)
 
-        if os.path.exists(current_db_path):
-            shutil.copy2(current_db_path, backup_current_path)
-            log_with_user('info', f"当前数据库已备份为: {backup_current_path}", admin_user)
+        # 关键区：全程持 db_manager.lock 完成「一致性快照 → 关连接 → 换文件 →
+        # 原对象重开」。持锁保证其他线程的 DB 调用排队等待，而不是拿着已
+        # 关闭的连接报 Cannot operate on a closed database；锁对象全程不变
+        # （用 db_manager.reopen 而不是 __init__ 重建），杜绝两把锁不互斥、
+        # 两线程共用一个连接互相提交/回滚对方事务的损坏窗口。
+        with db_manager.lock:
+            # 用 SQLite 在线备份 API 给当前库做一致快照。
+            # 直接 shutil.copy2 活库文件在写入中可能拿到撕裂副本，
+            # 恢复失败时的回滚源必须是可信的。
+            if os.path.exists(current_db_path):
+                try:
+                    _snapshot_src = sqlite3.connect(current_db_path)
+                    try:
+                        _snapshot_dst = sqlite3.connect(backup_current_path)
+                        try:
+                            _snapshot_src.backup(_snapshot_dst)
+                        finally:
+                            _snapshot_dst.close()
+                    finally:
+                        _snapshot_src.close()
+                    log_with_user('info', f"当前数据库已备份为: {backup_current_path}", admin_user)
+                except Exception as snapshot_err:
+                    log_with_user('warning', f"备份当前数据库失败（继续恢复流程）: {str(snapshot_err)}", admin_user)
 
-        # 关闭当前数据库连接
-        if hasattr(db_manager, 'conn') and db_manager.conn:
-            db_manager.conn.close()
-            log_with_user('info', "已关闭当前数据库连接", admin_user)
+            # 关闭当前连接（锁内关闭，其他线程在锁上排队）
+            if db_manager.conn is not None:
+                db_manager.conn.close()
+                log_with_user('info', "已关闭当前数据库连接", admin_user)
 
-        # 替换数据库文件
-        shutil.move(temp_file_path, current_db_path)
-        log_with_user('info', f"数据库文件已替换: {current_db_path}", admin_user)
+            # 替换数据库文件（连接已关闭，Windows 上独占文件方可移动）
+            shutil.move(temp_file_path, current_db_path)
+            log_with_user('info', f"数据库文件已替换: {current_db_path}", admin_user)
 
-        # 重新初始化数据库连接（使用原有的db_path）
-        db_manager.__init__(db_manager.db_path)
-        log_with_user('info', "数据库连接已重新初始化", admin_user)
+            # 在原对象上重开连接（不重建实例、不换锁对象）
+            db_manager.reopen(db_manager.db_path)
+            log_with_user('info', "数据库连接已重新打开（原对象）", admin_user)
 
-        # 验证新数据库
+        # 验证新数据库（在关键区外进行，缩短锁持有时长）
         try:
             test_users = db_manager.get_all_users()
             log_with_user('info', f"数据库恢复成功，包含 {len(test_users)} 个用户", admin_user)
         except Exception as e:
             log_with_user('error', f"数据库恢复后验证失败: {str(e)}", admin_user)
-            # 如果验证失败，尝试恢复原数据库
+            # 如果验证失败，恢复原数据库（同样持锁 + 原对象重开）
             if os.path.exists(backup_current_path):
-                shutil.copy2(backup_current_path, current_db_path)
-                db_manager.__init__()
+                with db_manager.lock:
+                    if db_manager.conn is not None:
+                        db_manager.conn.close()
+                    shutil.copy2(backup_current_path, current_db_path)
+                    db_manager.reopen(current_db_path)
                 log_with_user('info', "已恢复原数据库", admin_user)
             raise HTTPException(status_code=500, detail="数据库恢复失败，已回滚到原数据库")
 
