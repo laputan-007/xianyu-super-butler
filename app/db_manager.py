@@ -118,6 +118,18 @@ class DBManager:
             )
             ''')
 
+            # 消息去重表：内存去重随实例重启清零，而闲鱼在重连后会重推
+            # sync 消息，导致重启/重连窗口内对买家重复回复。本表把去重
+            # 状态落库，覆盖重启窗口。
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS processed_messages (
+                cookie_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                PRIMARY KEY (cookie_id, message_id)
+            )
+            ''')
+
             # 创建cookies表（添加user_id字段和auto_confirm字段）
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS cookies (
@@ -2171,6 +2183,63 @@ class DBManager:
         return cursor.executemany(sql, params_list)
     
     # -------------------- Cookie操作 --------------------
+    def check_and_mark_message_processed(self, cookie_id: str, message_id: str,
+                                         ttl_seconds: float = 21600) -> bool:
+        """原子地检查并标记消息为已处理。
+
+        返回 True 表示首次处理（调用方应继续回复流程），False 表示 TTL
+        内已处理过（调用方应跳过）。数据库故障时按未处理放行，去重失败
+        的代价（偶发重复回复）远小于拦截正常消息的代价。
+
+        Args:
+            ttl_seconds: 去重有效期，默认 6 小时。消息 ID 对单条消息唯一，
+                正常新消息必然有新 ID；重连重推的 sync 消息携带原 ID，
+                所以更长的 TTL 只会压制重推，不会压制正常消息。
+        """
+        now = time.time()
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "SELECT created_at FROM processed_messages WHERE cookie_id = ? AND message_id = ?",
+                    (cookie_id, message_id),
+                )
+                row = cursor.fetchone()
+                if row:
+                    created_at = row[0] or 0
+                    if now - created_at < ttl_seconds:
+                        return False
+                    cursor.execute(
+                        "UPDATE processed_messages SET created_at = ? WHERE cookie_id = ? AND message_id = ?",
+                        (now, cookie_id, message_id),
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO processed_messages (cookie_id, message_id, created_at) VALUES (?, ?, ?)",
+                        (cookie_id, message_id, now),
+                    )
+                self.conn.commit()
+                return True
+            except Exception as e:
+                logger.error(f"消息去重标记失败（按未处理放行）: {e}")
+                return True
+
+    def cleanup_processed_messages(self, ttl_seconds: float = 21600) -> int:
+        """清理过期的消息去重记录，返回删除行数。"""
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "DELETE FROM processed_messages WHERE created_at < ?",
+                    (time.time() - ttl_seconds,),
+                )
+                removed = cursor.rowcount
+                self.conn.commit()
+                return max(0, removed)
+            except Exception as e:
+                logger.error(f"清理消息去重记录失败: {e}")
+                return 0
+
     def get_cookie_owner_user_id(self, cookie_id: str):
         """查询账号归属的用户 ID（通知回退全局渠道时用），查不到返回 None"""
         with self.lock:

@@ -7190,6 +7190,11 @@ class XianyuLive:
                                     self.__class__._last_db_cleanup_time = current_time
                                 else:
                                     logger.error(f"【{self.cookie_id}】数据库清理失败: {stats['error']}")
+                                # 顺带清理过期的消息去重记录（TTL 6小时，行数
+                                # 有上限语义：每账号每消息一行，不清理会持续增长）
+                                removed = await asyncio.to_thread(db_manager.cleanup_processed_messages)
+                                if removed > 0:
+                                    logger.info(f"【{self.cookie_id}】已清理 {removed} 条过期消息去重记录")
                             except asyncio.CancelledError:
                                 logger.warning(f"【{self.cookie_id}】数据库清理被取消")
                                 raise
@@ -9489,12 +9494,12 @@ class XianyuLive:
         
         async with self.processed_message_ids_lock:
             current_time = time.time()
-            
-            # 检查消息是否已处理且未过期
+
+            # 检查消息是否已处理且未过期（内存快速路径）
             if message_id in self.processed_message_ids:
                 last_process_time = self.processed_message_ids[message_id]
                 time_elapsed = current_time - last_process_time
-                
+
                 # 如果消息处理时间未超过1小时，跳过
                 if time_elapsed < self.message_expire_time:
                     remaining_time = int(self.message_expire_time - time_elapsed)
@@ -9503,7 +9508,17 @@ class XianyuLive:
                 else:
                     # 超过1小时，可以重新处理
                     logger.info(f"【{self.cookie_id}】消息ID {message_id[:50]}... 已超过 {int(time_elapsed/60)} 分钟，允许重新回复")
-            
+
+            # 落库去重：内存去重随实例重启清零，而闲鱼重连后会重推 sync
+            # 消息（携带原 message_id），重启/重连窗口内会对买家重复回复。
+            # 数据库故障时按未处理放行（去重失败的代价远小于拦截正常消息）。
+            from app.db_manager import db_manager
+            if not db_manager.check_and_mark_message_processed(self.cookie_id, str(message_id)):
+                # TTL 内已在库中：同步内存状态后跳过
+                self.processed_message_ids[message_id] = current_time
+                logger.warning(f"【{self.cookie_id}】消息ID {message_id[:50]}... 已在数据库去重记录中，跳过重复回复")
+                return
+
             # 标记消息ID为已处理（更新或添加时间戳）
             self.processed_message_ids[message_id] = current_time
             
