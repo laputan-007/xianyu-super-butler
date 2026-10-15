@@ -23,6 +23,9 @@ NOTIFICATION_CHANNEL_REQUIRED_FIELDS = {
 NOTIFICATION_CHANNEL_TYPE_ALIASES = {
     "ding_talk": "dingtalk",
     "lark": "feishu",
+    # NotificationSender 的 handler 表里 'qmsg' 与 'qq' 同义；校验层的
+    # 规范类型位是 'qq'，补上别名后直发测试（qmsg-test）才能通过校验
+    "qmsg": "qq",
 }
 
 SUPPORTED_NOTIFICATION_CHANNEL_TYPES = frozenset(NOTIFICATION_CHANNEL_REQUIRED_FIELDS)
