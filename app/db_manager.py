@@ -7010,6 +7010,61 @@ class DBManager:
             self.conn.rollback()
             return False
 
+    # ------------------ 本地公告（管理员发布，全站推送） ------------------
+
+    def _ensure_announcement_table(self) -> None:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS local_announcements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                level TEXT DEFAULT 'info',
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            self.conn.commit()
+
+    def publish_announcement(self, title: str, content: str, level: str = 'info') -> int:
+        """发布一条本地公告，返回自增 ID。level: info/warning/danger。"""
+        self._ensure_announcement_table()
+        safe_level = level if level in ('info', 'warning', 'danger') else 'info'
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'INSERT INTO local_announcements (level, title, content) VALUES (?, ?, ?)',
+                    (safe_level, title.strip(), content.strip()),
+                )
+                new_id = int(cursor.lastrowid)
+                self.conn.commit()
+                return new_id
+        except Exception as e:
+            logger.error(f"发布公告失败: {e}")
+            self.conn.rollback()
+            raise
+
+    def get_latest_announcement(self) -> Optional[Dict[str, Any]]:
+        """最新一条本地公告（前端登录后对比已见 ID 决定是否推送）。"""
+        self._ensure_announcement_table()
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'SELECT id, level, title, content, published_at FROM local_announcements ORDER BY id DESC LIMIT 1'
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return {
+                    'id': row[0], 'level': row[1], 'title': row[2],
+                    'content': row[3], 'published_at': row[4],
+                }
+        except Exception as e:
+            logger.error(f"查询最新公告失败: {e}")
+            return None
+
     def migrate_item_id(self, cookie_id: str, old_item_id: str, new_item_id: str,
                         image_url: Optional[str] = None, price: Optional[str] = None) -> bool:
         """本地商品发布成功后，把本地记录的商品 ID 换成平台返回的新 ID。

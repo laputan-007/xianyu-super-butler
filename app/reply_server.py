@@ -1627,6 +1627,100 @@ async def create_events_ticket(current_user: Dict[str, Any] = Depends(get_curren
     }
 
 
+# ------------------ 本地公告：管理员发布，全站推送 ------------------
+
+class AnnouncementPublishIn(BaseModel):
+    title: str
+    content: str
+    level: str = "info"
+
+
+@app.post("/announcements/publish")
+def publish_announcement_route(
+    payload: AnnouncementPublishIn,
+    _: Dict[str, Any] = Depends(require_admin),
+):
+    """发布公告：写入本地公告表，并实时广播给所有在线用户（顶栏铃铛）。"""
+    title = payload.title.strip()
+    content = payload.content.strip()
+    if not title or not content:
+        raise HTTPException(status_code=400, detail="标题和内容不能为空")
+
+    try:
+        announcement_id = db_manager.publish_announcement(title, content, payload.level)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"发布公告失败: {e}")
+
+    # 广播给所有在线用户；离线用户下次登录时由前端拉取最新公告补推
+    realtime_hub.publish_all({
+        "type": "announcement",
+        "id": announcement_id,
+        "level": payload.level if payload.level in ("info", "warning", "danger") else "info",
+        "title": title,
+        "content": content,
+        "time": int(time.time() * 1000),
+    })
+    logger.info(f"管理员发布公告 #{announcement_id}: {title}")
+    return {"success": True, "message": "公告已发布", "data": {"id": announcement_id}}
+
+
+@app.get("/announcements/latest")
+def get_latest_announcement_route(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """最新一条本地公告（登录后前端对比已见 ID，决定是否推送通知）。"""
+    return {"success": True, "data": db_manager.get_latest_announcement()}
+
+
+class QmsgTestIn(BaseModel):
+    message: Optional[str] = None
+
+
+@app.post("/notification-channels/qmsg-test")
+async def test_qmsg_channel(
+    payload: Optional[QmsgTestIn] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """向当前用户配置的第一个启用 Qmsg 渠道发送一条测试消息。
+
+    payload.message 可传自定义文字（去空白后非空即用），不传用默认文案。
+    未配置 Qmsg 渠道时返回 400 引导去配置（关于页测试按钮的依据）。
+    """
+    import json as _json
+    from app.db_manager import db_manager
+    from app.services.notification_sender import NotificationSender
+
+    channels = db_manager.get_notification_channels(int(current_user["user_id"]))
+    qmsg_channel = next(
+        (ch for ch in channels
+         if ch.get('enabled') and str(ch.get('type') or '').lower() in ('qmsg', 'qq')),
+        None,
+    )
+    if not qmsg_channel:
+        raise HTTPException(
+            status_code=400,
+            detail="尚未配置 Qmsg 渠道：请先在「通知与日志 → 通知渠道」里添加并启用 Qmsg 渠道，再回来测试",
+        )
+    try:
+        config = _json.loads(qmsg_channel.get('config') or '{}')
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Qmsg 渠道配置格式异常，请重新保存渠道配置")
+
+    custom_message = (payload.message if payload else None)
+    custom_message = custom_message.strip() if isinstance(custom_message, str) else ''
+    message = (
+        f"【鱼小铺】Qmsg 测试：{custom_message}"
+        if custom_message
+        else "【鱼小铺】Qmsg 测试消息：收到即代表 QQ 机器人推送链路正常。"
+    )
+    try:
+        await NotificationSender().send('qq', config, message)
+    except Exception as exc:
+        logger.warning(f"Qmsg 测试发送失败: {exc}")
+        raise HTTPException(status_code=502, detail=f"测试消息发送失败：{exc}")
+
+    logger.info(f"用户 {current_user.get('username')} 测试 Qmsg 渠道 {qmsg_channel.get('name')}")
+    return {"success": True, "message": "测试消息已发送，请到 QQ 查收"}
+
+
 @app.get("/events")
 async def events_stream(ticket: str = Query(...), request: Request = None):
     """浏览器实时事件流（SSE）。票据换取订阅，之后所有事件按用户归属推送。"""
@@ -9725,9 +9819,63 @@ async def get_announcement(
 
     数据来自系统设置里配置的公网 JSON 地址，后端代拉并缓存 10 分钟。
     远端不可用时沿用上次结果，保证页面不受影响。
+    检测到新版本时通过 Qmsg（QQ 机器人）与邮件渠道推送提醒，每个版本只推一次。
     """
     from app.announcement import get_announcement_payload
-    return await get_announcement_payload(force=force)
+    payload = await get_announcement_payload(force=force)
+
+    latest = str(payload.get('latest_version') or '').strip()
+    if payload.get('has_update') and latest:
+        from app.db_manager import db_manager
+        notified = str(db_manager.get_system_setting(VERSION_PUSH_NOTIFIED_KEY) or '').strip()
+        if notified != latest:
+            try:
+                await _push_new_version_notice(latest)
+            finally:
+                # 无论渠道成败都记录，避免每次检查都轰炸（渠道问题在日志里查）
+                db_manager.set_system_setting(
+                    VERSION_PUSH_NOTIFIED_KEY, latest, '已推送过新版本提醒的版本号'
+                )
+
+    return payload
+
+
+VERSION_PUSH_NOTIFIED_KEY = 'version_push_notified'
+
+
+async def _push_new_version_notice(latest_version: str) -> None:
+    """发现新版本：向所有启用的 Qmsg（QQ 机器人）与邮件渠道推送一条提醒。"""
+    import json as _json
+    from app.announcement import get_local_version
+    from app.db_manager import db_manager
+    from app.services.notification_sender import NotificationSender
+
+    channels = db_manager.get_notification_channels()
+    targets = [
+        channel for channel in channels
+        if channel.get('enabled') and str(channel.get('type') or '').lower() in ('qmsg', 'qq', 'email')
+    ]
+    if not targets:
+        logger.info("发现新版本但无启用的 Qmsg/邮件渠道，跳过推送")
+        return
+
+    message = (
+        f"【鱼小铺】发现新版本 v{latest_version}\n"
+        f"当前运行 v{get_local_version()}\n"
+        f"请前往「关于」页查看更新内容并升级。"
+    )
+    sender = NotificationSender()
+    for channel in targets:
+        try:
+            config = _json.loads(channel.get('config') or '{}')
+        except (TypeError, ValueError):
+            logger.warning(f"新版本推送渠道 {channel.get('name')} 配置解析失败，跳过")
+            continue
+        try:
+            await sender.send(str(channel.get('type')).lower(), config, message)
+            logger.info(f"新版本提醒已推送至渠道 {channel.get('name')}")
+        except Exception as exc:
+            logger.warning(f"新版本推送渠道 {channel.get('name')} 失败: {exc}")
 
 
 def _rate_template() -> str:
