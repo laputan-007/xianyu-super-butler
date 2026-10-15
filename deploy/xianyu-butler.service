@@ -1,0 +1,49 @@
+# 闲鱼超级管家 · systemd 部署单元（2C2G 目标形态）
+
+# 安装：
+#   sudo cp deploy/xianyu-butler.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now xianyu-butler
+#
+# 日志：
+#   journalctl -u xianyu-butler -f
+
+[Unit]
+Description=Xianyu Super Butler (multi-account automation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xianyu
+Group=xianyu
+WorkingDirectory=/opt/xianyu-butler
+# 用 venv 内解释器直接跑（不用 docker 可省下 dockerd+containerd 的
+# 150-250MB 常驻内存，2C2G 上这笔内存留给浏览器毛刺）
+ExecStart=/opt/xianyu-butler/.venv/bin/python Start.py
+Restart=always
+RestartSec=5
+
+# 主进程优先保护：内存不足时 OOM killer 先杀 Chromium 子进程
+# （可重试、损失小），绝不杀持有全部账号连接的主进程
+OOMScoreAdjust=-500
+
+# 资源上限（按 16G 机器等比缩小；2G 内存机器的取值）
+MemoryMax=1600M
+CPUQuota=180%
+
+# 停止：SIGTERM 触发 uvicorn 优雅退出 + 账号任务清理，30 秒兜底
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# 运行时环境
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+# 回退开关（排障用，稳定后移除）：
+#   API_SEPARATE_THREAD=1   退回旧的双事件循环（线程跑 uvicorn）
+#   SQL_LOG_ENABLED=true    临时打开 SQL 日志排查
+Environment=API_HOST=0.0.0.0
+Environment=API_PORT=8080
+
+[Install]
+WantedBy=multi-user.target
