@@ -727,8 +727,17 @@ class XianyuLive:
             logger.error(f"【{self.cookie_id}】清理日志文件时出错: {self._safe_str(e)}")
             return 0
 
-    def __init__(self, cookies_str=None, cookie_id: str = "default", user_id: int = None):
-        """初始化闲鱼直播类"""
+    def __init__(self, cookies_str=None, cookie_id: str = "default", user_id: int = None, register: bool = True):
+        """初始化闲鱼直播类
+
+        Args:
+            register: 是否注册到全局实例表。只有由 CookieManager 启动、
+                长期持有 WebSocket 的常驻实例才应注册；Web 层为抓资料/
+                刷 cookie/同步商品创建的临时实例必须传 False —— 否则会把
+                注册表覆盖成 ws=None 的空壳，导致后续"手动发货/发消息"
+                拿到假实例（临时实例不会走 main() 退出路径，永不注销）。
+        """
+        self._should_register = register
         logger.info(f"【{cookie_id}】开始初始化XianyuLive...")
 
         if not cookies_str:
@@ -886,8 +895,9 @@ class XianyuLive:
         # 初始化订单状态处理器
         self._init_order_status_handler()
 
-        # 注册实例到类级别字典（用于API调用）
-        self._register_instance()
+        # 注册实例到类级别字典（用于API调用）；临时实例不注册，防止劫持注册表
+        if self._should_register:
+            self._register_instance()
 
     def _init_order_status_handler(self):
         """初始化订单状态处理器"""
