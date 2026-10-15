@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { AdminStats, OrderAnalytics, Order, OrderStatus, Item } from '../types';
 import { getAdminStats, getOrderAnalytics, getValidOrders, getItems } from '../services/api';
-import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw, Percent, Trophy} from 'lucide-react';
+import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw, Percent, Trophy, Sparkles, BellRing, Mail} from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { EmptyState, PageHeader, PageLoading, PageTabs, SectionHeader } from './ui';
 import { BrandPreference, useTheme } from '../theme/ThemeProvider';
+import { getUsageStats, UsageStatsResponse } from '../services/api';
+
+/** 用量统计的聚合辅助：按前缀求和（email_ok + email_fail → email 总量） */
+const sumUsageBy = (counts: Record<string, number> | undefined, prefix: string): number => {
+  if (!counts) return 0;
+  return Object.entries(counts)
+    .filter(([key]) => key === prefix || key.startsWith(`${prefix}_`))
+    .reduce((sum, [, value]) => sum + value, 0);
+};
 
 // 状态徽章组件
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
@@ -60,6 +69,28 @@ const Dashboard: React.FC = () => {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  // 系统用量（AI 调用 / 通知推送 / 邮件发送，近 7 天；口径随登录身份自动切换）
+  const [usageStats, setUsageStats] = useState<UsageStatsResponse | null>(null);
+
+  useEffect(() => {
+    getUsageStats(7).then(setUsageStats).catch(() => setUsageStats(null));
+  }, [reloadToken]);
+
+  // 用量汇总与每日序列（分组柱状图数据：邮件是通知的子集，不堆叠避免双计）
+  const usageAiTotal = (usageStats?.totals.ai_ok ?? 0) + (usageStats?.totals.ai_fail ?? 0);
+  const usageNotifyTotal = Object.entries(usageStats?.totals ?? {})
+    .filter(([key]) => !key.startsWith('ai_'))
+    .reduce((sum, [, value]) => sum + value, 0);
+  const usageEmailTotal = sumUsageBy(usageStats?.totals, 'email');
+  const usageChartData = (usageStats?.daily ?? []).map(day => ({
+    name: day.date.slice(5),
+    'AI 调用': (day.counts.ai_ok ?? 0) + (day.counts.ai_fail ?? 0),
+    '通知推送': Object.entries(day.counts)
+      .filter(([key]) => !key.startsWith('ai_'))
+      .reduce((sum, [, value]) => sum + value, 0),
+    '邮件发送': (day.counts.email_ok ?? 0) + (day.counts.email_fail ?? 0),
+  }));
+  const usageHasData = usageAiTotal + usageNotifyTotal > 0;
 
   // 搜索词
   const [searchTerm, setSearchTerm] = useState('');
@@ -533,6 +564,128 @@ const Dashboard: React.FC = () => {
           icon={Package}
           colorClass="bg-[#c9b8e8]"
         />
+      </div>
+
+      {/* 系统用量：AI 调用 / 通知推送 / 邮件发送（近 7 天），指标卡 + 趋势图 + 管理员每用户表 */}
+      <div className="section-panel">
+        <SectionHeader
+          title="系统用量"
+          description={`AI 调用、通知推送与邮件发送的近 7 天用量${usageStats?.scope === 'all' ? '（管理员视角，含全部用户）' : ''}。`}
+          icon={Activity}
+        />
+        <div className="grid gap-4 p-4 pt-0 sm:grid-cols-3">
+          <StatCard
+            title="AI 调用（7天）"
+            value={usageAiTotal.toLocaleString()}
+            icon={Sparkles}
+            colorClass="bg-brand"
+          />
+          <StatCard
+            title="通知推送（7天）"
+            value={usageNotifyTotal.toLocaleString()}
+            icon={BellRing}
+            colorClass="bg-brand-500"
+          />
+          <StatCard
+            title="邮件发送（7天）"
+            value={usageEmailTotal.toLocaleString()}
+            icon={Mail}
+            colorClass="bg-[#8fc7a8]"
+          />
+        </div>
+        <div className="h-[280px] w-full px-4 pb-4">
+          {usageHasData ? (
+            /* 分组柱状图（不堆叠）：邮件是通知渠道之一，堆叠会双计 */
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={usageChartData}
+                margin={{ top: 18, right: 16, left: -20, bottom: 18 }}
+                barGap={6}
+                barCategoryGap="28%"
+              >
+                <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="4 4" />
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
+                  dy={10}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'var(--text-soft)', fontSize: 12, fontWeight: 500 }}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--surface)',
+                    borderRadius: '14px',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-md)',
+                    padding: '10px 14px'
+                  }}
+                  itemStyle={{ color: 'var(--text)', fontWeight: 600 }}
+                  labelStyle={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}
+                  cursor={{ fill: 'var(--chart-cursor)', radius: 8 }}
+                  formatter={(value) => [`${Number(value).toLocaleString()} 次`, undefined]}
+                />
+                <Legend
+                  verticalAlign="top"
+                  height={28}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{value}</span>
+                  )}
+                />
+                <Bar dataKey="AI 调用" fill={COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="通知推送" fill={COLORS[1]} radius={[4, 4, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="邮件发送" fill={COLORS[2]} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState
+              compact
+              title="暂无用量记录"
+              description="发生 AI 回复或通知推送后，这里会出现按天的用量趋势。"
+              icon={Activity}
+            />
+          )}
+        </div>
+        {usageStats?.scope === 'all' && usageStats.per_user.length > 0 && (
+          <div className="overflow-x-auto px-4 pb-4">
+            <p className="mb-2 text-sm font-bold text-gray-900">每用户用量</p>
+            <table className="w-full min-w-[420px] text-left text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500">
+                  <th className="pb-2 font-bold">用户</th>
+                  <th className="pb-2 font-bold">AI 调用</th>
+                  <th className="pb-2 font-bold">邮件</th>
+                  <th className="pb-2 font-bold">通知合计</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usageStats.per_user.map((row) => (
+                  <tr key={row.user_id} className="border-t border-gray-100">
+                    <td className="py-2 text-gray-600">
+                      {row.username}
+                      <span className="ml-1.5 text-[11px] text-gray-400">#{row.user_id}</span>
+                    </td>
+                    <td className="py-2 font-bold text-gray-900">{sumUsageBy(row.counts, 'ai')}</td>
+                    <td className="py-2 font-bold text-gray-900">{sumUsageBy(row.counts, 'email')}</td>
+                    <td className="py-2 font-bold text-gray-900">
+                      {Object.entries(row.counts)
+                        .filter(([key]) => !key.startsWith('ai_'))
+                        .reduce((sum, [, value]) => sum + value, 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Main Chart Section */}
