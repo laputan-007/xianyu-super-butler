@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
   BellRing,
   Image,
@@ -275,6 +276,9 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const [searchInputName] = useState(
     () => `conversation-filter-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
+  // 防密码管理器把保存的登录密码灌进搜索框（配合 name 混淆 + readOnly 解锁）
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInputTouchedRef = useRef(false);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -331,26 +335,26 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     }
   };
   const [imageSending, setImageSending] = useState(false);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  // 消息轮询的活跃标记：发送/切换会话/收到新消息都会刷新它
-  const lastActivityRef = useRef(Date.now());
   const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  // 聊天滚动容器与尾部跟踪：轮询每轮都会替换消息数组引用，若照搬旧逻辑
-  // 无差别 scrollIntoView，正在往上翻历史的用户会每 3 秒被拽回底部
-  const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const lastTailIdRef = useRef('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchInputTouchedRef = useRef(false);
-  const activeCidRef = useRef('');
-  const readWatermarksRef = useRef<ReadWatermarks>(loadReadWatermarks());
-  // SSE 事件回调在连接建立时闭包固化，事件到来时要读「最新值」只能走引用
-  const activeAccountIdRef = useRef('');
-  const conversationsRef = useRef<ChatConversation[]>([]);
-  const loadMessagesRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
-  const loadConversationsRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
-  const pushRefreshTimerRef = useRef(0);
-
+  // 回到底部按钮：滚离底部超过半屏时出现
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
+  // 表情/短语弹层点击外部关闭
+  const emojiPanelRef = useRef<HTMLDivElement>(null);
+  const phrasesPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showEmoji && !showPhrases) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (showEmoji && emojiPanelRef.current && !emojiPanelRef.current.contains(target)) {
+        setShowEmoji(false);
+      }
+      if (showPhrases && phrasesPanelRef.current && !phrasesPanelRef.current.contains(target)) {
+        setShowPhrases(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [showEmoji, showPhrases]);
   const [filters, setFilters] = useState<MessageFilter[]>([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filterAccount, setFilterAccount] = useState('');
@@ -372,6 +376,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const activeAccount = accounts.find((account) => account.accountId === activeAccountId);
   const activeConversation = conversations.find((conversation) => conversation.cid === activeCid);
 
+  // 商品映射（会话头关联商品信息用）
   const itemMap = useMemo(
     () => new Map(items.map((item) => [`${item.cookie_id}:${item.item_id}`, item])),
     [items]
@@ -381,6 +386,10 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     ? itemMap.get(`${activeAccountId}:${activeConversation.itemId}`)
     : undefined;
 
+  const selectedAllFilters = filters.length > 0
+    && filters.every((filter) => selectedFilterIds.includes(filter.id));
+
+  // 会话列表按搜索词过滤（联系人/商品/摘要）
   const visibleConversations = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return conversations;
@@ -395,8 +404,18 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     );
   }, [conversations, query]);
 
-  const selectedAllFilters = filters.length > 0
-    && filters.every((filter) => selectedFilterIds.includes(filter.id));
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const lastActivityRef = useRef(Date.now());
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const lastTailIdRef = useRef('');
+  const activeCidRef = useRef('');
+  const readWatermarksRef = useRef<ReadWatermarks>(loadReadWatermarks());
+  const activeAccountIdRef = useRef('');
+  const conversationsRef = useRef<ChatConversation[]>([]);
+  const loadMessagesRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const loadConversationsRef = useRef<((silent?: boolean) => Promise<void>) | null>(null);
+  const pushRefreshTimerRef = useRef(0);
 
   const rememberConversationRead = (conversation: ChatConversation) => {
     if (!activeAccountIdRef.current || !conversation.cid) return;
@@ -601,6 +620,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
     // 会话/账号切换（含会话列表刷新导致的自动回退）：旧消息连同未回显的
     // 本地乐观消息一并清空，防止跨会话串消息
     setMessages([]);
+    setShowJumpBottom(false);
     if (isActive) {
       setMessagesLoading(true);
       void loadMessages();
@@ -763,6 +783,18 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // 回到底部按钮的显隐：滚离底部超过半屏才出现，贴底时隐藏
+  const handleMessagesScroll = () => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+    setShowJumpBottom(distance > container.clientHeight / 2);
+  };
+
+  const jumpToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     // Chromium 和部分密码管理器会无视 autocomplete="off"，把本站保存的
@@ -1169,13 +1201,13 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
               </span>
             </div>
 
-            <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-[var(--app-bg)] px-4 py-6 sm:px-8">
+            <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="relative min-h-0 flex-1 overflow-y-auto bg-[var(--app-bg)] px-4 py-6">
               {messagesLoading && messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-brand-700" />
                 </div>
               ) : (
-                <div className="mx-auto max-w-4xl space-y-4">
+                <div className="space-y-4">
                   {messages.map((message, index) => {
                     const previous = messages[index - 1];
                     const showTime = !previous || Math.abs(message.time - previous.time) > 300_000;
@@ -1200,7 +1232,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                             </div>
                           </div>
                         ) : (
-                          <div className={`flex items-start gap-3 ${message.isSelf ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
+                          <div className={`flex items-start gap-3 ${message.isSelf ? 'justify-end' : 'justify-start'}`}>
                             {!message.isSelf && renderAvatar(
                               activeConversation.otherUserAvatar,
                               senderLabel,
@@ -1240,6 +1272,18 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                 </div>
               )}
             </div>
+            {/* 一键回到底部：滚离底部超过半屏时出现 */}
+            {showJumpBottom && (
+              <button
+                type="button"
+                onClick={jumpToBottom}
+                className="absolute bottom-24 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] shadow-lg transition-colors hover:border-[var(--border-brand)] hover:text-[var(--brand-text)] sm:right-8"
+                title="回到底部"
+                aria-label="回到底部"
+              >
+                <ArrowDown className="h-5 w-5" />
+              </button>
+            )}
 
             <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 sm:px-5">
               <div className="mb-2 flex items-center gap-4 text-[var(--text-muted)]">
@@ -1257,7 +1301,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                     <Smile className="h-5 w-5" />
                   </button>
                   {showEmoji && (
-                    <div className="absolute bottom-8 left-0 z-20 w-80 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
+                    <div ref={emojiPanelRef} className="absolute bottom-8 left-0 z-20 w-80 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
                       <div className="grid grid-cols-8 gap-1">
                         {EMOJI_CHOICES.map(emoji => (
                           <button
@@ -1329,7 +1373,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                     <Zap className="h-5 w-5" />
                   </button>
                   {showPhrases && (
-                    <div className="absolute bottom-8 left-0 z-20 max-h-72 w-80 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
+                    <div ref={phrasesPanelRef} className="absolute bottom-8 left-0 z-20 max-h-72 w-80 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
                       {quickPhrases.length === 0 ? (
                         <p className="px-2 py-3 text-xs text-gray-500">
                           还没有快捷短语，可在「设置」中添加。
