@@ -2,14 +2,14 @@ import React from 'react';
 import {
   Bell,
   Bot,
-  CreditCard,
+  HeartHandshake,
+  KeyRound,
   LayoutDashboard,
   MessageCircle,
-  MessageSquare,
   Package,
+  Reply,
   Settings,
   ShoppingBag,
-  Star,
   UserCog,
   Users,
   Workflow,
@@ -39,6 +39,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   // 「通知与日志」保留：通知渠道按用户隔离（页面内系统日志已单独按权限隐藏）。
   const adminOnly = (item: { id: string }) => isAdmin || !['settings', 'users'].includes(item.id);
 
+  // 分组原则：按业务对象归拢，消灭只有单项的「孤儿分组」——
+  // 商品自动化并入商品组、买家互动归入订单语境、回复三件套独立成组。
   const menuGroups = [
     {
       label: '经营概览',
@@ -47,27 +49,27 @@ const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      label: '闲鱼业务',
+      label: '账号与商品',
       items: [
         { id: 'accounts', icon: Users, label: '账号管理' },
         { id: 'items', icon: Package, label: '商品与发货' },
-        { id: 'orders', icon: ShoppingBag, label: '订单管理' },
-        { id: 'buyer-interaction', icon: Star, label: '买家互动' },
-        { id: 'cards', icon: CreditCard, label: '卡密库存' },
+        { id: 'cards', icon: KeyRound, label: '卡密库存' },
+        { id: 'product-automation', icon: Workflow, label: '商品自动化' },
       ],
     },
     {
-      label: '客户沟通',
+      label: '订单与买家',
+      items: [
+        { id: 'orders', icon: ShoppingBag, label: '订单管理' },
+        { id: 'buyer-interaction', icon: HeartHandshake, label: '买家互动' },
+      ],
+    },
+    {
+      label: '消息与回复',
       items: [
         { id: 'messages', icon: MessageCircle, label: '消息中心' },
-        { id: 'auto-reply', icon: MessageSquare, label: '自动回复' },
+        { id: 'auto-reply', icon: Reply, label: '自动回复' },
         { id: 'ai-reply', icon: Bot, label: 'AI 回复' },
-      ],
-    },
-    {
-      label: '自动化',
-      items: [
-        { id: 'product-automation', icon: Workflow, label: '商品自动化' },
       ],
     },
     {

@@ -6799,6 +6799,10 @@ class AIReplySettings(BaseModel):
     context_message_limit: int = 12
     context_expire_minutes: int = 120
     custom_prompts: str = ""
+    # 商品问答指引：买家咨询商品本身（参数/成色/功能）时如何回复
+    product_reply_prompt: str = ""
+    # 无关话题边界：买家聊与商品无关的内容时如何应对
+    off_topic_prompt: str = ""
 
 
 def _public_ai_reply_settings(settings: dict) -> dict:

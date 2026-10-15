@@ -1115,6 +1115,12 @@ class DBManager:
                 cursor.execute("ALTER TABLE ai_reply_settings ADD COLUMN user_agent TEXT")
                 logger.info("数据库迁移完成：添加AI设置列 user_agent")
 
+            # AI 提示词扩展：商品问答指引 + 无关话题边界处理
+            for prompt_column in ('product_reply_prompt', 'off_topic_prompt'):
+                if prompt_column not in ai_setting_columns:
+                    cursor.execute(f"ALTER TABLE ai_reply_settings ADD COLUMN {prompt_column} TEXT")
+                    logger.info(f"数据库迁移完成：添加AI设置列 {prompt_column}")
+
             # 确保商品同步配置存在
             cursor.execute("SELECT key FROM system_settings WHERE key IN ('item_sync_enabled', 'item_sync_interval', 'item_sync_max_pages')")
             existing_keys = [row[0] for row in cursor.fetchall()]
@@ -3092,8 +3098,8 @@ class DBManager:
                 (cookie_id, ai_enabled, model_name, api_key, base_url, user_agent,
                  max_discount_percent, max_discount_amount, max_bargain_rounds,
                  context_enabled, context_message_limit, context_expire_minutes,
-                 custom_prompts, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 custom_prompts, product_reply_prompt, off_topic_prompt, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ''', (
                     cookie_id,
                     settings.get('ai_enabled', False),
@@ -3107,7 +3113,9 @@ class DBManager:
                     settings.get('context_enabled', True),
                     max(2, min(30, int(settings.get('context_message_limit', 12)))),
                     max(5, min(1440, int(settings.get('context_expire_minutes', 120)))),
-                    settings.get('custom_prompts', '')
+                    settings.get('custom_prompts', ''),
+                    settings.get('product_reply_prompt', ''),
+                    settings.get('off_topic_prompt', '')
                 ))
                 self.conn.commit()
                 logger.debug(f"AI回复设置保存成功: {cookie_id}")
@@ -3134,7 +3142,7 @@ class DBManager:
                 SELECT ai_enabled, model_name, api_key, base_url, user_agent,
                        max_discount_percent, max_discount_amount, max_bargain_rounds,
                        context_enabled, context_message_limit, context_expire_minutes,
-                       custom_prompts
+                       custom_prompts, product_reply_prompt, off_topic_prompt
                 FROM ai_reply_settings WHERE cookie_id = ?
                 ''', (cookie_id,))
 
@@ -3168,7 +3176,9 @@ class DBManager:
                         'context_enabled': bool(result[8]),
                         'context_message_limit': result[9] or 12,
                         'context_expire_minutes': result[10] or 120,
-                        'custom_prompts': result[11]
+                        'custom_prompts': result[11],
+                        'product_reply_prompt': result[12] or '',
+                        'off_topic_prompt': result[13] or ''
                     }
                 else:
                     # 账号没有设置，使用系统设置作为默认值
@@ -3184,7 +3194,9 @@ class DBManager:
                         'context_enabled': True,
                         'context_message_limit': 12,
                         'context_expire_minutes': 120,
-                        'custom_prompts': ''
+                        'custom_prompts': '',
+                        'product_reply_prompt': '',
+                        'off_topic_prompt': ''
                     }
             except Exception as e:
                 logger.error(f"获取AI回复设置失败: {e}")
@@ -3200,7 +3212,9 @@ class DBManager:
                     'context_enabled': True,
                     'context_message_limit': 12,
                     'context_expire_minutes': 120,
-                    'custom_prompts': ''
+                    'custom_prompts': '',
+                    'product_reply_prompt': '',
+                    'off_topic_prompt': ''
                 }
 
     def get_account_ai_api_key(self, cookie_id: str) -> str:

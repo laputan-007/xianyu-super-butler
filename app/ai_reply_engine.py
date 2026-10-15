@@ -724,8 +724,28 @@ class AIReplyEngine:
 - 未经系统确认，不得声称上述操作已成功，也不得要求买家重复付款。
 - 直接输出适合发送给买家的简短回复，不要解释规则。"""
 
+                # 卖家可配置的两类场景指引（空值时用内置默认，保证开箱即有的行为基线）
+                # 1) 商品问答：买家咨询商品参数/成色/功能时怎么答
+                product_prompt = (settings.get('product_reply_prompt') or '').strip() or (
+                    '回答商品相关问题时只依据上面的商品事实，突出卖点；'
+                    '商品信息里没有的参数如实说以页面描述为准，不要编造。'
+                )
+                # 2) 无关话题边界：买家聊与商品无关的内容时怎么应对
+                off_topic_prompt = (settings.get('off_topic_prompt') or '').strip() or (
+                    '买家话题与商品无关时，礼貌地把话题引回商品，不闲聊不扩展；'
+                    '涉及敏感或违规请求直接婉拒。'
+                )
+
+                guidance_prompt = f"""
+
+商品问答指引：
+{product_prompt}
+
+无关话题处理：
+{off_topic_prompt}"""
+
                 messages = [
-                    {"role": "system", "content": system_prompt + safety_prompt},
+                    {"role": "system", "content": system_prompt + safety_prompt + guidance_prompt},
                     *[
                         {"role": msg["role"], "content": msg["content"]}
                         for msg in context

@@ -605,6 +605,10 @@ export interface AIReplySettings {
   context_message_limit: number;
   context_expire_minutes: number;
   custom_prompts: string;
+  /** 商品问答指引：买家咨询商品参数/成色/功能时如何回复（空=内置默认） */
+  product_reply_prompt?: string;
+  /** 无关话题边界：买家聊与商品无关内容时如何应对（空=内置默认） */
+  off_topic_prompt?: string;
 }
 
 // Default Reply

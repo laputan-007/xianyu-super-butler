@@ -39,6 +39,8 @@ const defaultSettings: AIReplySettings = {
   context_message_limit: 12,
   context_expire_minutes: 120,
   custom_prompts: '',
+  product_reply_prompt: '',
+  off_topic_prompt: '',
 };
 
 const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
@@ -343,6 +345,26 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
                       onChange={event => updateSetting('custom_prompts', event.target.value)}
                       className="ios-input min-h-36 w-full resize-y rounded-md px-3 py-2.5 text-sm leading-6"
                       placeholder="例如：语气简洁，不承诺未确认的库存；涉及售后时引导买家说明订单号。"
+                    />
+                  </label>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1.5 block text-sm font-semibold text-gray-700">商品问答指引</span>
+                    <span className="mb-1.5 block text-xs leading-5 text-gray-400">买家咨询商品参数、成色、功能时，AI 按这里的规则回答。留空使用内置默认（只依据商品事实、不编造）。</span>
+                    <textarea
+                      value={settings.product_reply_prompt}
+                      onChange={event => updateSetting('product_reply_prompt', event.target.value)}
+                      className="ios-input min-h-24 w-full resize-y rounded-md px-3 py-2.5 text-sm leading-6"
+                      placeholder="例如：突出成色新、已保养；电池循环次数页面没写就说以实物为准；不承诺原装配件以外的赠品。"
+                    />
+                  </label>
+                  <label className="sm:col-span-3">
+                    <span className="mb-1.5 block text-sm font-semibold text-gray-700">无关话题处理</span>
+                    <span className="mb-1.5 block text-xs leading-5 text-gray-400">买家聊与商品无关的内容（闲聊、跑题、敏感请求）时，AI 按这里的规则应对。留空使用内置默认（礼貌引回商品）。</span>
+                    <textarea
+                      value={settings.off_topic_prompt}
+                      onChange={event => updateSetting('off_topic_prompt', event.target.value)}
+                      className="ios-input min-h-24 w-full resize-y rounded-md px-3 py-2.5 text-sm leading-6"
+                      placeholder="例如：一句话礼貌收尾并把话题引回商品；被索要微信等联系方式时婉拒；涉及违规请求一律不回应具体内容。"
                     />
                   </label>
                 </div>
