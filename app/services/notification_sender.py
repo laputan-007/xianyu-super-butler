@@ -389,9 +389,17 @@ class NotificationSender:
 
     @staticmethod
     def _send_email_sync(config: dict[str, Any], message: str) -> None:
+        from email.header import Header
+        from email.utils import formataddr
+
         email = EmailMessage()
         email["Subject"] = _EMAIL_SUBJECT
-        email["From"] = str(config["email_user"])
+        # 发件人规范化：裸地址在收件端只显示一串数字/账号名。显示名取渠道
+        # 配置 sender_name，缺省统一为产品名；Header+formataddr 组装成
+        # 纯 ASCII 的 RFC2047 编码头（=?utf-8?B?...?= <addr>），中文在
+        # QQ/163/Gmail 等客户端都能正确显示，也避免部分网关拒收非 ASCII 头。
+        sender_name = str(config.get("sender_name") or "").strip() or "鱼小铺"
+        email["From"] = formataddr((str(Header(sender_name, "utf-8")), str(config["email_user"])))
         email["To"] = str(config["recipient_email"])
         email.set_content(message)
 

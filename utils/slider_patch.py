@@ -88,10 +88,19 @@ def send_notification(user_id: str, title: str, message: str, notification_type:
                             from email.mime.multipart import MIMEMultipart
                             
                             # 创建邮件
+                            # 发件人规范化：smtp_from 若是裸名字（不含@）则按
+                            # RFC5322 显示名组装，直接写进 From 会被 QQ SMTP
+                            # 以 550 "From header missing or invalid" 拒信
+                            #（db_manager._send_email_via_smtp 踩过同款坑）。
+                            from email.header import Header
+                            from email.utils import formataddr
                             msg = MIMEMultipart()
-                            msg['From'] = smtp_from
+                            if smtp_from and '@' not in smtp_from:
+                                msg['From'] = formataddr((str(Header(smtp_from, 'utf-8')), email_user))
+                            else:
+                                msg['From'] = smtp_from or email_user
                             msg['To'] = recipient_email
-                            msg['Subject'] = f"闲鱼自动回复通知 - {title}"
+                            msg['Subject'] = f"鱼小铺通知 - {title}"
                             
                             # 邮件正文
                             email_body = f"""【闲鱼自动回复系统通知】

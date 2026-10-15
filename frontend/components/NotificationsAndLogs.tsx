@@ -101,6 +101,7 @@ const CHANNEL_DEFINITIONS: Record<NotificationChannelType, ChannelDefinition> = 
       { key: 'email_user', label: '发件邮箱' },
       { key: 'email_password', label: '邮箱密码或授权码', type: 'password' },
       { key: 'recipient_email', label: '接收邮箱' },
+      { key: 'sender_name', label: '发件人名称', placeholder: '收件箱里显示的发件人，如：鱼小铺', optional: true },
     ],
     defaults: { smtp_port: 587 },
   },

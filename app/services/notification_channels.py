@@ -87,6 +87,16 @@ def validate_channel_config(channel_type: Any, config: Any) -> tuple[str, dict[s
             raise NotificationChannelConfigError("SMTP 端口必须在 1-65535 之间")
         config_data["smtp_port"] = smtp_port
 
+        # 可选的发件人显示名（收件端看到的名称，缺省由发送端统一为产品名）。
+        # 该值会进邮件头，必须挡住 CR/LF——否则就是头注入通道。
+        sender_name = str(config_data.get("sender_name") or "").strip()
+        if sender_name:
+            if any(ch in sender_name for ch in "\r\n"):
+                raise NotificationChannelConfigError("发件人名称不能包含换行符")
+            config_data["sender_name"] = sender_name
+        else:
+            config_data.pop("sender_name", None)
+
     if normalized_type == "webhook":
         http_method = str(config_data.get("http_method", "POST")).strip().upper()
         if http_method not in {"POST", "PUT"}:

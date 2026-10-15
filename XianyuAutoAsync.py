@@ -5243,10 +5243,19 @@ class XianyuLive:
                 return
 
             # 创建邮件
+            # 发件人规范化：显示名取配置 sender_name / smtp_from（非邮箱地址时），
+            # 缺省统一为产品名；formataddr + RFC2047 编码组装 From 头，
+            # 裸地址在 QQ 邮箱收件端只会显示一串数字。
+            from email.header import Header
+            from email.utils import formataddr
+            sender_name = str(config_data.get('sender_name') or '').strip()
+            if not sender_name:
+                _from_conf = str(config_data.get('smtp_from') or '').strip()
+                sender_name = _from_conf if '@' not in _from_conf else ''
             msg = MIMEMultipart()
-            msg['From'] = email_user
+            msg['From'] = formataddr((str(Header(sender_name or '鱼小铺', 'utf-8')), email_user))
             msg['To'] = recipient_email
-            msg['Subject'] = "闲鱼自动回复通知"
+            msg['Subject'] = "鱼小铺通知"
 
             # 添加邮件正文
             msg.attach(MIMEText(message, 'plain', 'utf-8'))
