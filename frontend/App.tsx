@@ -5,6 +5,7 @@ import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 gsap.registerPlugin(MotionPathPlugin);
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import BrandLogo from './components/BrandLogo';
 import GlobalFeedback from './components/GlobalFeedback';
 import ThemeToggle from './components/ThemeToggle';
 import CaptchaInput from './components/CaptchaInput';
@@ -13,7 +14,7 @@ import { useCaptcha } from './lib/useCaptcha';
 import { validateEmail, validatePassword, validateUsername } from './lib/authValidation';
 import { login, verifyToken, getPublicSettings, register, sendVerificationCode, getAccountDetails } from './services/api';
 import type { AccountDetail } from './types';
-import { ShieldCheck, ArrowRight, Loader2, User, Lock, Mail, KeyRound, CheckCircle2, Zap, MessageCircle, Users, Eye, EyeOff, Package, Bell } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Loader2, User, Lock, Mail, KeyRound, CheckCircle2, Zap, MessageCircle, Users, Eye, EyeOff, Package, Bell, Bot, Megaphone } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const AccountList = lazy(() => import('./components/AccountList'));
@@ -38,7 +39,7 @@ const PageLoader = () => (
 );
 
 const pageLabels: Record<string, string> = {
-  dashboard: '总览',
+  dashboard: '数据概览',
   accounts: '账号管理',
   items: '商品与发货',
   orders: '订单管理',
@@ -603,7 +604,7 @@ const App: React.FC = () => {
               </span>
               <span className="leading-none">
                 <span className="block text-[17px] font-extrabold tracking-wide text-white">鱼小铺</span>
-                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-brand-300/70">YU XIAO PU</span>
+                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-brand-300/70">yu xiao pu</span>
               </span>
             </div>
 
@@ -632,29 +633,54 @@ const App: React.FC = () => {
                 统一处理账号、商品、订单、消息、回复和自动发货，让每一笔闲鱼生意自动运转。
               </p>
 
-              {/* 功能条：等宽四列网格，列间发丝竖线，整条与标题同宽 */}
-              <div className="mt-10 border-t border-white/[0.06] pt-7">
+              {/* 功能条：等分网格，列间发丝竖线，紧跟功能描述 */}
+              <div className="mt-10 shrink-0 border-t border-white/[0.06] pt-7">
                 <div className="mb-4 flex items-center gap-2 text-[10px] font-bold tracking-[0.25em] text-white/30">
                   <span className="h-px w-4 bg-white/25" />
                   核心能力
                 </div>
-                <div className="grid grid-cols-4 divide-x divide-white/[0.07]">
-                  {[
-                    { icon: Users, label: '账号同步', sub: '多号托管' },
-                    { icon: Package, label: '订单发货', sub: '卡密自动' },
-                    { icon: MessageCircle, label: '消息回复', sub: '智能应答' },
-                    { icon: Bell, label: '通知日志', sub: '风险提醒' },
-                  ].map(({ icon: Icon, label, sub }) => (
-                    <div key={label} className="login-chip group flex items-start gap-2.5 px-4">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-300/10 text-brand-300 ring-1 ring-inset ring-brand-300/20">
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="leading-tight">
-                        <span className="block text-[13px] font-bold text-white/80 transition-colors duration-300 group-hover:text-white">{label}</span>
-                        <span className="mt-1 block text-[11px] font-medium text-white/40">{sub}</span>
-                      </span>
-                    </div>
-                  ))}
+              <div className="grid grid-cols-6 divide-x divide-white/[0.07]">
+                {[
+                  { icon: Users, label: '账号同步', sub: '多号托管' },
+                  { icon: Package, label: '订单发货', sub: '卡密自动' },
+                  { icon: MessageCircle, label: '消息回复', sub: '智能应答' },
+                  { icon: Mail, label: '邮箱通知', sub: '新消息即达' },
+                  { icon: Bot, label: 'QQ 推送', sub: 'Qmsg 机器人' },
+                  { icon: Megaphone, label: '公告系统', sub: '版本与运营' },
+                ].map(({ icon: Icon, label, sub }) => (
+                  <div key={label} className="login-chip group flex flex-col items-center gap-1.5 px-2 text-center">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-300/10 text-brand-300 ring-1 ring-inset ring-brand-300/20">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="text-[11px] font-bold leading-tight text-white/80 transition-colors duration-300 group-hover:text-white">{label}</span>
+                    <span className="text-[10px] font-medium leading-tight text-white/40">{sub}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+              {/* 纸飞机航线：漫画风格飞行动画（纯 CSS，reduced-motion 时为静态装饰） */}
+              <div className="login-plane-scene pointer-events-none relative mt-5 h-24 select-none" aria-hidden="true">
+                <svg viewBox="0 0 1200 90" className="absolute inset-0 h-full w-full" fill="none" preserveAspectRatio="none">
+                  <path
+                    className="login-plane-trail-path"
+                    d="M 4 68 C 300 4, 640 96, 940 30 C 1040 10, 1130 14, 1196 22"
+                    stroke="rgba(255, 229, 0, 0.16)"
+                    strokeWidth="1.5"
+                    strokeDasharray="2 6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="login-plane-fly absolute left-0 top-0 h-6 w-6">
+                  {/* 漫画速度线：飞机后方三条渐隐短线 */}
+                  <span className="absolute right-full top-1/2 mr-1 h-px w-6 -translate-y-3 bg-gradient-to-l from-brand-300/70 to-transparent" />
+                  <span className="absolute right-full top-1/2 mr-1 h-px w-9 -translate-y-0.5 bg-gradient-to-l from-brand-300/50 to-transparent" />
+                  <span className="absolute right-full top-1/2 mr-1 h-px w-5 translate-y-2.5 bg-gradient-to-l from-brand-300/40 to-transparent" />
+                  <svg className="login-plane-bob h-full w-full" viewBox="0 0 1024 1024" fill="none">
+                    <path d="M180.737 346.816l38.784 224.96 57.856-175.041 591.871-274.944L180.737 346.816z" fill="var(--brand-300)" opacity="0.9" />
+                    <path d="M311.681 428.48l213.376 298.304L1024 58.304 0 180.928l154.753 129.92L989.76 72.384 311.681 428.48z" fill="var(--brand-300)" opacity="0.75" />
+                    <path d="M227.905 600.256l120-80.191-54.016-69.185L227.905 600.256z" fill="var(--brand-300)" opacity="0.55" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -672,7 +698,7 @@ const App: React.FC = () => {
           <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
             <div className="login-form-card w-full max-w-sm animate-fade-in">
               <div className="login-brand mb-6 flex items-center gap-2.5">
-                <img src="/static/login-cover.png" alt="鱼小铺" className="h-8 w-8" draggable={false} />
+                <BrandLogo className="h-8 w-8" />
                 <span className="brand-wordmark text-[15px] font-black leading-none">鱼小铺</span>
               </div>
               <div className="login-form-header mb-8">
@@ -896,11 +922,13 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                <div className="login-extras mt-8 grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-6">
+                <div className="login-extras mt-8 grid grid-cols-5 gap-2 border-t border-[var(--border)] pt-6">
                   {[
                     { icon: Zap, label: '自动发货' },
                     { icon: MessageCircle, label: '智能回复' },
                     { icon: Users, label: '多号托管' },
+                    { icon: Bot, label: 'QQ 推送' },
+                    { icon: Mail, label: '邮箱通知' },
                   ].map(({ icon: Icon, label }) => (
                     <div key={label} className="flex flex-col items-center gap-1.5">
                       <span
@@ -918,7 +946,7 @@ const App: React.FC = () => {
                   本机部署 · 数据本地存储
                 </p>
                 <p className="mt-4 text-center text-[11px] text-[var(--text-soft)]">
-                  鱼小铺 · xy.corleom.com
+                  鱼小铺 · yu xiao pu
                 </p>
               </div>
             </div>
@@ -958,6 +986,10 @@ const App: React.FC = () => {
           onAccountChange={setActiveAccountId}
           onLogout={handleAppLogout}
           onOpenMobileNav={() => setMobileMenuOpen(true)}
+          onNavigateToMessages={() => {
+            setActiveTab('messages');
+            setMobileMenuOpen(false);
+          }}
           username={currentUsername}
           isAdmin={isAdmin}
           sidebarCollapsed={sidebarCollapsed}
