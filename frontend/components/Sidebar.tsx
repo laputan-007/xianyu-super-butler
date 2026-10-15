@@ -46,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     {
       label: '经营概览',
       items: [
-        { id: 'dashboard', icon: LayoutDashboard, label: '总览' },
+        { id: 'dashboard', icon: LayoutDashboard, label: '数据概览' },
       ],
     },
     {

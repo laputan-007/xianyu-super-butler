@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Database,
   ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
+  Loader2,
   Mail,
   Megaphone,
   Palette,
@@ -26,6 +27,7 @@ import {
   deleteQuickPhrase,
   getQuickPhrases,
   getSystemSettings,
+  publishAnnouncement,
   sendTestEmail,
   updateQuickPhrase,
   updateSystemSettings,
@@ -114,9 +116,9 @@ const SettingStrategy: React.FC<{
   options: Array<{ value: string; title: string; description: string }>;
   onChange: (value: string) => void;
 }> = ({ value, options, onChange }) => (
-  <div className="border-b border-gray-100 px-4 py-3 last:border-b-0">
-    <p className="text-sm font-bold text-gray-900">拖动策略</p>
-    <p className="mt-1 text-xs leading-5 text-gray-500">自动过滑块时模拟鼠标的方式，改动即时生效、无需重启。</p>
+  <div className="border-b border-[var(--border)] px-4 py-3 last:border-b-0">
+    <p className="text-sm font-bold text-[var(--text)]">拖动策略</p>
+    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">自动过滑块时模拟鼠标的方式，改动即时生效、无需重启。</p>
     <div className="mt-3 grid gap-2">
       {options.map(opt => (
         <button
@@ -127,20 +129,20 @@ const SettingStrategy: React.FC<{
           onClick={() => onChange(opt.value)}
           className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
             value === opt.value
-              ? 'border-brand bg-[#fffbdb]'
-              : 'border-gray-200 bg-white hover:border-gray-300'
+              ? 'border-[var(--border-brand)] bg-[var(--brand-soft)]'
+              : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]'
           }`}
         >
           <span
             className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
-              value === opt.value ? 'border-[#e0c400]' : 'border-gray-300'
+              value === opt.value ? 'border-[var(--brand-300)]' : 'border-[var(--border-strong)]'
             }`}
           >
-            {value === opt.value && <span className="h-2 w-2 rounded-full bg-brand" />}
+            {value === opt.value && <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />}
           </span>
           <span className="min-w-0">
-            <span className="block text-xs font-bold text-gray-900">{opt.title}</span>
-            <span className="mt-0.5 block text-[11px] leading-4 text-gray-500">{opt.description}</span>
+            <span className="block text-xs font-bold text-[var(--text)]">{opt.title}</span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-[var(--text-muted)]">{opt.description}</span>
           </span>
         </button>
       ))}
@@ -239,6 +241,44 @@ const Settings: React.FC = () => {
   const loadSettings = () => {
     setLoading(true);
     getSystemSettings().then(setSettings).finally(() => setLoading(false));
+  };
+
+  // 公告发布（管理员）：发布后全站在线用户实时收到，离线用户下次登录补推
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', content: '', level: 'info' as 'info' | 'warning' | 'danger' });
+  const [publishing, setPublishing] = useState(false);
+
+  const publishGuardRef = useRef(false);
+
+  const handlePublishAnnouncement = async () => {
+    // 同步守卫防双击：publishing state 在批处理下两次点击都读到 false，会发布两条
+    if (publishGuardRef.current) return;
+    publishGuardRef.current = true;
+    try {
+      await doPublishAnnouncement();
+    } finally {
+      publishGuardRef.current = false;
+    }
+  };
+
+  const doPublishAnnouncement = async () => {
+    if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+      notify('公告标题和内容不能为空', 'warning');
+      return;
+    }
+    setPublishing(true);
+    try {
+      const res = await publishAnnouncement({
+        title: announcementForm.title.trim(),
+        content: announcementForm.content.trim(),
+        level: announcementForm.level,
+      });
+      notify(res.message || '公告已发布', 'success');
+      setAnnouncementForm({ title: '', content: '', level: 'info' });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '发布失败', 'error');
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -715,6 +755,59 @@ const Settings: React.FC = () => {
                 后端每 10 分钟拉取一次并缓存；远端不可用时沿用上次结果。
                 在「关于」页可手动点「检查更新」立即刷新。
               </p>
+            </div>
+
+            <div className="border-t border-[var(--border)] px-4 py-4">
+              <p className="text-sm font-bold text-[var(--text)]">发布公告</p>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                发布后所有在线用户的顶栏铃铛实时收到；离线用户下次登录时自动补推最新一条，
+                同一条公告只推一次，再发新公告才会再推。
+              </p>
+              <div className="mt-3 grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_150px]">
+                  <div>
+                    <label className="field-label">标题</label>
+                    <input
+                      value={announcementForm.title}
+                      onChange={e => setAnnouncementForm(current => ({ ...current, title: e.target.value }))}
+                      placeholder="例如：系统升级维护通知"
+                      className="ios-input mt-1 w-full rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">级别</label>
+                    <select
+                      value={announcementForm.level}
+                      onChange={e => setAnnouncementForm(current => ({ ...current, level: e.target.value as 'info' | 'warning' | 'danger' }))}
+                      className="ios-input mt-1 w-full rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="info">通知</option>
+                      <option value="warning">警告</option>
+                      <option value="danger">重要</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="field-label">内容</label>
+                  <textarea
+                    value={announcementForm.content}
+                    onChange={e => setAnnouncementForm(current => ({ ...current, content: e.target.value }))}
+                    placeholder="公告正文，将显示在用户的通知铃铛里"
+                    className="ios-input !min-h-[100px] mt-1 w-full resize-y rounded-md p-3 text-sm"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handlePublishAnnouncement()}
+                    disabled={publishing}
+                    className="ios-btn-primary flex items-center gap-2 rounded-md px-4 py-2.5 text-sm"
+                  >
+                    {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+                    {publishing ? '发布中' : '发布公告'}
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         </div>

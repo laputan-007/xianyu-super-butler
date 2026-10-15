@@ -121,6 +121,8 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
   const [deleteRules, setDeleteRules] = useState<ProductDeleteRule[]>([]);
   const [runs, setRuns] = useState<AutomationTaskRun[]>([]);
   const [loading, setLoading] = useState(true);
+  // 手动刷新期间按钮自转 + 内容压暗，列表保留
+  const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState('');
   const [accountFilter, setAccountFilter] = useState('');
   // 顶栏切换「管理的账号」后，素材库的账号筛选跟随
@@ -159,6 +161,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
 
   const loadAll = async (showLoader = true) => {
     if (showLoader) setLoading(true);
+    else setRefreshing(true);
     try {
       const [accountData, materialData, filterData, deleteData, runData] = await Promise.all([
         getAccountDetails(),
@@ -182,6 +185,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
       notify(`商品自动化数据加载失败：${(error as Error).message}`, 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -395,7 +399,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
   }
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="商品自动化"
         description="管理商品素材库、筛选入库规则、下架删除计划与历史数据补偿任务，让商品上架与清理按规则自动运转。"
@@ -404,9 +408,10 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
           <button
             type="button"
             onClick={() => void loadAll(false)}
+            disabled={refreshing}
             className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             刷新数据
           </button>
         )}
