@@ -41,6 +41,8 @@ import {
   getNotificationEvents,
   getRiskControlLogs,
   getSystemLogs,
+  getSystemSettings,
+  updateSystemSettings,
   setMessageNotification,
   testMessageNotification,
   updateMessageNotificationRule,
@@ -200,6 +202,10 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
   const [systemLevel, setSystemLevel] = useState('');
   const [systemSource, setSystemSource] = useState('');
   const [systemLoading, setSystemLoading] = useState(false);
+  // 邮件聚合设置：满 N 条消息合并发一封邮件（仅邮件渠道；1 = 逐条发送）
+  const [emailBatchCount, setEmailBatchCount] = useState('1');
+  const [emailBatchMinutes, setEmailBatchMinutes] = useState('10');
+  const [savingEmailBatch, setSavingEmailBatch] = useState(false);
 
   const loadBaseData = async () => {
     setLoadingBase(true);
@@ -221,10 +227,40 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
       });
       setEventDefinitions(eventData.events);
       setPriorityDefinitions(eventData.priorities);
+      if (isAdmin) {
+        try {
+          const settings = await getSystemSettings() as Record<string, string>;
+          const count = parseInt(String(settings.notification_email_batch_count ?? ''), 10);
+          const minutes = parseInt(String(settings.notification_email_batch_minutes ?? ''), 10);
+          setEmailBatchCount(Number.isFinite(count) && count >= 1 ? String(count) : '1');
+          setEmailBatchMinutes(Number.isFinite(minutes) && minutes >= 1 ? String(minutes) : '10');
+        } catch {
+          // 聚合设置加载失败不阻塞页面，保持默认值
+        }
+      }
     } catch (error) {
       notify(`加载通知配置失败：${(error as Error).message}`);
     } finally {
       setLoadingBase(false);
+    }
+  };
+
+  const saveEmailBatchSettings = async () => {
+    const count = Math.max(1, parseInt(emailBatchCount, 10) || 1);
+    const minutes = Math.max(1, parseInt(emailBatchMinutes, 10) || 10);
+    setSavingEmailBatch(true);
+    try {
+      await updateSystemSettings({
+        notification_email_batch_count: String(count),
+        notification_email_batch_minutes: String(minutes),
+      });
+      setEmailBatchCount(String(count));
+      setEmailBatchMinutes(String(minutes));
+      notify('邮件聚合设置已保存，下一条消息通知起生效');
+    } catch (error) {
+      notify(`保存邮件聚合设置失败：${(error as Error).message}`);
+    } finally {
+      setSavingEmailBatch(false);
     }
   };
 
@@ -558,6 +594,43 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
               </button>
             )}
           />
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-gray-100 px-4 py-3.5 text-sm">
+              <span className="font-bold text-gray-900">邮件聚合</span>
+              <span className="text-xs text-gray-500">满</span>
+              <input
+                type="number"
+                min={1}
+                max={999}
+                value={emailBatchCount}
+                onChange={(event) => setEmailBatchCount(event.target.value)}
+                aria-label="邮件聚合条数"
+                className="ios-input w-24 rounded-md px-3 py-2 text-sm"
+                title="1 = 每条消息发一封邮件（默认）"
+              />
+              <span className="text-xs text-gray-500">条消息合并发送一封邮件；不足条数时</span>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={emailBatchMinutes}
+                onChange={(event) => setEmailBatchMinutes(event.target.value)}
+                aria-label="邮件聚合时间窗（分钟）"
+                className="ios-input w-24 rounded-md px-3 py-2 text-sm"
+                title="超过该时长即使不满条数也会发出，避免末尾消息被拖延"
+              />
+              <span className="text-xs text-gray-500">分钟内兜底发出。仅影响邮件渠道，QQ/钉钉等仍逐条推送。</span>
+              <button
+                type="button"
+                onClick={() => void saveEmailBatchSettings()}
+                disabled={savingEmailBatch}
+                className="ios-btn-secondary flex items-center gap-1.5 rounded-md px-3 py-2 text-xs disabled:opacity-50"
+              >
+                {savingEmailBatch ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                保存
+              </button>
+            </div>
+          )}
           <div className="divide-y divide-gray-100 px-4">
             {channels.map((channel) => (
               <div key={channel.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">

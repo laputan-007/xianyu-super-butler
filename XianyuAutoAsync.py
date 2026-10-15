@@ -784,6 +784,11 @@ class XianyuLive:
         self.notification_cooldown = 300  # 5分钟内不重复发送相同类型的通知
         self.token_refresh_notification_cooldown = 18000  # Token刷新异常通知冷却时间：3小时
         self.notification_lock = asyncio.Lock()  # 通知防重复机制的异步锁
+        # 邮件通知聚合缓冲：{buffer_key: {'config': 渠道配置, 'entries': [(时间戳, 消息)]}}
+        # 一条消息一封邮件对高频账号是轰炸；满 N 条（系统设置可配）或超时间窗
+        # 合并发送一封。只作用于邮件渠道，QQ/钉钉等渠道仍逐条推送。
+        self._email_notify_buffers = {}
+        self._email_notify_buffer_lock = asyncio.Lock()
 
         # 自动发货防重复机制
         self.last_delivery_time = {}  # 记录每个商品的最后发货时间
@@ -4984,7 +4989,7 @@ class XianyuLive:
                             await self._send_bark_notification(config_data, notification_msg)
                         case 'email':
                             logger.info(f"📱 开始发送邮件通知...")
-                            await self._send_email_notification(config_data, notification_msg)
+                            await self._send_or_buffer_email_notification(notification, config_data, notification_msg)
                         case 'webhook':
                             logger.info(f"📱 开始发送Webhook通知...")
                             await self._send_webhook_notification(config_data, notification_msg)
@@ -5215,7 +5220,101 @@ class XianyuLive:
             import traceback
             logger.error(f"📱 Bark通知异常详情: {traceback.format_exc()}")
 
-    async def _send_email_notification(self, config_data: dict, message: str, attachment_path: str = None):
+    def _get_email_notify_batch_settings(self) -> tuple:
+        """读取邮件聚合设置。
+
+        Returns:
+            (batch_count, batch_window_seconds)：
+            - notification_email_batch_count：满 N 条合并发一封，默认 1（逐条发送）
+            - notification_email_batch_minutes：时间窗兜底（分钟），默认 10；
+              消息不足 N 条时超过该时长也会发出，避免末尾消息被无限拖延
+        """
+        try:
+            from app.db_manager import db_manager
+            raw_count = str(db_manager.get_system_setting('notification_email_batch_count') or '').strip()
+            count = int(raw_count) if raw_count.isdigit() else 1
+            raw_minutes = str(db_manager.get_system_setting('notification_email_batch_minutes') or '').strip()
+            minutes = int(raw_minutes) if raw_minutes.isdigit() else 10
+            return max(1, count), max(1, minutes) * 60
+        except Exception as e:
+            logger.warning(f"【{self.cookie_id}】读取邮件聚合设置失败，按逐条发送: {self._safe_str(e)}")
+            return 1, 600
+
+    async def _send_or_buffer_email_notification(self, notification: dict, config_data: dict, message: str):
+        """邮件通知聚合发送入口。
+
+        聚满 N 条立即合并发送；未聚满时先暂存，超过时间窗（由本方法的
+        事件触发检查 + 清理循环的定期冲刷共同保证）也会发出。
+        其他渠道（Qmsg/QQ、钉钉、Bark 等）不受影响，仍然逐条推送。
+        """
+        batch_count, batch_window = self._get_email_notify_batch_settings()
+        if batch_count <= 1:
+            await self._send_email_notification(config_data, message)
+            return
+
+        buffer_key = str(
+            notification.get('channel_id')
+            or config_data.get('recipient_email')
+            or 'default'
+        )
+        now = time.time()
+        async with self._email_notify_buffer_lock:
+            buffer = self._email_notify_buffers.setdefault(
+                buffer_key, {'config': config_data, 'entries': []}
+            )
+            # 渠道配置以最近一次为准（改了 SMTP 授权码等无需重启生效）
+            buffer['config'] = config_data
+            buffer['entries'].append((now, message))
+            should_send = (
+                len(buffer['entries']) >= batch_count
+                or any(now - ts > batch_window for ts, _ in buffer['entries'])
+            )
+            pending = self._email_notify_buffers.pop(buffer_key) if should_send else None
+            buffered_count = len(buffer['entries'])
+
+        if pending is not None:
+            await self._flush_email_buffer(pending['config'], pending['entries'])
+        else:
+            logger.info(
+                f"📧 邮件通知聚合暂存（{buffered_count}/{batch_count} 条），"
+                f"满 {batch_count} 条或超时后合并发送"
+            )
+
+    async def _flush_email_buffer(self, config_data: dict, entries: list) -> None:
+        """把一批暂存的通知合并成一封邮件发出。"""
+        if not entries:
+            return
+        merged = "\n\n".join(
+            f"【第 {i} 条 / 共 {len(entries)} 条】\n{msg}"
+            for i, (_, msg) in enumerate(entries, 1)
+        )
+        subject = f"鱼小铺通知（{len(entries)} 条消息汇总）"
+        try:
+            await self._send_email_notification(config_data, merged, subject=subject)
+            logger.info(f"📧 聚合邮件已发送：合并 {len(entries)} 条通知")
+        except Exception as e:
+            logger.error(
+                f"📧 聚合邮件发送失败（本批 {len(entries)} 条通知被丢弃）: {self._safe_str(e)}"
+            )
+
+    async def _flush_aged_email_notify_buffers(self) -> None:
+        """冲刷超时的聚合缓冲（挂在清理循环上，兜底末尾不足 N 条的消息）。"""
+        if not self._email_notify_buffers:
+            return
+        _, batch_window = self._get_email_notify_batch_settings()
+        now = time.time()
+        pending = []
+        async with self._email_notify_buffer_lock:
+            for key in list(self._email_notify_buffers.keys()):
+                buffer = self._email_notify_buffers.get(key)
+                if not buffer or not buffer.get('entries'):
+                    continue
+                if now - buffer['entries'][0][0] > batch_window:
+                    pending.append(self._email_notify_buffers.pop(key))
+        for buffer in pending:
+            await self._flush_email_buffer(buffer['config'], buffer['entries'])
+
+    async def _send_email_notification(self, config_data: dict, message: str, attachment_path: str = None, subject: str = None):
         """发送邮件通知（支持附件）
         
         Args:
@@ -5255,7 +5354,7 @@ class XianyuLive:
             msg = MIMEMultipart()
             msg['From'] = formataddr((str(Header(sender_name or '鱼小铺', 'utf-8')), email_user))
             msg['To'] = recipient_email
-            msg['Subject'] = "鱼小铺通知"
+            msg['Subject'] = subject or "鱼小铺通知"
 
             # 添加邮件正文
             msg.attach(MIMEText(message, 'plain', 'utf-8'))
@@ -7211,6 +7310,14 @@ class XianyuLive:
                         raise  # 重新抛出取消信号
                     except Exception as db_clean_e:
                         logger.error(f"【{self.cookie_id}】清理数据库历史数据时出错: {db_clean_e}")
+
+                    # 冲刷超时的邮件聚合缓冲：末尾不足 N 条的消息也不能被无限拖延
+                    try:
+                        await self._flush_aged_email_notify_buffers()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as flush_e:
+                        logger.warning(f"【{self.cookie_id}】冲刷邮件聚合缓冲失败: {self._safe_str(flush_e)}")
 
                     # 每5分钟清理一次
                     await self._interruptible_sleep(300)

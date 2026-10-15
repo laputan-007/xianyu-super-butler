@@ -582,6 +582,10 @@ export interface SystemSettings {
   announcement_show_notice?: boolean;
   announcement_show_update?: boolean;
   smtp_server?: string;
+  /** 邮件通知聚合条数：满 N 条合并发送一封（默认 1 = 逐条发送），仅影响邮件渠道 */
+  notification_email_batch_count?: string;
+  /** 邮件通知聚合时间窗（分钟）：不足 N 条时超过该时长兜底发出，默认 10 */
+  notification_email_batch_minutes?: string;
   [key: string]: any;
 }
 
