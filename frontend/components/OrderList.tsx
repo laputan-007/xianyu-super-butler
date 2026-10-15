@@ -44,6 +44,8 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
   // 每页条数可调，订单量大时避免频繁翻页
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
+  // 手动刷新/同步期间保留列表内容，只有按钮自转，不闪整页加载态
+  const [refreshing, setRefreshing] = useState(false);
   const [syncSoldLoading, setSyncSoldLoading] = useState(false);
   // 各状态的全量条数，由后端统计，避免只按当前页计算
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
@@ -279,10 +281,25 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
     });
   }, [filter, page, pageSize, searchText, accountFilter]);
 
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadOrders({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleSync = async () => {
-      setLoading(true);
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
       await syncOrders();
-      loadOrders();
+      await loadOrders({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // 从卖家端接口拉取真实成交数据，可补齐监听离线期间产生的订单
@@ -463,7 +480,7 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
   const exceptionCount = cancelledCount + refundingCount;
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="订单管理"
         description="同步闲鱼订单并跟进发货全流程：按状态与账号筛选，支持自动发货、手动补发、买家评价与小红花索要。"
@@ -471,12 +488,13 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
         actions={(
           <>
             <button
-              onClick={loadOrders}
+              onClick={handleRefresh}
+              disabled={refreshing}
               className="ios-btn-secondary flex items-center justify-center rounded-md p-2.5 text-gray-600"
               title="刷新订单"
               aria-label="刷新订单"
             >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => setShowImportModal(true)}

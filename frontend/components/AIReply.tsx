@@ -110,6 +110,28 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
       .finally(() => setLoading(false));
   }, [selectedAccountId]);
 
+  // 手动刷新：重载账号列表与当前账号配置，内容保留只有按钮自转
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const [accountData] = await Promise.all([
+        getAccountDetails(),
+        selectedAccountId
+          ? getAccountAISettings(selectedAccountId)
+              .then(data => setSettings({ ...defaultSettings, ...data, api_key: '' }))
+          : Promise.resolve(),
+      ]);
+      setAccounts(accountData);
+      if (!selectedAccountId && accountData[0]) setSelectedAccountId(syncedAccountId || accountData[0].id);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '刷新失败', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const updateSetting = <K extends keyof AIReplySettings>(key: K, value: AIReplySettings[K]) => {
     setSettings(current => ({ ...current, [key]: value }));
   };
@@ -165,7 +187,7 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
   }
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="AI 回复"
         description="按账号接入大模型自动回复与议价：配置模型连接、上下文记忆、议价边界和业务规则，并可在线试回复验证效果。"
@@ -186,6 +208,15 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
                 ))}
               </select>
             </label>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              刷新
+            </button>
             <button
               type="button"
               onClick={handleSave}

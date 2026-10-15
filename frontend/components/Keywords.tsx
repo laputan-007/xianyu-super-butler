@@ -81,6 +81,8 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
   });
 
   const [loading, setLoading] = useState(false);
+  // 手动刷新期间按钮自转，列表内容保留
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (mode === 'delivery') {
@@ -142,16 +144,17 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
     }
   };
 
-  const loadKeywords = async () => {
+  const loadKeywords = async (silent = false) => {
     if (!selectedAccount) return;
-    setLoading(true);
+    // 手动刷新走静默：列表保留原内容，只有按钮自转，不闪整块加载态
+    if (!silent) setLoading(true);
     try {
       const data = await getReplyRules(selectedAccount);
       setKeywords(data as Keyword[]);
     } catch (e) {
       console.error('加载关键词失败', e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -365,12 +368,15 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
     .filter(reply => reply.enabled).length;
 
   const refreshCurrent = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const done = () => setRefreshing(false);
     if (mode === 'delivery') {
-      void Promise.all([loadShippingRules(), loadCards()]);
+      void Promise.all([loadShippingRules(), loadCards()]).then(done, done);
     } else if (activeTab === 'reply') {
-      void loadKeywords();
+      void loadKeywords(true).then(done, done);
     } else {
-      void loadDefaultReplies();
+      void loadDefaultReplies().then(done, done);
     }
   };
 
@@ -392,7 +398,7 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
   );
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title={mode === 'reply' ? '自动回复' : '通用自动发货'}
         description={mode === 'reply'
@@ -404,9 +410,10 @@ const Keywords: React.FC<KeywordsProps> = ({ mode, syncedAccountId, onSyncedAcco
             <button
               type="button"
               onClick={refreshCurrent}
+              disabled={refreshing}
               className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               刷新
             </button>
             <button

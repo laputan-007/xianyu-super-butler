@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Card } from '../types';
 import { getCards, createCard, updateCard, deleteCard } from '../services/api';
 import { confirmAction, notify } from '../services/feedback';
-import { Plus, CreditCard, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Package, Boxes } from 'lucide-react';
+import { Plus, CreditCard, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Package, Boxes, RefreshCw } from 'lucide-react';
 import { EmptyState, PageHeader, SectionHeader } from './ui';
 
 const CardList: React.FC = () => {
@@ -24,6 +24,20 @@ const CardList: React.FC = () => {
   useEffect(() => {
     getCards().then(setCards);
   }, []);
+
+  // 手动刷新：保留列表内容原地更新，只有按钮自转
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      setCards(await getCards());
+    } catch (error) {
+      notify(`刷新卡密列表失败：${(error as Error).message}`, 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const CardIcon = ({ type }: { type: string }) => {
       switch(type) {
@@ -188,19 +202,30 @@ const CardList: React.FC = () => {
   }, 0);
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="卡密库存"
         description="集中维护自动发货所需的固定文本、批量卡密、图片与 API 数据源，按类型分区管理，可随时启停。"
         icon={CreditCard}
         actions={(
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+          <>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              刷新
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
           >
             <Plus className="h-4 w-4" />
             添加卡密
           </button>
+          </>
         )}
       />
 

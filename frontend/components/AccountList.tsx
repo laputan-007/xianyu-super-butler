@@ -90,6 +90,23 @@ const AccountList: React.FC = () => {
     custom_prompts: '',
   });
   const [saving, setSaving] = useState(false);
+  // 手动刷新期间按钮自转，列表内容保留
+  const [accountsRefreshing, setAccountsRefreshing] = useState(false);
+
+  const handleRefreshAccounts = async () => {
+    if (accountsRefreshing) return;
+    setAccountsRefreshing(true);
+    try {
+      await Promise.all([
+        loadAccounts({ silent: true }),
+        getRiskControlStatus()
+          .then(res => setRiskBlocked((res.accounts || []).filter(a => a.blocked || (a.verification_type && a.verification_type !== 'none'))))
+          .catch(() => {}),
+      ]);
+    } finally {
+      setAccountsRefreshing(false);
+    }
+  };
 
   const loadAccounts = async (options?: { silent?: boolean }) => {
     // 轮询刷新走静默模式，避免每 30 秒把整个列表闪成加载态
@@ -553,20 +570,31 @@ const AccountList: React.FC = () => {
   if (loading) return <PageLoading label="正在加载账号和运行状态" />;
 
   return (
-    <div className="page-stack animate-fade-in relative">
+    <div className={`page-stack animate-fade-in relative ${accountsRefreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="账号管理"
         description="扫码授权闲鱼账号并集中托管：实时查看监听与风控状态，可暂停监听、刷新资料，并按账号配置 AI 回复策略。"
         icon={Users}
         badge={<span className="status-badge status-badge-info">{accounts.length} 个账号</span>}
         actions={(
-          <button
-            onClick={startQRLogin}
-            className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
-          >
-            <QrCode className="h-4 w-4" />
-            扫码添加账号
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void handleRefreshAccounts()}
+              disabled={accountsRefreshing}
+              className="ios-btn-secondary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+            >
+              <RefreshCw className={`h-4 w-4 ${accountsRefreshing ? 'animate-spin' : ''}`} />
+              刷新
+            </button>
+            <button
+              onClick={startQRLogin}
+              className="ios-btn-primary flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm"
+            >
+              <QrCode className="h-4 w-4" />
+              扫码添加账号
+            </button>
+          </>
         )}
       />
 

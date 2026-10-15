@@ -37,6 +37,8 @@ const formatDateTime = (value?: string) => {
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  // 手动刷新期间按钮自转，列表内容保留
+  const [refreshing, setRefreshing] = useState(false);
   const [busyUserId, setBusyUserId] = useState<number | null>(null);
   // 正在重置密码的用户：展开内联输入框，一次只处理一个
   const [resettingUserId, setResettingUserId] = useState<number | null>(null);
@@ -51,14 +53,17 @@ const UserManagement: React.FC = () => {
         (user.email || '').toLowerCase().includes(searchKeyword))
     : users;
 
-  const loadUsers = async () => {
-    setLoading(true);
+  const loadUsers = async (silent = false) => {
+    // 手动刷新走静默：列表保留原内容，只有按钮自转，不闪加载态
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     try {
       setUsers(await getAdminUsers());
     } catch (error) {
       notify(`加载用户列表失败：${(error as Error).message}`, 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -126,7 +131,7 @@ const UserManagement: React.FC = () => {
   };
 
   return (
-    <div className="page-stack">
+    <div className={`page-stack ${refreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
         title="用户管理"
         description="管理注册用户的启用状态、登录密码与权限边界：管理员可分配账号归属，普通用户仅能操作其名下账号数据。"
@@ -134,10 +139,11 @@ const UserManagement: React.FC = () => {
         actions={
           <button
             type="button"
-            onClick={() => void loadUsers()}
+            onClick={() => void loadUsers(true)}
+            disabled={refreshing}
             className="ios-btn-secondary flex items-center gap-2 rounded-md px-4 py-2.5 text-sm"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             刷新
           </button>
         }
