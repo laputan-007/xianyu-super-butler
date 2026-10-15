@@ -692,7 +692,7 @@ const AccountList: React.FC = () => {
                       type="button"
                       onClick={() => handleOpenFreshCaptcha(account.id)}
                       disabled={freshUrlLoadingId === account.id}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#ffe100] px-3 py-1.5 font-bold text-[#2a2416] hover:bg-[#ffd700] disabled:opacity-60"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 font-bold text-brand-ink hover:bg-brand-500 disabled:opacity-60"
                     >
                       {freshUrlLoadingId === account.id
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -930,7 +930,7 @@ const AccountList: React.FC = () => {
                   type="button"
                   onClick={() => setEditForm({ ...editForm, auto_confirm: !editForm.auto_confirm })}
                   className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                    editForm.auto_confirm ? 'bg-[#ffe100]' : 'bg-gray-300'
+                    editForm.auto_confirm ? 'bg-brand' : 'bg-gray-300'
                   }`}
                 >
                   <span
@@ -1004,7 +1004,7 @@ const AccountList: React.FC = () => {
                       type="button"
                       onClick={() => setEditForm({ ...editForm, show_browser: !editForm.show_browser })}
                       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                        editForm.show_browser ? 'bg-[#ffe100]' : 'bg-gray-300'
+                        editForm.show_browser ? 'bg-brand' : 'bg-gray-300'
                       }`}
                     >
                       <span
@@ -1080,7 +1080,7 @@ const AccountList: React.FC = () => {
                   type="button"
                   onClick={() => setAiSettings({ ...aiSettings, ai_enabled: !aiSettings.ai_enabled })}
                   className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                    aiSettings.ai_enabled ? 'bg-[#ffe100]' : 'bg-gray-300'
+                    aiSettings.ai_enabled ? 'bg-brand' : 'bg-gray-300'
                   }`}
                 >
                   <span

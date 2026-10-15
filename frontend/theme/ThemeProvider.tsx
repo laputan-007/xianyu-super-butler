@@ -10,14 +10,23 @@ import React, {
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
+/** 主题色预设：yellow 为默认（不设 data-brand 属性即黄色）。 */
+export type BrandPreference = 'yellow' | 'sky' | 'jade' | 'royal' | 'coral' | 'violet' | 'rose';
+
+export const BRAND_PREFERENCES: BrandPreference[] = [
+  'yellow', 'sky', 'jade', 'royal', 'coral', 'violet', 'rose',
+];
 
 const THEME_STORAGE_KEY = 'xianyu-theme-preference';
+const BRAND_STORAGE_KEY = 'xianyu-brand';
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)';
 
 interface ThemeContextValue {
   theme: ThemePreference;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: ThemePreference) => void;
+  brand: BrandPreference;
+  setBrand: (brand: BrandPreference) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -35,6 +44,19 @@ const readStoredTheme = (): ThemePreference => {
   }
 };
 
+const normalizeBrand = (value: string | null): BrandPreference => (
+  BRAND_PREFERENCES.includes(value as BrandPreference) ? (value as BrandPreference) : 'yellow'
+);
+
+const readStoredBrand = (): BrandPreference => {
+  if (typeof window === 'undefined') return 'yellow';
+  try {
+    return normalizeBrand(window.localStorage.getItem(BRAND_STORAGE_KEY));
+  } catch {
+    return 'yellow';
+  }
+};
+
 const readSystemTheme = (): ResolvedTheme => {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia(DARK_MEDIA_QUERY).matches ? 'dark' : 'light';
@@ -47,6 +69,7 @@ interface ThemeProviderProps {
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemePreference>(readStoredTheme);
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(readSystemTheme);
+  const [brand, setBrandState] = useState<BrandPreference>(readStoredBrand);
 
   useEffect(() => {
     const media = window.matchMedia(DARK_MEDIA_QUERY);
@@ -63,6 +86,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === THEME_STORAGE_KEY) {
         setThemeState(normalizeTheme(event.newValue));
+      }
+      if (event.key === BRAND_STORAGE_KEY) {
+        setBrandState(normalizeBrand(event.newValue));
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -84,13 +110,32 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [resolvedTheme, theme]);
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    // yellow 是 :root 默认值，不落属性，减少一层选择器嵌套
+    if (brand === 'yellow') {
+      delete root.dataset.brand;
+    } else {
+      root.dataset.brand = brand;
+    }
+    try {
+      window.localStorage.setItem(BRAND_STORAGE_KEY, brand);
+    } catch {
+      // 同上：存储禁用时本页仍生效
+    }
+  }, [brand]);
+
   const setTheme = useCallback((nextTheme: ThemePreference) => {
     setThemeState(nextTheme);
   }, []);
 
+  const setBrand = useCallback((nextBrand: BrandPreference) => {
+    setBrandState(nextBrand);
+  }, []);
+
   const value = useMemo(
-    () => ({ theme, resolvedTheme, setTheme }),
-    [resolvedTheme, setTheme, theme]
+    () => ({ theme, resolvedTheme, setTheme, brand, setBrand }),
+    [brand, resolvedTheme, setBrand, setTheme, theme]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

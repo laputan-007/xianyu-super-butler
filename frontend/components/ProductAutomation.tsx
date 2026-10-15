@@ -686,7 +686,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
                 <div key={rule.id} className="grid gap-4 p-4 lg:grid-cols-[minmax(220px,1.2fr)_minmax(260px,1.5fr)_180px_auto] lg:items-center">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${rule.enabled ? 'bg-[#ffe100]' : 'bg-[#e8dcbc]'}`} />
+                    <span className={`h-2.5 w-2.5 rounded-full ${rule.enabled ? 'bg-brand' : 'bg-[#e8dcbc]'}`} />
                     <span className="font-bold text-gray-900">{rule.name}</span>
                   </div>
                   <div className="mt-1 text-xs text-gray-500">{accountNames.get(rule.cookie_id) || rule.cookie_id}</div>

@@ -218,7 +218,7 @@ const BuyerInteraction: React.FC = () => {
                               }`}
                               onClick={() => void toggleAccountFlag(account.id, key)}
                               className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                                flags[key] ? 'bg-[#ffe100]' : 'bg-gray-300'
+                                flags[key] ? 'bg-brand' : 'bg-gray-300'
                               }`}
                             >
                               <span

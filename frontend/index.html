@@ -8,20 +8,30 @@
     <meta name="description" content="闲鱼自动回复、自动发货、订单管理、AI智能议价一体化解决方案" />
     <script>
       (() => {
-        try {
-          const stored = localStorage.getItem('xianyu-theme-preference');
-          const preference = ['light', 'dark', 'system'].includes(stored) ? stored : 'system';
-          const resolved = preference === 'system'
-            ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            : preference;
-          document.documentElement.dataset.theme = resolved;
-          document.documentElement.dataset.themePreference = preference;
-          document.documentElement.classList.toggle('dark', resolved === 'dark');
-          document.documentElement.style.colorScheme = resolved;
-        } catch {
-          document.documentElement.dataset.theme = 'light';
-          document.documentElement.style.colorScheme = 'light';
-        }
+        const applyAppearance = () => {
+          try {
+            const stored = localStorage.getItem('xianyu-theme-preference');
+            const preference = ['light', 'dark', 'system'].includes(stored) ? stored : 'system';
+            const resolved = preference === 'system'
+              ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+              : preference;
+            document.documentElement.dataset.theme = resolved;
+            document.documentElement.dataset.themePreference = preference;
+            document.documentElement.classList.toggle('dark', resolved === 'dark');
+            document.documentElement.style.colorScheme = resolved;
+
+            const brand = localStorage.getItem('xianyu-brand');
+            if (['sky', 'jade', 'royal', 'coral', 'violet', 'rose'].includes(brand)) {
+              document.documentElement.dataset.brand = brand;
+            } else {
+              delete document.documentElement.dataset.brand;
+            }
+          } catch {
+            document.documentElement.dataset.theme = 'light';
+            document.documentElement.style.colorScheme = 'light';
+          }
+        };
+        applyAppearance();
       })();
     </script>
   </head>

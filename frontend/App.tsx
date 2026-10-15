@@ -317,7 +317,7 @@ const App: React.FC = () => {
         { backgroundPosition: '100% 0%, 0% 0%' },
         { backgroundPosition: '0% 0%, 0% 0%', duration: 2.4, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.6 });
       // 标题金色光晕缓慢呼吸
-      gsap.to('.login-title', { filter: 'drop-shadow(0px 4px 28px rgba(255,213,0,0.32))', duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      gsap.to('.login-title', { filter: 'drop-shadow(0px 4px 28px rgb(var(--brand-rgb)/0.32))', duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
     }, loginRootRef);
 
     return () => ctx.revert();
@@ -406,13 +406,13 @@ const App: React.FC = () => {
           {/* 左上柔光：呼应 logo 位置，让画面有主光方向 */}
           <div
             className="pointer-events-none absolute inset-0"
-            style={{ background: 'radial-gradient(ellipse 60% 50% at 12% 0%, rgba(255,229,0,0.08) 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(ellipse 60% 50% at 12% 0%, rgb(var(--brand-rgb)/0.08) 0%, transparent 70%)' }}
           />
           {/* 点阵纹理：上密下疏的径向蒙版，比均匀铺满更有设计感 */}
           <div
             className="pointer-events-none absolute inset-0 opacity-30"
             style={{
-              backgroundImage: 'radial-gradient(rgba(255,229,0,0.16) 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(rgb(var(--brand-rgb)/0.16) 1px, transparent 1px)',
               backgroundSize: '22px 22px',
               maskImage: 'radial-gradient(ellipse 75% 65% at 28% 18%, black 25%, transparent 95%)',
               WebkitMaskImage: 'radial-gradient(ellipse 75% 65% at 28% 18%, black 25%, transparent 95%)',
@@ -434,11 +434,11 @@ const App: React.FC = () => {
           {/* 呼吸光晕：左下角一团，插画身后一团（兼作插画光环） */}
           <div
             className="login-glow pointer-events-none absolute -bottom-44 -left-28 h-[24rem] w-[24rem] rounded-full"
-            style={{ background: 'radial-gradient(circle, rgba(255,213,0,0.12) 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.12) 0%, transparent 70%)' }}
           />
           <div
             className="login-glow pointer-events-none absolute right-1 top-5 h-48 w-48 rounded-full opacity-80"
-            style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.22) 0%, transparent 65%)' }}
+            style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.22) 0%, transparent 65%)' }}
           />
           {/* 吉祥物水印：右下角半透明剪影，收小避让能力面板 */}
           <img
@@ -456,16 +456,16 @@ const App: React.FC = () => {
           ].map(s => (
             <span
               key={`${s.top}-${s.left}`}
-              className={`login-sparkle pointer-events-none absolute ${s.size} animate-pulse rounded-full bg-[#ffe566]`}
+              className={`login-sparkle pointer-events-none absolute ${s.size} animate-pulse rounded-full bg-brand-300`}
               style={{ top: s.top, left: s.left, opacity: s.opacity, animationDelay: s.delay }}
             />
           ))}
           {/* 金色接缝：与右侧表单的分界线，一缕流光周期性下行 */}
           <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-[2px] overflow-hidden bg-gradient-to-b from-transparent via-[#ffe566]/40 to-transparent"
+            className="pointer-events-none absolute inset-y-0 right-0 w-[2px] overflow-hidden bg-gradient-to-b from-transparent via-brand-300/40 to-transparent"
             style={{ boxShadow: '0 0 14px 1px rgba(255,229,102,0.28)' }}
           >
-            <div className="login-seam-light absolute inset-x-0 h-[16%] bg-gradient-to-b from-transparent via-[#ffe566] to-transparent blur-[1px]" />
+            <div className="login-seam-light absolute inset-x-0 h-[16%] bg-gradient-to-b from-transparent via-brand-300 to-transparent blur-[1px]" />
           </div>
           {/* 封面主视觉：小黄鱼吉祥物，缓慢游动，悬停弹跳 */}
           <div className="login-hero-layer absolute right-8 top-12">
@@ -473,7 +473,7 @@ const App: React.FC = () => {
               src="/static/login-mascot.png"
               alt="闲鱼吉祥物"
               draggable={false}
-              className="login-hero h-40 w-40 drop-shadow-[0_16px_36px_rgba(255,213,0,0.4)]"
+              className="login-hero h-40 w-40 drop-shadow-[0_16px_36px_rgb(var(--brand-rgb)/0.4)]"
               onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.1, duration: 0.35, ease: 'back.out(2)' })}
               onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
             />
@@ -502,7 +502,7 @@ const App: React.FC = () => {
               <span className="relative">
                 <span
                   className="login-logo-glow absolute -inset-3 rounded-2xl"
-                  style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.35) 0%, transparent 65%)' }}
+                  style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.35) 0%, transparent 65%)' }}
                 />
                 <img
                   src="/static/login-cover.png"
@@ -513,18 +513,18 @@ const App: React.FC = () => {
               </span>
               <span className="leading-none">
                 <span className="block text-[17px] font-extrabold tracking-wide text-white">鱼小铺</span>
-                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-[#ffe566]/70">YU XIAO PU</span>
+                <span className="mt-1.5 block text-[9.5px] font-bold tracking-[0.3em] text-brand-300/70">YU XIAO PU</span>
               </span>
             </div>
 
             {/* 主体：单一内容流垂直居中，眉标-标题-口号-能力面板一气呵成，消灭 justify-between 的死区 */}
             <div className="my-auto max-w-xl pb-8">
-              <span className="login-eyebrow inline-flex items-center gap-2 rounded-full border border-[#ffe566]/25 bg-[#ffe566]/10 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.18em] text-[#ffe566]">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ffe566]" />
+              <span className="login-eyebrow inline-flex items-center gap-2 rounded-full border border-brand-300/25 bg-brand-300/10 px-3.5 py-1.5 text-[11px] font-bold tracking-[0.18em] text-brand-300">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-300" />
                 闲鱼卖家的一体化运营工作台
               </span>
               <h1
-                className="login-title mt-5 text-6xl font-extrabold leading-tight text-transparent drop-shadow-[0_4px_24px_rgba(255,213,0,0.2)]"
+                className="login-title mt-5 text-6xl font-extrabold leading-tight text-transparent drop-shadow-[0_4px_24px_rgb(var(--brand-rgb)/0.2)]"
                 aria-label="鱼小铺"
                 style={{
                   backgroundImage: 'linear-gradient(110deg, transparent 38%, rgba(255,244,190,0.95) 50%, transparent 62%), linear-gradient(to bottom, #ffffff 20%, #ffedb0 100%)',
@@ -556,7 +556,7 @@ const App: React.FC = () => {
                     { icon: Bell, label: '通知日志', sub: '风险提醒' },
                   ].map(({ icon: Icon, label, sub }) => (
                     <div key={label} className="login-chip group flex items-start gap-2.5 px-4">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#ffe566]/10 text-[#ffe566] ring-1 ring-inset ring-[#ffe566]/20">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-300/10 text-brand-300 ring-1 ring-inset ring-brand-300/20">
                         <Icon className="h-3.5 w-3.5" />
                       </span>
                       <span className="leading-tight">
@@ -577,7 +577,7 @@ const App: React.FC = () => {
           {/* 顶部品牌色微光：呼应左侧封面，弱化纯色底的平板感 */}
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-64"
-            style={{ background: 'radial-gradient(ellipse 70% 60% at 50% -10%, rgba(255,213,0,0.05), transparent 70%)' }}
+            style={{ background: 'radial-gradient(ellipse 70% 60% at 50% -10%, rgb(var(--brand-rgb)/0.05), transparent 70%)' }}
           />
           <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
             <div className="login-form-card w-full max-w-sm animate-fade-in">

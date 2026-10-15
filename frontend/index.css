@@ -52,6 +52,14 @@
   --brand-soft: #fff9c9;
   --brand-text: #806d00;
   --focus-ring: #806d00;
+
+  /* tailwind 透明度修饰符（bg-brand/60 等）所需的 rgb 三元组，空格分隔无逗号 */
+  --brand-rgb: 255 225 0;
+  --brand-300-rgb: 255 229 102;
+  /* 浅色底上的品牌深色文字阶 */
+  --brand-700: #d9a800;
+  --brand-800: #a67f00;
+  --brand-900: #6b5200;
   --unread-badge: #dc2626;
 
   --danger: #b42318;
@@ -122,6 +130,10 @@
   --brand-soft: #393216;
   --brand-text: #f2d85c;
   --focus-ring: #f2d85c;
+  /* 暗色下的深色阶（对齐旧 [class~=] 深色补丁的行为） */
+  --brand-700: #f2d85c;
+  --brand-800: #8a6300;
+  --brand-900: #6b5200;
 
   --danger: #ff8c8c;
   --danger-ink: #ffaaaa;
@@ -1590,4 +1602,166 @@ aside nav:hover::-webkit-scrollbar-thumb {
 
 .ios-btn-primary.login-submit:hover:not(:disabled)::after {
   left: 150%;
+}
+
+/* ============================================================
+   主题色预设：html[data-brand] 属性切换（localStorage xianyu-brand）。
+   yellow 为默认（:root 即闲鱼黄），其余预设覆盖品牌变量。
+   特异性说明：预设亮色块 (0,1,0) 低于 :root[data-theme='dark'] (0,2,0)，
+   暗色必须由 [data-theme='dark'][data-brand='x'] (0,2,0，位于其后) 接管，
+   覆盖暗色专属的浅底/文字/描边变量。
+   --brand-ink 是品牌底上的文字色：亮色品牌（黄/天蓝/水绿/珊瑚）配深墨，
+   中深色品牌（皇家蓝/紫/玫红）配白。
+   ============================================================ */
+
+[data-brand='sky'] {
+  --brand-50: #eef7ff; --brand-100: #d9edfe; --brand-200: #b3dcfd;
+  --brand-300: #7cc4fa;
+  --brand: #35a3f7; --brand-hover: #1e93f0; --brand-active: #0f84e0;
+  --brand-ink: #0b2a44; --brand-soft: #e1f2fe; --brand-text: #0b6bb3;
+  --brand-700: #1a7fc4; --brand-800: #145a8f; --brand-900: #0e3f64;
+  --brand-rgb: 53 163 247; --brand-300-rgb: 124 196 250;
+  --border-brand: #79c2fb; --focus-ring: #0b6bb3;
+  --shadow-brand: 0 6px 18px rgb(53 163 247 / 0.3);
+}
+[data-theme='dark'][data-brand='sky'] {
+  --brand-50: #0e2033; --brand-100: #14293f; --brand-200: #1d3a55;
+  --brand-soft: #122a41; --brand-text: #6cb6f5;
+  --brand-700: #6cb6f5; --brand-800: #2f6690; --brand-900: #1d4468;
+  --border-brand: #1f4460; --focus-ring: #6cb6f5;
+  --shadow-brand: 0 7px 22px rgb(53 163 247 / 0.18);
+}
+
+[data-brand='jade'] {
+  --brand-50: #e8faf6; --brand-100: #d0f4ec; --brand-200: #a5e9db;
+  --brand-300: #5fd9c4;
+  --brand: #14c0a0; --brand-hover: #0dab8c; --brand-active: #05967c;
+  --brand-ink: #073a30; --brand-soft: #d7f5ee; --brand-text: #0b7d68;
+  --brand-700: #0e8a74; --brand-800: #0a6353; --brand-900: #07453a;
+  --brand-rgb: 20 192 160; --brand-300-rgb: 95 217 196;
+  --border-brand: #4dd0bb; --focus-ring: #0b7d68;
+  --shadow-brand: 0 6px 18px rgb(20 192 160 / 0.3);
+}
+[data-theme='dark'][data-brand='jade'] {
+  --brand-50: #0c2a24; --brand-100: #123530; --brand-200: #19453c;
+  --brand-soft: #10322b; --brand-text: #5bd6c0;
+  --brand-700: #5bd6c0; --brand-800: #1f5f52; --brand-900: #143f36;
+  --border-brand: #1c4f44; --focus-ring: #5bd6c0;
+  --shadow-brand: 0 7px 22px rgb(20 192 160 / 0.18);
+}
+
+[data-brand='royal'] {
+  --brand-50: #eff2ff; --brand-100: #dfe5ff; --brand-200: #c0cdfb;
+  --brand-300: #8ea7fc;
+  --brand: #4f7afd; --brand-hover: #3f6cf5; --brand-active: #305ce6;
+  --brand-ink: #ffffff; --brand-soft: #e3eaff; --brand-text: #2d54c9;
+  --brand-700: #3a5fd0; --brand-800: #2a45a3; --brand-900: #1c2f75;
+  --brand-rgb: 79 122 253; --brand-300-rgb: 142 167 252;
+  --border-brand: #7b95fd; --focus-ring: #2d54c9;
+  --shadow-brand: 0 6px 18px rgb(79 122 253 / 0.32);
+}
+[data-theme='dark'][data-brand='royal'] {
+  --brand-50: #131a36; --brand-100: #1a2347; --brand-200: #24305e;
+  --brand-soft: #1b2549; --brand-text: #8fa8fe;
+  --brand-700: #8fa8fe; --brand-800: #2f4685; --brand-900: #1e2c57;
+  --border-brand: #263366; --focus-ring: #8fa8fe;
+  --shadow-brand: 0 7px 22px rgb(79 122 253 / 0.22);
+}
+
+[data-brand='coral'] {
+  --brand-50: #fff2ed; --brand-100: #ffe2d9; --brand-200: #ffc4b3;
+  --brand-300: #ff9d80;
+  --brand: #ff7043; --brand-hover: #f25c33; --brand-active: #e04f24;
+  --brand-ink: #4d1607; --brand-soft: #ffe7df; --brand-text: #c73e12;
+  --brand-700: #d1582c; --brand-800: #9e3f1d; --brand-900: #6b2b14;
+  --brand-rgb: 255 112 67; --brand-300-rgb: 255 157 128;
+  --border-brand: #ff9d80; --focus-ring: #c73e12;
+  --shadow-brand: 0 6px 18px rgb(255 112 67 / 0.3);
+}
+[data-theme='dark'][data-brand='coral'] {
+  --brand-50: #3a1d12; --brand-100: #472417; --brand-200: #5a2f1e;
+  --brand-soft: #4a2416; --brand-text: #ff9d80;
+  --brand-700: #ff9d80; --brand-800: #7c4629; --brand-900: #523018;
+  --border-brand: #5c3222; --focus-ring: #ff9d80;
+  --shadow-brand: 0 7px 22px rgb(255 112 67 / 0.2);
+}
+
+[data-brand='violet'] {
+  --brand-50: #f5f1ff; --brand-100: #ebe3fe; --brand-200: #d9cbfd;
+  --brand-300: #b7a2fb;
+  --brand: #8b5cf6; --brand-hover: #7c4ef0; --brand-active: #6d3fe3;
+  --brand-ink: #ffffff; --brand-soft: #eae2ff; --brand-text: #6d3fe3;
+  --brand-700: #6d43d6; --brand-800: #5231a5; --brand-900: #382071;
+  --brand-rgb: 139 92 246; --brand-300-rgb: 183 162 251;
+  --border-brand: #a78bfa; --focus-ring: #6d3fe3;
+  --shadow-brand: 0 6px 18px rgb(139 92 246 / 0.32);
+}
+[data-theme='dark'][data-brand='violet'] {
+  --brand-50: #1e1733; --brand-100: #261d41; --brand-200: #332554;
+  --brand-soft: #292046; --brand-text: #b7a2fb;
+  --brand-700: #b7a2fb; --brand-800: #443377; --brand-900: #2c2150;
+  --border-brand: #3a2b63; --focus-ring: #b7a2fb;
+  --shadow-brand: 0 7px 22px rgb(139 92 246 / 0.22);
+}
+
+[data-brand='rose'] {
+  --brand-50: #fff0f3; --brand-100: #ffd9e1; --brand-200: #f9b8c7;
+  --brand-300: #f585a1;
+  --brand: #ef476f; --brand-hover: #de355c; --brand-active: #c92850;
+  --brand-ink: #ffffff; --brand-soft: #fde5ea; --brand-text: #c92850;
+  --brand-700: #c93a5c; --brand-800: #962a44; --brand-900: #651c2e;
+  --brand-rgb: 239 71 111; --brand-300-rgb: 245 133 161;
+  --border-brand: #f585a1; --focus-ring: #c92850;
+  --shadow-brand: 0 6px 18px rgb(239 71 111 / 0.3);
+}
+[data-theme='dark'][data-brand='rose'] {
+  --brand-50: #36141d; --brand-100: #421a25; --brand-200: #542330;
+  --brand-soft: #471d29; --brand-text: #f585a1;
+  --brand-700: #f585a1; --brand-800: #6b2f40; --brand-900: #46202c;
+  --border-brand: #592735; --focus-ring: #f585a1;
+  --shadow-brand: 0 7px 22px rgb(239 71 111 / 0.2);
+}
+
+/* 主题色切换色板（设置页） */
+.brand-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.brand-swatch {
+  position: relative;
+  height: 34px;
+  width: 34px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.brand-swatch:hover {
+  transform: scale(1.08);
+}
+.brand-swatch--active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--text-muted);
+}
+.brand-swatch--active::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--brand-ink);
+}
+[data-brand='sky'] .brand-swatch--sky,
+[data-brand='jade'] .brand-swatch--jade,
+[data-brand='royal'] .brand-swatch--royal,
+[data-brand='coral'] .brand-swatch--coral,
+[data-brand='violet'] .brand-swatch--violet,
+[data-brand='rose'] .brand-swatch--rose,
+[data-brand='yellow'] .brand-swatch--yellow,
+html:not([data-brand]) .brand-swatch--yellow {
+  outline: none;
 }

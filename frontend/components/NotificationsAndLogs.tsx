@@ -667,7 +667,7 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
                   role="switch"
                   aria-checked={channel.enabled}
                   onClick={() => void toggleChannel(channel)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${channel.enabled ? 'bg-[#ffe100]' : 'bg-gray-300'}`}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${channel.enabled ? 'bg-brand' : 'bg-gray-300'}`}
                   title={channel.enabled ? '停用渠道' : '启用渠道'}
                 >
                   <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${channel.enabled ? 'translate-x-5' : ''}`} />
@@ -745,7 +745,7 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
                     aria-checked={binding.enabled}
                     aria-label={`${binding.name || binding.channel_name}通知规则开关`}
                     onClick={() => void toggleBinding(binding)}
-                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${binding.enabled ? 'bg-[#ffe100]' : 'bg-gray-300'}`}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${binding.enabled ? 'bg-brand' : 'bg-gray-300'}`}
                     title={binding.enabled ? '暂停规则' : '启用规则'}
                   >
                     <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${binding.enabled ? 'translate-x-5' : ''}`} />
@@ -970,7 +970,7 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
               onClick={() => setSystemSource((value) => value === 'logistics_quote' ? '' : 'logistics_quote')}
               className={`rounded-md px-3 py-2.5 text-sm font-bold ${
                 systemSource === 'logistics_quote'
-                  ? 'bg-[#ffe100] text-gray-900'
+                  ? 'bg-brand text-gray-900'
                   : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
@@ -1205,11 +1205,11 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
                                 key={event.id}
                                 onClick={() => toggleRuleEvent(event.id)}
                                 className={`flex items-start gap-2 rounded-md border p-3 text-left transition-colors ${
-                                  selected ? 'border-[#ffe100] bg-[#fffbe6]' : 'border-gray-200 bg-white hover:bg-gray-50'
+                                  selected ? 'border-brand bg-[#fffbe6]' : 'border-gray-200 bg-white hover:bg-gray-50'
                                 }`}
                               >
                                 <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                                  selected ? 'border-[#ffe100] bg-[#ffe100]' : 'border-gray-300 bg-white'
+                                  selected ? 'border-brand bg-brand' : 'border-gray-300 bg-white'
                                 }`}>
                                   {selected && <Check className="h-3 w-3 text-gray-900" />}
                                 </span>

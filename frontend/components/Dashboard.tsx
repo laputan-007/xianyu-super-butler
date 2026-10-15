@@ -4,12 +4,13 @@ import { getAdminStats, getOrderAnalytics, getValidOrders, getItems } from '../s
 import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw, Percent, Trophy} from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { EmptyState, PageHeader, PageLoading, PageTabs, SectionHeader } from './ui';
+import { BrandPreference, useTheme } from '../theme/ThemeProvider';
 
 // 状态徽章组件
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
     processing: 'bg-yellow-100 text-yellow-800',
-    pending_ship: 'bg-[#ffe100] text-black',
+    pending_ship: 'bg-brand text-black',
     shipped: 'bg-blue-100 text-blue-700',
     completed: 'bg-green-100 text-green-700',
     cancelled: 'bg-gray-100 text-gray-500',
@@ -70,9 +71,20 @@ const Dashboard: React.FC = () => {
   const [itemNames, setItemNames] = useState<Record<string, string>>({});
 
   // 颜色配置
-  // 以品牌黄为主，配少量低饱和辅助色。原来混了纯蓝/纯紫/亮绿，
-  // 几个饼图并排时颜色打架，也压不住整站的黄色主题。
-  const COLORS = ['#ffe100', '#f5c800', '#ffd426', '#e8c86a', '#8fc7a8', '#c9b8e8'];
+  // 以当前主题色为主，配少量低饱和辅助色。原来混了纯蓝/纯紫/亮绿，
+  // 几个饼图并排时颜色打架，也压不住整站的强调色。
+  // 图表色是 recharts 的数据色（非 CSS 变量场景），按当前主题色取预设。
+  const CHART_COLORS: Record<BrandPreference, string[]> = {
+    yellow: ['#ffe100', '#f5c800', '#ffd426', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    sky: ['#35a3f7', '#0f84e0', '#7cc4fa', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    jade: ['#14c0a0', '#05967c', '#5fd9c4', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    royal: ['#4f7afd', '#305ce6', '#8ea7fc', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    coral: ['#ff7043', '#e04f24', '#ff9d80', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    violet: ['#8b5cf6', '#6d3fe3', '#b7a2fb', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+    rose: ['#ef476f', '#c92850', '#f585a1', '#e8c86a', '#8fc7a8', '#c9b8e8'],
+  };
+  const { brand } = useTheme();
+  const COLORS = CHART_COLORS[brand];
 
   const loadAnalytics = async (range: TimeRange) => {
     // 使用本地时间而不是UTC时间
@@ -488,14 +500,14 @@ const Dashboard: React.FC = () => {
           title="有效成交额 (CNY)"
           value={`¥${analytics.revenue_stats.total_amount.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`}
           icon={DollarSign}
-          colorClass="bg-[#ffe100]"
+          colorClass="bg-brand"
           trend={getTrendPercent() || undefined}
         />
         <StatCard
           title="已到账 (CNY)"
           value={`¥${(analytics.revenue_stats.confirmed_amount ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`}
           icon={DollarSign}
-          colorClass="bg-[#f5c800]"
+          colorClass="bg-brand-600"
         />
         <StatCard
           title="已退款 (CNY)"
@@ -507,7 +519,7 @@ const Dashboard: React.FC = () => {
           title="订单总数"
           value={totalOrders.toLocaleString()}
           icon={ShoppingCart}
-          colorClass="bg-[#ffd700]"
+          colorClass="bg-brand-500"
         />
         <StatCard
           title="活跃账号 / 总数"

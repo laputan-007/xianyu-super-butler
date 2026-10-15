@@ -151,7 +151,7 @@ const UserManagement: React.FC = () => {
         <div className="grid gap-3 p-4 sm:grid-cols-2">
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] p-3.5">
             <p className="flex items-center gap-2 text-sm font-bold text-[var(--text)]">
-              <ShieldCheck className="h-4 w-4 text-[#8a6300]" />
+              <ShieldCheck className="h-4 w-4 text-brand-800" />
               管理员（admin）
             </p>
             <p className="mt-1.5 text-xs leading-5 text-[var(--text-muted)]">
@@ -195,14 +195,14 @@ const UserManagement: React.FC = () => {
             return (
               <div key={user.id} className="p-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-sm font-black text-[#2a2416]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-sm font-black text-brand-ink">
                     {user.username.slice(0, 1).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-bold text-[var(--text)]">{user.username}</p>
                       {isBuiltinAdmin && (
-                        <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[10px] font-bold text-[#2a2416]">
+                        <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[10px] font-bold text-brand-ink">
                           内置管理员
                         </span>
                       )}
@@ -305,7 +305,7 @@ const UserManagement: React.FC = () => {
           )}
           {loading && (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-[#d6b600]" />
+              <Loader2 className="h-6 w-6 animate-spin text-brand-700" />
             </div>
           )}
         </div>

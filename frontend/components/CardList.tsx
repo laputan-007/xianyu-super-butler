@@ -269,7 +269,7 @@ const CardList: React.FC = () => {
                       {/* 四类卡券用同一套低饱和色阶区分，不用纯蓝/紫/橙/粉 ——
                           表格里几十行并排时，高饱和标签会盖过内容本身 */}
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
-                        card.type === 'text' ? 'bg-[#fff8d1] text-[#8a6300]' :
+                        card.type === 'text' ? 'bg-brand-100 text-brand-800' :
                         card.type === 'data' ? 'bg-[#eef4ff] text-[#3f5f8f]' :
                         card.type === 'api' ? 'bg-[#f0f7f3] text-[#3f7a5c]' :
                         'bg-[#f7f2fb] text-[#6b5a8a]'
@@ -296,7 +296,7 @@ const CardList: React.FC = () => {
                       <button
                         onClick={() => toggleCardStatus(card)}
                         className={`relative h-6 w-10 rounded-full transition-colors ${
-                          card.enabled ? 'bg-[#ffe100]' : 'bg-gray-300'
+                          card.enabled ? 'bg-brand' : 'bg-gray-300'
                         }`}
                         title={card.enabled ? '停用' : '启用'}
                         aria-label={`${card.enabled ? '停用' : '启用'}卡密 ${card.name}`}
@@ -555,7 +555,7 @@ const CardList: React.FC = () => {
                     type="button"
                     onClick={() => setEditForm({ ...editForm, enabled: !editForm.enabled })}
                     className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                      editForm.enabled ? 'bg-[#ffe100]' : 'bg-gray-300'
+                      editForm.enabled ? 'bg-brand' : 'bg-gray-300'
                     }`}
                   >
                     <span
@@ -631,7 +631,7 @@ const CardList: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAddForm({ ...addForm, type: 'text' })}
-                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'text' ? 'border-amber-400 bg-[#ffe100] text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'text' ? 'border-amber-400 bg-brand text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                     >
                       <FileText className="w-5 h-5 mx-auto mb-1" />
                       文本
@@ -639,7 +639,7 @@ const CardList: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAddForm({ ...addForm, type: 'data' })}
-                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'data' ? 'border-amber-400 bg-[#ffe100] text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'data' ? 'border-amber-400 bg-brand text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                     >
                       <Package className="w-5 h-5 mx-auto mb-1" />
                       批量
@@ -647,7 +647,7 @@ const CardList: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAddForm({ ...addForm, type: 'image' })}
-                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'image' ? 'border-amber-400 bg-[#ffe100] text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'image' ? 'border-amber-400 bg-brand text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                     >
                       <ImageIcon className="w-5 h-5 mx-auto mb-1" />
                       图片
@@ -655,7 +655,7 @@ const CardList: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAddForm({ ...addForm, type: 'api' })}
-                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'api' ? 'border-amber-400 bg-[#ffe100] text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                      className={`rounded-md border p-3 text-sm font-bold transition-colors ${addForm.type === 'api' ? 'border-amber-400 bg-brand text-black' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
                     >
                       <Code className="w-5 h-5 mx-auto mb-1" />
                       API

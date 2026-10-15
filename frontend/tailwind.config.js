@@ -13,19 +13,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        // 品牌色阶全部走 CSS 变量：[data-brand] 属性切换主题色
+        // （yellow/sky/jade/royal/coral/violet/rose），不用重编译。
+        // DEFAULT 与 300 用 rgb 三元组变量，支持 bg-brand/60 这类透明度修饰符。
         brand: {
-          DEFAULT: '#FFE100',
-          50: '#FFFDF0',
-          100: '#FFF8D1',
-          200: '#FFEFA3',
-          300: '#FFE566',
-          400: '#FFE100',
-          500: '#FFD700',
-          600: '#F5C800',
-          700: '#D9A800',
-          800: '#A67F00',
-          900: '#6B5200',
-          ink: '#2A2416',
+          DEFAULT: 'rgb(var(--brand-rgb) / <alpha-value>)',
+          50: 'var(--brand-50)',
+          100: 'var(--brand-100)',
+          200: 'var(--brand-200)',
+          300: 'rgb(var(--brand-300-rgb) / <alpha-value>)',
+          400: 'rgb(var(--brand-rgb) / <alpha-value>)',
+          500: 'var(--brand-hover)',
+          600: 'var(--brand-active)',
+          700: 'var(--brand-700)',
+          800: 'var(--brand-800)',
+          900: 'var(--brand-900)',
+          ink: 'var(--brand-ink)',
         },
         // 中性色阶：只带极轻微的暖调，避免和黄色强调元素冲突。
         // 不做成黄色系 —— 全站 130+ 处 bg-gray-* 一旦变黄会让整页发闷。
@@ -53,8 +56,8 @@ export default {
         '3xl': '32px',
       },
       boxShadow: {
-        brand: '0 6px 18px rgba(255, 214, 0, 0.35)',
-        'brand-lg': '0 10px 28px rgba(255, 214, 0, 0.45)',
+        brand: '0 6px 18px rgb(var(--brand-rgb) / 0.35)',
+        'brand-lg': '0 10px 28px rgb(var(--brand-rgb) / 0.45)',
         soft: '0 1px 2px rgba(122, 96, 20, 0.06)',
         card: '0 6px 20px rgba(122, 96, 20, 0.10)',
       },

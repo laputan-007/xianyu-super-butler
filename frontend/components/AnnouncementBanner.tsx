@@ -5,14 +5,14 @@ import { AnnouncementPayload } from '../types';
 
 // info 走品牌黄而不是蓝：公告常驻页面顶部，蓝色会和整站黄色主题打架
 const levelStyles: Record<string, string> = {
-  info: 'border-[#ffe566] bg-[#fffdf0] text-[#6b5200]',
-  warning: 'border-[#f5c800] bg-[#fff7e6] text-[#8a6300]',
+  info: 'border-brand-300 bg-brand-50 text-brand-900',
+  warning: 'border-brand-600 bg-[#fff7e6] text-brand-800',
   danger: 'border-red-200 bg-red-50 text-red-700',
 };
 
 const levelBadge: Record<string, string> = {
-  info: 'bg-[#ffe100] text-[#2a2416]',
-  warning: 'bg-[#f5c800] text-[#2a2416]',
+  info: 'bg-brand text-brand-ink',
+  warning: 'bg-brand-600 text-brand-ink',
   danger: 'bg-red-600 text-white',
 };
 

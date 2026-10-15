@@ -7,11 +7,13 @@ import {
   KeyRound,
   Mail,
   Megaphone,
+  Palette,
   RefreshCw,
   Save,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
+  Sun,
   UserRound,
   Zap,
 } from 'lucide-react';
@@ -37,8 +39,21 @@ import {
   PageTabs,
   SectionHeader,
 } from './ui';
+import ThemeToggle from './ThemeToggle';
+import { BrandPreference, useTheme } from '../theme/ThemeProvider';
 
-type SettingsSection = 'general' | 'ai' | 'email' | 'phrases' | 'notice';
+type SettingsSection = 'general' | 'ai' | 'email' | 'phrases' | 'notice' | 'appearance';
+
+/** 主题色预设：色块展示色（预设的品牌主色，与 index.css 里的 [data-brand] 块一致） */
+const BRAND_OPTIONS: Array<{ value: BrandPreference; label: string; color: string }> = [
+  { value: 'yellow', label: '闲鱼黄', color: '#ffe100' },
+  { value: 'sky', label: '天蓝', color: '#35a3f7' },
+  { value: 'jade', label: '水绿', color: '#14c0a0' },
+  { value: 'royal', label: '皇家蓝', color: '#4f7afd' },
+  { value: 'coral', label: '珊瑚橙', color: '#ff7043' },
+  { value: 'violet', label: '紫罗兰', color: '#8b5cf6' },
+  { value: 'rose', label: '玫红', color: '#ef476f' },
+];
 
 /**
  * 把后端的开关值转成布尔。
@@ -82,7 +97,7 @@ const SettingToggle: React.FC<SettingToggleProps> = ({
       aria-checked={checked}
       onClick={onChange}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-        checked ? 'bg-[#ffe100]' : 'bg-gray-300'
+        checked ? 'bg-brand' : 'bg-gray-300'
       }`}
     >
       <span
@@ -112,7 +127,7 @@ const SettingStrategy: React.FC<{
           onClick={() => onChange(opt.value)}
           className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
             value === opt.value
-              ? 'border-[#ffe100] bg-[#fffbdb]'
+              ? 'border-brand bg-[#fffbdb]'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
@@ -121,7 +136,7 @@ const SettingStrategy: React.FC<{
               value === opt.value ? 'border-[#e0c400]' : 'border-gray-300'
             }`}
           >
-            {value === opt.value && <span className="h-2 w-2 rounded-full bg-[#ffe100]" />}
+            {value === opt.value && <span className="h-2 w-2 rounded-full bg-brand" />}
           </span>
           <span className="min-w-0">
             <span className="block text-xs font-bold text-gray-900">{opt.title}</span>
@@ -134,6 +149,8 @@ const SettingStrategy: React.FC<{
 );
 
 const Settings: React.FC = () => {
+  // 主题色换肤（外观分区）；浅深色切换在 ThemeToggle 内部同样走 useTheme
+  const { brand, setBrand } = useTheme();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -305,8 +322,51 @@ const Settings: React.FC = () => {
           { id: 'email', label: '邮件服务', icon: Mail },
           { id: 'phrases', label: '快捷短语', icon: Zap },
           { id: 'notice', label: '公告与更新', icon: Megaphone },
+          { id: 'appearance', label: '外观', icon: Palette },
         ]}
       />
+
+      {activeSection === 'appearance' && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <section className="section-panel">
+            <SectionHeader
+              title="显示主题"
+              description="浅色、深色或跟随系统外观。"
+              icon={Sun}
+            />
+            <div className="px-4 pb-4">
+              <ThemeToggle />
+            </div>
+          </section>
+          <section className="section-panel">
+            <SectionHeader
+              title="主题色"
+              description="全站按钮、强调元素与图表的强调色——风格不变，只换颜色，即时生效。"
+              icon={Palette}
+            />
+            <div className="px-4 pb-4">
+              <div className="brand-swatches" role="radiogroup" aria-label="主题色">
+                {BRAND_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={brand === option.value}
+                    aria-label={`主题色：${option.label}`}
+                    title={`${option.label}${option.value === 'yellow' ? '（默认）' : ''}`}
+                    onClick={() => setBrand(option.value)}
+                    style={{ background: option.color }}
+                    className={`brand-swatch ${brand === option.value ? 'brand-swatch--active' : ''}`}
+                  />
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-gray-500">
+                当前选择保存在本浏览器（localStorage），换设备后需重新选择。
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
 
       {activeSection === 'general' && (
         <div className="grid gap-4 xl:grid-cols-2">

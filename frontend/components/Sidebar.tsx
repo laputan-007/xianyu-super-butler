@@ -103,7 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <span className="relative shrink-0">
             <span
               className="login-logo-glow absolute -inset-2 rounded-2xl"
-              style={{ background: 'radial-gradient(circle, rgba(255,229,0,0.35) 0%, transparent 65%)' }}
+              style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.35) 0%, transparent 65%)' }}
             />
             <img
               src="/static/login-cover.png"
@@ -143,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         collapsed ? 'justify-center px-2 lg:px-2' : 'gap-3 px-3'
                       } ${
                         isActive
-                          ? 'font-bold text-[#2a2416]'
+                          ? 'font-bold text-brand-ink'
                           : 'font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]'
                       }`}
                       style={isActive ? {
@@ -151,7 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         boxShadow: 'var(--shadow-brand)',
                       } : undefined}
                     >
-                      <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-[#2a2416]' : 'text-[var(--text-soft)] group-hover:text-[var(--text-muted)]'}`} />
+                      <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? 'text-brand-ink' : 'text-[var(--text-soft)] group-hover:text-[var(--text-muted)]'}`} />
                       <span className={`truncate text-sm ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
                     </button>
                   );

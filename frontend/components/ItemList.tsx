@@ -239,7 +239,7 @@ const Toggle: React.FC<{
     disabled={disabled}
     onClick={onChange}
     className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors ${
-      checked ? 'bg-[#ffe100]' : 'bg-[#e8dcbc]'
+      checked ? 'bg-brand' : 'bg-[#e8dcbc]'
     } disabled:cursor-not-allowed disabled:opacity-50`}
   >
     <span
@@ -1218,7 +1218,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                   return (
                     <article
                       key={key}
-                      className="grid gap-4 px-4 py-4 transition-colors hover:bg-[#fffdf0] xl:grid-cols-[minmax(320px,2.7fr)_minmax(120px,1fr)_minmax(260px,2.1fr)_minmax(200px,1.5fr)_minmax(112px,auto)] xl:items-stretch xl:gap-0 xl:px-0 xl:[&>*]:flex xl:[&>*]:min-w-0 xl:[&>*]:flex-col xl:[&>*]:justify-center xl:[&>*]:border-r xl:[&>*]:border-gray-200 xl:[&>*]:px-4 xl:[&>*:first-child]:!flex-row xl:[&>*:first-child]:items-center xl:[&>*:last-child]:border-r-0"
+                      className="grid gap-4 px-4 py-4 transition-colors hover:bg-brand-50 xl:grid-cols-[minmax(320px,2.7fr)_minmax(120px,1fr)_minmax(260px,2.1fr)_minmax(200px,1.5fr)_minmax(112px,auto)] xl:items-stretch xl:gap-0 xl:px-0 xl:[&>*]:flex xl:[&>*]:min-w-0 xl:[&>*]:flex-col xl:[&>*]:justify-center xl:[&>*]:border-r xl:[&>*]:border-gray-200 xl:[&>*]:px-4 xl:[&>*:first-child]:!flex-row xl:[&>*:first-child]:items-center xl:[&>*:last-child]:border-r-0"
                     >
                       <div className="flex min-w-0 gap-3">
                         <div className="h-20 w-20 flex-none overflow-hidden rounded-md border border-gray-200 bg-gray-100">
@@ -2079,7 +2079,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                       <div key={image.url} className="relative h-20 w-20">
                         <img src={image.preview || image.url} alt="" className="h-full w-full rounded-md border border-gray-200 object-cover" />
                         {index === 0 && (
-                          <span className="absolute left-0 top-0 rounded-br-md bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-bold text-[#2a2416]">主图</span>
+                          <span className="absolute left-0 top-0 rounded-br-md bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-bold text-brand-ink">主图</span>
                         )}
                         <button
                           type="button"
