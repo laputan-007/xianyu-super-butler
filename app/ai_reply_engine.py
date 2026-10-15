@@ -317,6 +317,16 @@ class AIReplyEngine:
         name = type(exc).__name__.lower()
         return any(k in name for k in ('timeout', 'connection', 'unavailable', 'ratelimit'))
 
+    def _bump_ai_stat(self, cookie_id: str, ok: bool) -> None:
+        """AI 用量旁路计数：任何失败静默吞掉，绝不影响回复链路。"""
+        try:
+            from app.db_manager import db_manager
+            user_id = db_manager.get_cookie_owner_user_id(cookie_id)
+            if user_id is not None:
+                db_manager.bump_usage_stat(user_id, 'ai', 'ok' if ok else 'fail')
+        except Exception:
+            pass
+
     def _generate_with_retry(self, settings: dict, messages: list, cookie_id: str) -> Optional[str]:
         """调用 AI 服务，对暂时性故障做有限重试。
 
@@ -325,6 +335,8 @@ class AIReplyEngine:
 
         「思维链吃光预算」是另一类失败：换时间重试没有意义，必须加大额度再试。
         碰到就把 max_tokens 翻三倍重来，直到触到上限。
+
+        每次真实 API 调用（含重试）都计入用量统计——重试同样消耗 token。
         """
         max_tokens = self._resolve_max_tokens(settings)
         attempts = 3
@@ -332,9 +344,12 @@ class AIReplyEngine:
 
         for attempt in range(1, attempts + 1):
             try:
-                return self._dispatch_api_call(settings, messages, cookie_id, max_tokens)
+                result = self._dispatch_api_call(settings, messages, cookie_id, max_tokens)
+                self._bump_ai_stat(cookie_id, ok=True)
+                return result
             except ReasoningBudgetExhausted as exc:
                 last_exc = exc
+                self._bump_ai_stat(cookie_id, ok=False)
                 escalated = min(max_tokens * 3, self.MAX_TOKENS_CEILING)
                 if attempt >= attempts or escalated <= max_tokens:
                     break
@@ -347,6 +362,7 @@ class AIReplyEngine:
                 continue
             except Exception as exc:
                 last_exc = exc
+                self._bump_ai_stat(cookie_id, ok=False)
                 if attempt >= attempts or not self._is_retryable(exc):
                     break
                 delay = 0.8 * (2 ** (attempt - 1))  # 0.8s、1.6s

@@ -5010,8 +5010,13 @@ class XianyuLive:
                             await self._send_telegram_notification(config_data, notification_msg)
                         case _:
                             logger.warning(f"📱 不支持的通知渠道类型: {channel_type}")
+                            continue
+
+                    # 用量统计：真实派发到渠道发送器即计数
+                    self._bump_notify_stat(channel_type)
 
                 except Exception as notify_error:
+                    self._bump_notify_stat(channel_type, failed=True)
                     logger.error(f"📱 发送通知失败 ({notification.get('channel_name', 'Unknown')}): {self._safe_str(notify_error)}")
                     import traceback
                     logger.error(f"📱 详细错误信息: {traceback.format_exc()}")
@@ -5322,6 +5327,21 @@ class XianyuLive:
                     pending.append(self._email_notify_buffers.pop(key))
         for buffer in pending:
             await self._flush_email_buffer(buffer['config'], buffer['entries'])
+
+    def _bump_notify_stat(self, channel_type, failed: bool = False) -> None:
+        """通知用量旁路计数：口径=真实派发到渠道发送器的次数；失败静默。
+
+        发送器内部的成败各自记日志，此处统计的是"发了几条"。
+        """
+        try:
+            from app.db_manager import db_manager
+            user_id = self.user_id or db_manager.get_cookie_owner_user_id(self.cookie_id)
+            if user_id is None:
+                return
+            channel = str(channel_type or 'unknown').strip().lower()
+            db_manager.bump_usage_stat(user_id, 'notify', f"{channel}:{'fail' if failed else 'ok'}")
+        except Exception:
+            pass
 
     def _get_token_notify_limit(self) -> int:
         """Token 刷新异常通知的熔断上限（系统设置 token_refresh_notify_limit，默认 10）。"""
@@ -5793,8 +5813,13 @@ class XianyuLive:
                             notification_sent = True
                         case _:
                             logger.warning(f"不支持的通知渠道类型: {channel_type}")
+                            continue
+
+                    # 用量统计：真实派发到渠道发送器即计数
+                    self._bump_notify_stat(channel_type)
 
                 except Exception as notify_error:
+                    self._bump_notify_stat(channel_type, failed=True)
                     logger.error(f"发送Token刷新通知失败 ({notification.get('channel_name', 'Unknown')}): {self._safe_str(notify_error)}")
 
             # 如果成功发送了通知，更新最后发送时间
@@ -7375,6 +7400,10 @@ class XianyuLive:
                                 removed = await asyncio.to_thread(db_manager.cleanup_processed_messages)
                                 if removed > 0:
                                     logger.info(f"【{self.cookie_id}】已清理 {removed} 条过期消息去重记录")
+                                # 用量统计保留 90 天
+                                removed_usage = await asyncio.to_thread(db_manager.cleanup_usage_stats)
+                                if removed_usage > 0:
+                                    logger.info(f"【{self.cookie_id}】已清理 {removed_usage} 条过期用量统计")
                             except asyncio.CancelledError:
                                 logger.warning(f"【{self.cookie_id}】数据库清理被取消")
                                 raise

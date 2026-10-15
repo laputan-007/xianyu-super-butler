@@ -130,6 +130,21 @@ class DBManager:
             )
             ''')
 
+            # 用量统计：按用户/维度/明细/日累计（AI 调用、通知推送、邮件发送）。
+            # 旁路能力——计数失败绝不影响业务路径，方法内部吞异常。
+            # dimension: 'ai'（detail=ok/fail）| 'notify'（detail=渠道:ok|渠道:fail）
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usage_stats (
+                user_id INTEGER NOT NULL,
+                dimension TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                stat_date TEXT NOT NULL,
+                counter INTEGER NOT NULL DEFAULT 0,
+                updated_at REAL NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, dimension, detail, stat_date)
+            )
+            ''')
+
             # 创建cookies表（添加user_id字段和auto_confirm字段）
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS cookies (
@@ -2238,6 +2253,129 @@ class DBManager:
                 return max(0, removed)
             except Exception as e:
                 logger.error(f"清理消息去重记录失败: {e}")
+                return 0
+
+    # -------------------- 用量统计 --------------------
+    def bump_usage_stat(self, user_id: int, dimension: str, detail: str = '', amount: int = 1) -> bool:
+        """累计一条用量计数（UPSERT 自增），失败只记日志绝不向上抛。
+
+        统计是旁路能力：AI 回复、通知发送的主链路不能因为计数失败而中断。
+        Args:
+            dimension: 'ai' | 'notify' | 其他自定义维度
+            detail: ai 用 'ok'/'fail'；notify 用 '渠道:ok'/'渠道:fail'
+        """
+        now = time.time()
+        stat_date = time.strftime('%Y-%m-%d')
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "INSERT INTO usage_stats (user_id, dimension, detail, stat_date, counter, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(user_id, dimension, detail, stat_date) DO UPDATE SET "
+                    "counter = counter + excluded.counter, updated_at = excluded.updated_at",
+                    (user_id, dimension, detail, stat_date, max(0, int(amount)), now)
+                )
+                self.conn.commit()
+                return True
+            except Exception as e:
+                logger.debug(f"用量计数失败（不影响业务）: {dimension}/{detail} - {e}")
+                return False
+
+    def get_usage_stats(self, user_id: int = None, days: int = 7) -> Dict[str, Any]:
+        """查询用量统计，供 /usage-stats 接口与前端展示。
+
+        user_id=None 查全部用户（admin 视角，附带 per_user 每用户分解）；
+        指定 user_id 则只查该用户。返回 key 形如 ai_ok / ai_fail /
+        email_ok / qq_fail（notify 维度的 detail 拆成 渠道_状态）。
+        """
+        days = max(1, min(90, int(days)))
+        start_date = time.strftime('%Y-%m-%d', time.localtime(time.time() - (days - 1) * 86400))
+        params: list = [start_date]
+        where = "stat_date >= ?"
+        if user_id is not None:
+            where += " AND user_id = ?"
+            params.append(user_id)
+
+        rows = []
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "SELECT user_id, dimension, detail, stat_date, SUM(counter) "
+                    f"FROM usage_stats WHERE {where} "
+                    "GROUP BY user_id, dimension, detail, stat_date",
+                    params
+                )
+                rows = cursor.fetchall()
+        except Exception as e:
+            logger.error(f"查询用量统计失败: {e}")
+
+        usernames: Dict[int, str] = {}
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute("SELECT id, username FROM users")
+                usernames = {r[0]: r[1] for r in cursor.fetchall()}
+        except Exception:
+            pass
+
+        def _add(bucket: Dict[str, Any], key: str, value: int) -> None:
+            bucket[key] = bucket.get(key, 0) + value
+
+        daily: Dict[str, Dict[str, int]] = {}
+        per_user: Dict[int, Dict[str, int]] = {}
+        for uid, dimension, detail, stat_date, total in rows:
+            if dimension == 'ai':
+                key = f"ai_{detail or 'ok'}"
+            elif dimension == 'notify':
+                channel, _, status = str(detail).partition(':')
+                key = f"{channel or 'unknown'}_{status or 'ok'}"
+            else:
+                key = f"{dimension}_{detail or 'ok'}"
+            _add(daily.setdefault(stat_date, {}), key, int(total or 0))
+            _add(per_user.setdefault(uid, {}), key, int(total or 0))
+
+        totals: Dict[str, int] = {}
+        for counts in daily.values():
+            for key, value in counts.items():
+                _add(totals, key, value)
+
+        # 补齐日期序列（无数据的日期给空对象），按日期升序
+        daily_series = []
+        for i in range(days):
+            date_str = time.strftime('%Y-%m-%d', time.localtime(time.time() - (days - 1 - i) * 86400))
+            daily_series.append({'date': date_str, 'counts': daily.get(date_str, {})})
+
+        per_user_list = [
+            {
+                'user_id': uid,
+                'username': usernames.get(uid, f'用户{uid}'),
+                'counts': counts,
+            }
+            for uid, counts in sorted(per_user.items(), key=lambda kv: -sum(kv[1].values()))
+        ]
+
+        return {
+            'days': days,
+            'scope': 'all' if user_id is None else 'user',
+            'daily': daily_series,
+            'totals': totals,
+            'per_user': per_user_list if user_id is None else [],
+        }
+
+    def cleanup_usage_stats(self, keep_days: int = 90) -> int:
+        """清理过老的用量统计记录，返回删除行数。"""
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cutoff = time.strftime('%Y-%m-%d', time.localtime(time.time() - keep_days * 86400))
+                cursor.execute("DELETE FROM usage_stats WHERE stat_date < ?", (cutoff,))
+                removed = cursor.rowcount
+                self.conn.commit()
+                return max(0, removed)
+            except Exception as e:
+                logger.error(f"清理用量统计失败: {e}")
                 return 0
 
     def get_cookie_owner_user_id(self, cookie_id: str):

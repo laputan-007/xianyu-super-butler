@@ -4097,6 +4097,37 @@ def get_system_settings(current_user: Dict[str, Any] = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get('/usage-stats')
+def get_usage_stats_endpoint(days: int = 7, user_id: int = None,
+                             current_user: Dict[str, Any] = Depends(get_current_user)):
+    """用量统计（AI 调用 / 通知推送 / 邮件发送，按天累计）。
+
+    普通用户只能看自己的；admin 不传 user_id 看全部（含每用户分解），
+    传 user_id 则查指定用户。
+    """
+    from app.db_manager import db_manager
+
+    is_admin = (
+        current_user.get('is_admin', False)
+        or current_user.get('username') == ADMIN_USERNAME
+    )
+    effective_user: Optional[int] = None
+    if not is_admin:
+        effective_user = current_user.get('user_id')
+    elif user_id is not None:
+        try:
+            effective_user = int(user_id)
+        except (TypeError, ValueError):
+            effective_user = None
+
+    try:
+        days = max(1, min(90, int(days)))
+    except (TypeError, ValueError):
+        days = 7
+
+    return db_manager.get_usage_stats(user_id=effective_user, days=days)
+
+
 @app.put('/system-settings/{key}')
 def update_system_setting(key: str, setting_data: SystemSettingIn,
                           _: Dict[str, Any] = Depends(require_admin)):

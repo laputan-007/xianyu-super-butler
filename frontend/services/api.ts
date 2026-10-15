@@ -1003,6 +1003,22 @@ export const getSystemSettings = async (): Promise<SystemSettings> => {
     return res.data || res; // handle {success:true, data: {...}} wrapper if exists
 };
 
+// Usage Stats（AI 调用 / 通知推送 / 邮件发送，按天累计）
+export interface UsageStatsDay { date: string; counts: Record<string, number>; }
+export interface UsageStatsUserRow { user_id: number; username: string; counts: Record<string, number>; }
+export interface UsageStatsResponse {
+    days: number;
+    scope: 'all' | 'user';
+    daily: UsageStatsDay[];
+    totals: Record<string, number>;
+    per_user: UsageStatsUserRow[];
+}
+
+export const getUsageStats = async (days: number): Promise<UsageStatsResponse> => {
+    const res = await get<UsageStatsResponse & { data?: UsageStatsResponse }>(`/usage-stats?days=${days}`);
+    return (res as { data?: UsageStatsResponse }).data || (res as UsageStatsResponse);
+};
+
 export const updateSystemSettings = async (settings: Partial<SystemSettings>): Promise<ApiResponse> => {
     // API expects individual PUTs, but we'll loop in the service for convenience or assume bulk endpoint if updated
     // Based on docs 12.2, we iterate.

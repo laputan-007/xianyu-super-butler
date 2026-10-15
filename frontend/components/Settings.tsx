@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
+  BarChart3,
   Database,
   ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
+  Loader2,
   Mail,
   Megaphone,
   Palette,
@@ -41,8 +43,44 @@ import {
 } from './ui';
 import ThemeToggle from './ThemeToggle';
 import { BrandPreference, useTheme } from '../theme/ThemeProvider';
+import { getUsageStats, UsageStatsResponse } from '../services/api';
 
-type SettingsSection = 'general' | 'ai' | 'email' | 'phrases' | 'notice' | 'appearance';
+type SettingsSection = 'general' | 'ai' | 'email' | 'phrases' | 'notice' | 'appearance' | 'usage';
+
+/** 通知渠道的统计展示名（usage-stats 的 detail 前缀） */
+const USAGE_CHANNEL_LABELS: Record<string, string> = {
+  email: '邮件',
+  qq: 'QQ消息',
+  dingtalk: '钉钉',
+  ding_talk: '钉钉',
+  feishu: '飞书',
+  bark: 'Bark',
+  wechat: '企业微信',
+  telegram: 'Telegram',
+  webhook: 'Webhook',
+};
+
+/** counts 里按前缀求和（email_ok + email_fail → email 总量） */
+const sumUsageBy = (counts: Record<string, number> | undefined, prefix: string): number => {
+  if (!counts) return 0;
+  return Object.entries(counts)
+    .filter(([key]) => key === prefix || key.startsWith(`${prefix}_`))
+    .reduce((sum, [, value]) => sum + value, 0);
+};
+
+/** 从 totals 提取出现过的渠道列表（保持稳定顺序） */
+const usageChannels = (totals: Record<string, number> | undefined): string[] => {
+  if (!totals) return [];
+  const channels = new Set<string>();
+  for (const key of Object.keys(totals)) {
+    if (key.startsWith('ai_')) continue;
+    const idx = key.lastIndexOf('_');
+    if (idx > 0) channels.add(key.slice(0, idx));
+  }
+  return ['email', 'qq', 'dingtalk', 'feishu', 'bark', 'wechat', 'telegram', 'webhook']
+    .filter(channel => channels.has(channel))
+    .concat([...channels].filter(c => !(c in USAGE_CHANNEL_LABELS)));
+};
 
 /** 主题色预设：色块展示色（预设的品牌主色，与 index.css 里的 [data-brand] 块一致） */
 const BRAND_OPTIONS: Array<{ value: BrandPreference; label: string; color: string }> = [
@@ -151,10 +189,34 @@ const SettingStrategy: React.FC<{
 const Settings: React.FC = () => {
   // 主题色换肤（外观分区）；浅深色切换在 ThemeToggle 内部同样走 useTheme
   const { brand, setBrand } = useTheme();
+  // 用量统计（AI 调用 / 通知推送 / 邮件发送）
+  const [usageDays, setUsageDays] = useState(7);
+  const [usageStats, setUsageStats] = useState<UsageStatsResponse | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+
+  const loadUsageStats = async (days: number) => {
+    setUsageLoading(true);
+    try {
+      const data = await getUsageStats(days);
+      setUsageStats(data);
+    } catch (error) {
+      notify(`加载用量统计失败：${(error as Error).message}`);
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+
+  useEffect(() => {
+    if (activeSection === 'usage') {
+      void loadUsageStats(usageDays);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, usageDays]);
   // 快捷短语：人工客服常用话术
   const [phrases, setPhrases] = useState<QuickPhrase[]>([]);
   const [phraseForm, setPhraseForm] = useState({ category: '默认', title: '', content: '' });
@@ -323,6 +385,7 @@ const Settings: React.FC = () => {
           { id: 'phrases', label: '快捷短语', icon: Zap },
           { id: 'notice', label: '公告与更新', icon: Megaphone },
           { id: 'appearance', label: '外观', icon: Palette },
+          { id: 'usage', label: '用量统计', icon: BarChart3 },
         ]}
       />
 
@@ -366,6 +429,159 @@ const Settings: React.FC = () => {
             </div>
           </section>
         </div>
+      )}
+
+      {activeSection === 'usage' && (
+        <section className="section-panel">
+          <SectionHeader
+            title="用量统计"
+            description={`AI 调用、通知推送与邮件发送的按天累计${usageStats?.scope === 'all' ? '；当前为管理员视角，含全部用户' : ''}。`}
+            icon={BarChart3}
+            actions={(
+              <div className="flex gap-1.5">
+                {[1, 7, 30].map((range) => (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setUsageDays(range)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+                      usageDays === range
+                        ? 'bg-brand text-brand-ink'
+                        : 'ios-btn-secondary'
+                    }`}
+                  >
+                    {range === 1 ? '今天' : `近${range}天`}
+                  </button>
+                ))}
+              </div>
+            )}
+          />
+          {usageLoading ? (
+            <div className="flex items-center justify-center py-10 text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : !usageStats || Object.keys(usageStats.totals).length === 0 ? (
+            <div className="px-4 pb-6 pt-2 text-sm text-gray-500">
+              所选时间范围内暂无用量记录——发生 AI 回复或通知推送后这里会出现数据。
+            </div>
+          ) : (
+            <div className="px-4 pb-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border border-gray-100 p-3.5">
+                  <p className="text-xs font-bold text-gray-500">AI 调用</p>
+                  <p className="mt-1 text-2xl font-black text-gray-900">
+                    {sumUsageBy(usageStats.totals, 'ai')}
+                    <span className="ml-1.5 text-xs font-bold text-gray-400">次</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">
+                    成功 {usageStats.totals.ai_ok ?? 0} · 失败 {usageStats.totals.ai_fail ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-100 p-3.5">
+                  <p className="text-xs font-bold text-gray-500">邮件发送</p>
+                  <p className="mt-1 text-2xl font-black text-gray-900">
+                    {sumUsageBy(usageStats.totals, 'email')}
+                    <span className="ml-1.5 text-xs font-bold text-gray-400">次</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">
+                    成功 {usageStats.totals.email_ok ?? 0} · 失败 {usageStats.totals.email_fail ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-100 p-3.5">
+                  <p className="text-xs font-bold text-gray-500">QQ 消息推送</p>
+                  <p className="mt-1 text-2xl font-black text-gray-900">
+                    {sumUsageBy(usageStats.totals, 'qq')}
+                    <span className="ml-1.5 text-xs font-bold text-gray-400">次</span>
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-100 p-3.5">
+                  <p className="text-xs font-bold text-gray-500">其他渠道通知</p>
+                  <p className="mt-1 text-2xl font-black text-gray-900">
+                    {usageChannels(usageStats.totals)
+                      .filter((c) => c !== 'email' && c !== 'qq')
+                      .reduce((sum, c) => sum + sumUsageBy(usageStats.totals, c), 0)}
+                    <span className="ml-1.5 text-xs font-bold text-gray-400">次</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">
+                    {usageChannels(usageStats.totals)
+                      .filter((c) => c !== 'email' && c !== 'qq')
+                      .map((c) => USAGE_CHANNEL_LABELS[c] || c)
+                      .join(' / ') || '暂无'}
+                  </p>
+                </div>
+              </div>
+
+              <h4 className="mt-5 mb-2 text-sm font-bold text-gray-900">每日明细</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px] text-left text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-500">
+                      <th className="pb-2 font-bold">日期</th>
+                      <th className="pb-2 font-bold">AI 调用</th>
+                      <th className="pb-2 font-bold">邮件</th>
+                      {usageChannels(usageStats.totals)
+                        .filter((c) => c !== 'email')
+                        .map((c) => (
+                          <th key={c} className="pb-2 font-bold">{USAGE_CHANNEL_LABELS[c] || c}</th>
+                        ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...usageStats.daily].reverse().map((day) => (
+                      <tr key={day.date} className="border-t border-gray-100">
+                        <td className="py-2 text-gray-600">{day.date}</td>
+                        <td className="py-2 font-bold text-gray-900">{sumUsageBy(day.counts, 'ai')}</td>
+                        <td className="py-2 font-bold text-gray-900">{sumUsageBy(day.counts, 'email')}</td>
+                        {usageChannels(usageStats.totals)
+                          .filter((c) => c !== 'email')
+                          .map((c) => (
+                            <td key={c} className="py-2 font-bold text-gray-900">
+                              {sumUsageBy(day.counts, c) || '-'}
+                            </td>
+                          ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {usageStats.scope === 'all' && usageStats.per_user.length > 0 && (
+                <>
+                  <h4 className="mt-6 mb-2 text-sm font-bold text-gray-900">每用户用量</h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-left text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-500">
+                          <th className="pb-2 font-bold">用户</th>
+                          <th className="pb-2 font-bold">AI 调用</th>
+                          <th className="pb-2 font-bold">邮件</th>
+                          <th className="pb-2 font-bold">通知合计</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageStats.per_user.map((row) => (
+                          <tr key={row.user_id} className="border-t border-gray-100">
+                            <td className="py-2 text-gray-600">
+                              {row.username}
+                              <span className="ml-1.5 text-[11px] text-gray-400">#{row.user_id}</span>
+                            </td>
+                            <td className="py-2 font-bold text-gray-900">{sumUsageBy(row.counts, 'ai')}</td>
+                            <td className="py-2 font-bold text-gray-900">{sumUsageBy(row.counts, 'email')}</td>
+                            <td className="py-2 font-bold text-gray-900">
+                              {Object.entries(row.counts)
+                                .filter(([key]) => !key.startsWith('ai_'))
+                                .reduce((sum, [, value]) => sum + value, 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
       )}
 
       {activeSection === 'general' && (
