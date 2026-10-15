@@ -297,6 +297,20 @@ select:-webkit-autofill {
   border-radius: 8px;
 }
 
+/* 手机端顶栏空间紧张：主题切换器压缩到 26px 格 */
+@media (max-width: 640px) {
+  .theme-picker--header .theme-switcher {
+    grid-template-columns: repeat(3, 26px);
+    border-radius: 8px;
+  }
+
+  .theme-picker--header .theme-switcher__option {
+    width: 26px;
+    min-height: 26px;
+    border-radius: 6px;
+  }
+}
+
 /* 顶栏登录用户卡：悬浮/键盘聚焦时在卡片下方弹出「退出登录」菜单（Element 式 zoom-in-top）；
    触屏点按由 --pinned 钉住。不走 Tailwind group-hover 工具类——JIT 规则顺序在本项目出过
    基础类压过变体的问题。顶部 8px 透明 padding 充当 hover 桥，隐藏态整体上移 5px 贴住卡片，
@@ -335,6 +349,29 @@ select:-webkit-autofill {
   transform: rotate(180deg);
 }
 
+/* 手机端顶栏下拉（账号切换/通知）：锚点按钮窄屏靠右时 right-0 + 固定宽度
+   会向左伸出屏幕。改为 fixed 全宽（左右留 12px），顶栏 h-14 = 56px，面板
+   贴其下方展开。退出菜单内容短，不做全宽——右对齐、宽度随内容。 */
+@media (max-width: 640px) {
+  .header-popover {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 3.75rem;
+    width: auto;
+    margin-top: 0;
+  }
+
+  .user-menu {
+    position: fixed;
+    right: 0.75rem;
+    top: 3.75rem;
+    width: max-content;
+    margin-top: 0;
+    padding-top: 0;
+  }
+}
+
 /* 挂载式弹层（账号下拉）与 .user-menu 共用同款入场动效，两个下拉观感一致 */
 @keyframes dropdown-pop-in {
   from {
@@ -354,22 +391,131 @@ select:-webkit-autofill {
    深色主题用整幅亮金渐变 + 金晕。 */
 .brand-wordmark {
   background-image:
-    linear-gradient(110deg, transparent 40%, rgba(255, 250, 222, 0.95) 50%, transparent 60%),
-    linear-gradient(180deg, #ffe066 0%, #e0a800 18%, #a67f00 55%, #6b5200 100%);
+    linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.85) 50%, transparent 60%),
+    linear-gradient(180deg, var(--brand-300) 0%, var(--brand-700) 16%, var(--brand-900) 100%);
   background-size: 260% 100%, 100% 100%;
   background-position: 100% 0, 0 0;
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(107, 82, 0, 0.12));
+  filter: drop-shadow(0 1px 0 rgb(var(--brand-rgb) / 0.14));
   animation: brand-wordmark-sweep 5s ease-in-out 2s infinite;
 }
 
 [data-theme='dark'] .brand-wordmark {
   background-image:
     linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.75) 50%, transparent 60%),
-    linear-gradient(180deg, #ffe566 0%, #ffd700 40%, #d9a814 100%);
-  filter: drop-shadow(0 1px 12px rgba(255, 213, 0, 0.3));
+    linear-gradient(180deg, var(--brand-300) 0%, var(--brand) 40%, var(--brand-700) 100%);
+  filter: drop-shadow(0 1px 12px rgb(var(--brand-rgb) / 0.3));
+}
+
+/* ============================================================
+   登录页纸飞机航线（漫画风格，纯 CSS）：
+   - 外层 .login-plane-fly 沿弧线 waypoint 往返起伏（left 0→97%），
+     机身随爬升/俯冲左右倾斜，首尾淡入淡出；
+   - 内层 .login-plane-bob 快速轻颤（漫画的生动感）；
+   - 机后三条渐隐速度线随行；
+   - 虚线轨迹缓慢向右流动。
+   ============================================================ */
+.login-plane-scene {
+  --plane-cycle: 11s; /* 9s 飞行 + 2s 停顿 */
+}
+
+.login-plane-fly {
+  animation: login-plane-fly var(--plane-cycle) ease-in-out infinite;
+  opacity: 0;
+  will-change: left, top, opacity;
+}
+
+@keyframes login-plane-fly {
+  0% {
+    left: 0%;
+    top: 76%;
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  /* 爬升段：机头微抬 */
+  18% {
+    left: 24%;
+    top: 10%;
+    transform: rotate(-10deg);
+  }
+  /* 高位平飞 */
+  32% {
+    left: 42%;
+    top: 26%;
+    transform: rotate(2deg);
+  }
+  /* 俯冲段：机头压低 */
+  48% {
+    left: 58%;
+    top: 68%;
+    transform: rotate(10deg);
+  }
+  /* 拉起回稳 */
+  64% {
+    left: 74%;
+    top: 34%;
+    transform: rotate(-4deg);
+  }
+  78% {
+    left: 88%;
+    top: 26%;
+    transform: rotate(4deg);
+  }
+  84% {
+    opacity: 1;
+  }
+  /* 到达终点后隐身，剩余 16% 时间为停顿（原地不可见） */
+  90%,
+  100% {
+    left: 96%;
+    top: 24%;
+    transform: rotate(6deg);
+    opacity: 0;
+  }
+}
+
+/* 机身轻颤：漫画飞行的"活"感 */
+.login-plane-bob {
+  animation: login-plane-bob 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes login-plane-bob {
+  from {
+    transform: translateY(-2.5px) rotate(-3deg);
+  }
+  to {
+    transform: translateY(2.5px) rotate(3deg);
+  }
+}
+
+/* 虚线轨迹向右流动 */
+.login-plane-trail-path {
+  animation: login-plane-trail-flow 3.2s linear infinite;
+}
+
+@keyframes login-plane-trail-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-plane-fly,
+  .login-plane-bob,
+  .login-plane-trail-path {
+    animation: none;
+  }
+
+  /* 静态装饰态：飞机停在航线中段，保持可见 */
+  .login-plane-fly {
+    left: 42%;
+    top: 26%;
+    opacity: 0.85;
+  }
 }
 
 /* 0%→45% 高光带从右向左扫过文字，随后停留至周期结束（对齐登录页 2.4s 扫 + 2.6s 停的节奏） */
@@ -545,7 +691,7 @@ select:-webkit-autofill {
 :root[data-theme='dark'] .theme-brand-panel [class~='text-[#6b5200]'] { color: #6b5200; }
 
 :root[data-theme='dark'] .page-tab:not(.page-tab--active) .page-tab__count {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-strong);
 }
 
 .recharts-pie-label-text,
@@ -562,18 +708,27 @@ select:-webkit-autofill {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* 静默刷新期间整块轻微压暗并禁止交互：看得见「正在刷新」，数据到了原地恢复 */
+  transition: opacity 200ms ease;
+}
+
+.page-stack--refreshing {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 /* 页面头 = 功能介绍区：金色图标章 + 标题 + 介绍文案 + 右侧操作。
    底部细分隔线上叠一段渐隐金条（::after）作为每页的视觉锚点。
    吸顶：负 margin 抵消容器顶部内边距、padding 原样补回——页头从滚动第一像素起
    就钉在滚动区顶部（零空滑），底色与页面一致，内容从下方滚过不透字。
-   ≤768px 页头会纵向堆叠成多行，吸顶会占掉近半视口，故仅在宽屏生效。 */
+   ≤768px 页头会纵向堆叠成多行，吸顶会占掉近半视口，故仅在宽屏生效。
+   flex-wrap：窄屏操作按钮多时自动换到标题下方，不挤压标题。 */
 .page-header {
   position: sticky;
   top: 0;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -647,16 +802,18 @@ select:-webkit-autofill {
   gap: 8px;
 }
 
+/* 方正分段式页签：直角 + 选项间 1px 分割线，激活项淡金底深金字。
+   全站筛选/页签（数据概览时间范围、订单状态、设置分区等）共用。
+   flex-wrap：选项多时窄屏自动折行，不再横向裁切（滚动条已隐藏，截断无提示）。 */
 .page-tabs {
   display: inline-flex;
   max-width: 100%;
-  gap: 4px;
+  flex-wrap: wrap;
   overflow-x: auto;
-  border-radius: var(--radius-pill);
-  background: var(--surface-strong);
-  padding: 4px;
-  /* 溢出时仍可横向滚动，但不显示滚动条 ——
-     胶囊组是圆角浅黄底，底部露出一条滚动轨道很像渲染错位 */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -672,36 +829,42 @@ select:-webkit-autofill {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border-radius: var(--radius-pill);
+  border-radius: 0;
+  border-right: 1px solid var(--border);
   padding: 8px 16px;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
-  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.page-tab:last-child {
+  border-right: 0;
 }
 
 .page-tab:hover {
-  background: var(--surface);
+  background: var(--surface-hover);
   color: var(--text);
 }
 
 .page-tab--active {
-  background: var(--brand);
-  color: var(--brand-ink);
-  box-shadow: var(--shadow-brand);
+  background: var(--brand-soft);
+  color: var(--brand-text);
+  font-weight: 750;
 }
 
 .page-tab--active:hover {
-  background: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-text);
 }
 
 .page-tab__count {
   min-width: 20px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-strong);
   padding: 2px 7px;
-  color: inherit;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
@@ -1607,14 +1770,15 @@ aside nav:hover::-webkit-scrollbar-thumb {
 /* ============================================================
    主题色预设：html[data-brand] 属性切换（localStorage xianyu-brand）。
    yellow 为默认（:root 即闲鱼黄），其余预设覆盖品牌变量。
-   特异性说明：预设亮色块 (0,1,0) 低于 :root[data-theme='dark'] (0,2,0)，
-   暗色必须由 [data-theme='dark'][data-brand='x'] (0,2,0，位于其后) 接管，
-   覆盖暗色专属的浅底/文字/描边变量。
+   特异性说明：预设必须用 :root[data-brand='x'] (0,2,0)——浅色主题块是
+   :root[data-theme='light'] (0,2,0)，普通 [data-brand] (0,1,0) 会被它压住，
+   导致浅色模式切主题色无效（深色因 [data-theme='dark'][data-brand='x']
+   同级且靠后接管而正常）。预设块位于浅/深主题块之后，同级靠后者胜出。
    --brand-ink 是品牌底上的文字色：亮色品牌（黄/天蓝/水绿/珊瑚）配深墨，
    中深色品牌（皇家蓝/紫/玫红）配白。
    ============================================================ */
 
-[data-brand='sky'] {
+:root[data-brand='sky'] {
   --brand-50: #eef7ff; --brand-100: #d9edfe; --brand-200: #b3dcfd;
   --brand-300: #7cc4fa;
   --brand: #35a3f7; --brand-hover: #1e93f0; --brand-active: #0f84e0;
@@ -1632,7 +1796,7 @@ aside nav:hover::-webkit-scrollbar-thumb {
   --shadow-brand: 0 7px 22px rgb(53 163 247 / 0.18);
 }
 
-[data-brand='jade'] {
+:root[data-brand='jade'] {
   --brand-50: #e8faf6; --brand-100: #d0f4ec; --brand-200: #a5e9db;
   --brand-300: #5fd9c4;
   --brand: #14c0a0; --brand-hover: #0dab8c; --brand-active: #05967c;
@@ -1650,7 +1814,7 @@ aside nav:hover::-webkit-scrollbar-thumb {
   --shadow-brand: 0 7px 22px rgb(20 192 160 / 0.18);
 }
 
-[data-brand='royal'] {
+:root[data-brand='royal'] {
   --brand-50: #eff2ff; --brand-100: #dfe5ff; --brand-200: #c0cdfb;
   --brand-300: #8ea7fc;
   --brand: #4f7afd; --brand-hover: #3f6cf5; --brand-active: #305ce6;
@@ -1668,7 +1832,7 @@ aside nav:hover::-webkit-scrollbar-thumb {
   --shadow-brand: 0 7px 22px rgb(79 122 253 / 0.22);
 }
 
-[data-brand='coral'] {
+:root[data-brand='coral'] {
   --brand-50: #fff2ed; --brand-100: #ffe2d9; --brand-200: #ffc4b3;
   --brand-300: #ff9d80;
   --brand: #ff7043; --brand-hover: #f25c33; --brand-active: #e04f24;
@@ -1686,7 +1850,7 @@ aside nav:hover::-webkit-scrollbar-thumb {
   --shadow-brand: 0 7px 22px rgb(255 112 67 / 0.2);
 }
 
-[data-brand='violet'] {
+:root[data-brand='violet'] {
   --brand-50: #f5f1ff; --brand-100: #ebe3fe; --brand-200: #d9cbfd;
   --brand-300: #b7a2fb;
   --brand: #8b5cf6; --brand-hover: #7c4ef0; --brand-active: #6d3fe3;
@@ -1704,7 +1868,7 @@ aside nav:hover::-webkit-scrollbar-thumb {
   --shadow-brand: 0 7px 22px rgb(139 92 246 / 0.22);
 }
 
-[data-brand='rose'] {
+:root[data-brand='rose'] {
   --brand-50: #fff0f3; --brand-100: #ffd9e1; --brand-200: #f9b8c7;
   --brand-300: #f585a1;
   --brand: #ef476f; --brand-hover: #de355c; --brand-active: #c92850;
