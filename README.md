@@ -1,4 +1,4 @@
-# 闲鱼超级管家（多账户稳定增强版）
+# 鱼小铺（闲鱼超级管家 · 多账户稳定增强版）
 
 面向闲鱼卖家的账号、商品、订单、消息、自动回复与自动发货一体化管理系统。
 *一款能让你的想法'变现'的强大作品*
@@ -26,7 +26,7 @@
 - 📊 **经营看板** — 成交额、到账、退款、订单和库存一屏掌握，**历史订单可一次性拉回**
 - 🔒 **并发安全架构（v3.2.0）** — 单事件循环 + 去重落库 + 备份恢复安全化：多账号数据不串号、重启不重复回复、手动发货不再随机失败，**2核2G 小机器稳定承载 25~30 个账号**
 
-![闲鱼超级管家运营概览](docs/screenshots/revenue-overview.png)
+![鱼小铺运营概览](docs/screenshots/revenue-overview.png)
 
 ## 核心功能
 
@@ -207,8 +207,8 @@ git pull && sudo systemctl restart xianyu-butler
     <th align="center">QQ群</th>
   </tr>
   <tr>
-    <td align="center"><img src="docs/community/wechat-group.jpg" alt="闲鱼超级管家微信群二维码" width="180"></td>
-    <td align="center"><img src="docs/community/qq-group.jpg" alt="闲鱼超级管家QQ群二维码" width="180"></td>
+    <td align="center"><img src="docs/community/wechat-group.jpg" alt="鱼小铺微信群二维码" width="180"></td>
+    <td align="center"><img src="docs/community/qq-group.jpg" alt="鱼小铺QQ群二维码" width="180"></td>
   </tr>
   <tr>
     <td align="center">二维码失效后会在仓库更新</td>
