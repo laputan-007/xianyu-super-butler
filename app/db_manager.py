@@ -2155,8 +2155,12 @@ class DBManager:
                         admin_user = cursor.fetchone()
                         user_id = admin_user[0] if admin_user else 1
 
+                # 按列 UPSERT：只更新 value 和 user_id。
+                # 不能用 INSERT OR REPLACE —— REPLACE 会整行删除重插，
+                # auto_confirm/remark/pause_duration 等既有配置列会被清空。
                 self._execute_sql(cursor,
-                    "INSERT OR REPLACE INTO cookies (id, value, user_id) VALUES (?, ?, ?)",
+                    "INSERT INTO cookies (id, value, user_id) VALUES (?, ?, ?) "
+                    "ON CONFLICT(id) DO UPDATE SET value = excluded.value, user_id = excluded.user_id",
                     (cookie_id, cookie_value, user_id)
                 )
 
