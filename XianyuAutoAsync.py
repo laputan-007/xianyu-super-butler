@@ -727,6 +727,19 @@ class XianyuLive:
             logger.error(f"【{self.cookie_id}】清理日志文件时出错: {self._safe_str(e)}")
             return 0
 
+    # 不计入熔断的通知类型：人工介入类（人脸/滑块验证）与恢复/成功通知。
+    # 其余（token_refresh_exception / no_credentials / db_update_failed 等）
+    # 全部视为"故障族"——计数熔断 + 共享长冷却。
+    _NON_FAILURE_NOTIFY_TYPES = frozenset({
+        'face_verification',
+        'token_recovered',
+        'captcha_success_auto_update',
+        'captcha_success_db_update_failed',
+        'captcha_verification_failed',   # 滑块失败带验证URL，需用户尽快处理
+        'captcha_execution_error',
+        'captcha_dependency_missing',
+    })
+
     def __init__(self, cookies_str=None, cookie_id: str = "default", user_id: int = None, register: bool = True):
         """初始化闲鱼直播类
 
@@ -5671,27 +5684,34 @@ class XianyuLive:
                 logger.warning(f"检测到正常的令牌过期，跳过通知: {error_message}")
                 return
 
-            # 熔断兜底：Token 刷新异常若一直推送会演变成"狼来了"——每次过完
-            # 冷却期就发一条，直到账号被人工处理为止。达到上限后静默，刷新
-            # 成功自动恢复（_reset_token_notify_circuit）。只熔断 Token 类
-            # 异常，人脸/滑块等其他类型的通知不受影响。
-            is_token_error = self._is_token_related_error(error_message)
-            if is_token_error and self._token_fail_notify_silenced:
+            # 熔断兜底：故障类通知若一直推送会演变成"狼来了"——每次过完
+            # 冷却期就发一条，直到账号被人工处理为止。达到上限后静默，
+            # 刷新成功自动恢复（_reset_token_notify_circuit）。
+            # 故障族 = 文案命中 Token 关键词，或类型不在人工/恢复类白名单。
+            # 此前只按文案判定，"连续失败5次未配置密码登录"（no_credentials）
+            # 等卫星路径的文案不含关键词 → 走 5 分钟冷却且不计数，账号
+            # Cookie 失效时演变成每分钟一条"连续失败5次"的轰炸。
+            is_failure_notify = (
+                self._is_token_related_error(error_message)
+                or str(notification_type or '') not in self._NON_FAILURE_NOTIFY_TYPES
+            )
+            if is_failure_notify and self._token_fail_notify_silenced:
                 logger.warning(
-                    f"Token刷新异常通知已达上限，静默中，本次跳过"
+                    f"异常通知已达上限，静默中，本次跳过"
                     f"（刷新成功后自动恢复并通知一次）: {self.cookie_id}"
                 )
                 return
 
             # 检查是否在冷却期内
             current_time = time.time()
-            last_time = self.last_notification_time.get(notification_type, 0)
+            # 故障族共享一个冷却桶：no_credentials / token_refresh_exception
+            # 等类型轮换无法再互相绕过冷却
+            cooldown_key = '_token_fail_shared' if is_failure_notify else notification_type
+            last_time = self.last_notification_time.get(cooldown_key, 0)
 
-            # 为Token刷新异常通知使用特殊的3小时冷却时间
-            # 基于错误消息内容判断是否为Token相关异常
-            if is_token_error:
+            if is_failure_notify:
                 cooldown_time = self.token_refresh_notification_cooldown
-                cooldown_desc = "3小时"
+                cooldown_desc = f"{cooldown_time // 3600}小时"
             else:
                 cooldown_time = self.notification_cooldown
                 cooldown_desc = f"{self.notification_cooldown // 60}分钟"
@@ -5765,9 +5785,9 @@ class XianyuLive:
 
             # 达到熔断上限的最后一条带上说明：让用户知道"不再推送"是保护
             # 策略而不是系统悄悄坏了
-            if is_token_error and (self._token_fail_notify_count + 1) >= self._get_token_notify_limit():
+            if is_failure_notify and (self._token_fail_notify_count + 1) >= self._get_token_notify_limit():
                 notification_msg += (
-                    f"\n⚠️ 已连续推送 {self._token_fail_notify_count + 1} 次Token刷新异常通知，"
+                    f"\n⚠️ 已连续推送 {self._token_fail_notify_count + 1} 次异常通知，"
                     f"达到上限，此后将停止该类提醒。\n"
                     f"账号恢复（刷新成功或重新扫码登录）后会自动恢复推送并通知一次。\n"
                 )
@@ -5824,27 +5844,20 @@ class XianyuLive:
 
             # 如果成功发送了通知，更新最后发送时间
             if notification_sent:
-                self.last_notification_time[notification_type] = current_time
+                self.last_notification_time[cooldown_key] = current_time
 
-                # 根据错误消息内容使用不同的冷却时间
-                if is_token_error:
-                    next_send_time = current_time + self.token_refresh_notification_cooldown
-                    cooldown_desc = "3小时"
-                else:
-                    next_send_time = current_time + self.notification_cooldown
-                    cooldown_desc = f"{self.notification_cooldown // 60}分钟"
-
+                next_send_time = current_time + cooldown_time
                 next_send_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_send_time))
                 logger.info(f"Token刷新通知已发送，下次可发送时间: {next_send_time_str} (冷却时间: {cooldown_desc})")
 
                 # 熔断计数：只在通知真正发出时计数，冷却期内被跳过的尝试
                 # 不计数（否则重试风暴一天就把上限耗光，用户却只收到两条）。
-                if is_token_error:
+                if is_failure_notify:
                     self._token_fail_notify_count += 1
                     if self._token_fail_notify_count >= self._get_token_notify_limit():
                         self._token_fail_notify_silenced = True
                         logger.warning(
-                            f"Token刷新异常通知达到上限（{self._token_fail_notify_count} 次），"
+                            f"异常通知达到上限（{self._token_fail_notify_count} 次），"
                             f"进入静默直至刷新成功: {self.cookie_id}"
                         )
 
