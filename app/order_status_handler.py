@@ -77,8 +77,8 @@ class OrderStatusHandler:
         log_level = self.config.get('log_level', 'info')
         logger.info(f"订单状态处理器初始化完成，配置: {self.config}")
     
-    def extract_order_id(self, message: dict) -> Optional[str]:
-        """从消息中提取订单ID"""
+    def extract_order_id(self, message: dict, cookie_id: str = None) -> Optional[str]:
+        """从消息中提取订单ID。传入 cookie_id 时，按账号反查订单，避免跨账号命中。"""
         try:
             order_id = None
             
@@ -178,7 +178,7 @@ class OrderStatusHandler:
                                 try:
                                     from app.db_manager import db_manager
                                     # 查询该商品和买家的最近订单
-                                    recent_order = db_manager.get_recent_order_by_item_and_buyer(item_id, buyer_id)
+                                    recent_order = db_manager.get_recent_order_by_item_and_buyer(item_id, buyer_id, cookie_id=cookie_id)
                                     if recent_order:
                                         order_id = recent_order.get('order_id')
                                         if order_id:
@@ -725,7 +725,7 @@ class OrderStatusHandler:
                 return False
             
             # 提取订单ID
-            order_id = self.extract_order_id(message)
+            order_id = self.extract_order_id(message, cookie_id=cookie_id)
             if not order_id:
                 # 如果无法提取订单ID，根据配置决定是否添加到待处理队列
                 if not self.config.get('use_pending_queue', True):
@@ -828,7 +828,7 @@ class OrderStatusHandler:
                 return False
             
             # 提取订单ID
-            order_id = self.extract_order_id(message)
+            order_id = self.extract_order_id(message, cookie_id=cookie_id)
             if not order_id:
                 # 如果无法提取订单ID，根据配置决定是否添加到待处理队列
                 if not self.config.get('use_pending_queue', True):

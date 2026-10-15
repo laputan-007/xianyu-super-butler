@@ -7320,9 +7320,10 @@ class DBManager:
                         logger.warning(f"Cookie ID {cookie_id} 不存在于cookies表中，拒绝插入订单 {order_id}")
                         return False
 
-                # 检查订单是否已存在
-                cursor.execute("SELECT order_id FROM orders WHERE order_id = ?", (order_id,))
+                # 检查订单是否已存在（顺带取出当前归属，用于归属保护）
+                cursor.execute("SELECT order_id, cookie_id FROM orders WHERE order_id = ?", (order_id,))
                 existing = cursor.fetchone()
+                existing_cookie_id = existing[1] if existing else None
 
                 if existing:
                     # 更新现有订单
@@ -7350,7 +7351,10 @@ class DBManager:
                     if order_status is not None:
                         update_fields.append("order_status = ?")
                         update_values.append(order_status)
-                    if cookie_id is not None:
+                    if cookie_id is not None and not existing_cookie_id:
+                        # 归属保护：只在订单无主时补写 cookie_id。
+                        # 有归属的订单不允许被改写——否则 A 账号的消息流反查
+                        # 到 B 账号的订单时，会把订单划归 A，造成归属串号。
                         update_fields.append("cookie_id = ?")
                         update_values.append(cookie_id)
                     if is_bargain is not None:
@@ -7518,12 +7522,15 @@ class DBManager:
                 self.conn.rollback()
                 return False
 
-    def get_recent_order_by_item_and_buyer(self, item_id: str, buyer_id: str):
+    def get_recent_order_by_item_and_buyer(self, item_id: str, buyer_id: str, cookie_id: str = None):
         """根据商品ID和买家ID获取最近的订单
 
         Args:
             item_id: 商品ID
             buyer_id: 买家ID
+            cookie_id: 账号ID（强烈建议提供）。不提供时跨全表匹配，可能命中
+                其他账号的订单，随后触发的订单更新会把归属改写（已由归属保护
+                拦截，但仍可能错误更新他人订单状态）。
 
         Returns:
             dict: 订单信息，如果没有找到则返回None
@@ -7531,14 +7538,24 @@ class DBManager:
         with self.lock:
             try:
                 cursor = self.conn.cursor()
-                cursor.execute('''
-                SELECT order_id, item_id, buyer_id, spec_name, spec_value,
-                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at
-                FROM orders
-                WHERE item_id = ? AND buyer_id = ?
-                ORDER BY created_at DESC
-                LIMIT 1
-                ''', (item_id, buyer_id))
+                if cookie_id:
+                    cursor.execute('''
+                    SELECT order_id, item_id, buyer_id, spec_name, spec_value,
+                           quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at
+                    FROM orders
+                    WHERE item_id = ? AND buyer_id = ? AND cookie_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    ''', (item_id, buyer_id, cookie_id))
+                else:
+                    cursor.execute('''
+                    SELECT order_id, item_id, buyer_id, spec_name, spec_value,
+                           quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at
+                    FROM orders
+                    WHERE item_id = ? AND buyer_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    ''', (item_id, buyer_id))
 
                 row = cursor.fetchone()
                 if row:
