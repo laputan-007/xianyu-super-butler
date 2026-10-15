@@ -1,16 +1,16 @@
-# 闲鱼智控（闲鱼超级管家）
+# 闲鱼超级管家（多账户稳定增强版）
 
 面向闲鱼卖家的账号、商品、订单、消息、自动回复与自动发货一体化管理系统。
-*一款能让你的想法'变现'的强大作品* 
-### 推荐使用云端版（GPT6自动过滑块+人工巡检）
-云端saas版本：https://xy.corleom.com/
-**本项目征集PR、功能更新，任何一个提交PR的作者会在未来获得顶配模型token奖励**
+*一款能让你的想法'变现'的强大作品*
 
-[![GitHub Stars](https://img.shields.io/github/stars/23Star/xianyu-super-butler?style=flat&logo=github&color=f5b301)](https://github.com/23Star/xianyu-super-butler/stargazers)
-[![Version](https://img.shields.io/badge/Version-3.1.0-52c41a)](https://github.com/23Star/xianyu-super-butler/releases)
+[![Version](https://img.shields.io/badge/Version-3.2.0-52c41a)](https://gitee.com/is-it-day-and-night/xianyu-super-butler)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-222222)](LICENSE)
+[![GitHub](https://img.shields.io/github/stars/laputan-007/xianyu-super-butler?style=flat&logo=github&color=f5b301)](https://github.com/laputan-007/xianyu-super-butler)
+
+- 主仓库（Gitee）：https://gitee.com/is-it-day-and-night/xianyu-super-butler
+- 镜像（GitHub）：https://github.com/laputan-007/xianyu-super-butler
 
 **一个人把多个闲鱼账号做成一门自动运转的生意，让你的创意自动'变现'**
 
@@ -24,6 +24,7 @@
 - ⭐ **买家互动** — 确认收货后自动评价、自动求小红花、自动发送致谢文本
 - 🤖 **商品自动化** — 商品同步、素材库、定时擦亮、自动上下架
 - 📊 **经营看板** — 成交额、到账、退款、订单和库存一屏掌握，**历史订单可一次性拉回**
+- 🔒 **并发安全架构（v3.2.0）** — 单事件循环 + 去重落库 + 备份恢复安全化：多账号数据不串号、重启不重复回复、手动发货不再随机失败，**2核2G 小机器稳定承载 25~30 个账号**
 
 ![闲鱼超级管家运营概览](docs/screenshots/revenue-overview.png)
 
@@ -44,6 +45,24 @@
 | 通知与日志 | 通知渠道、账号绑定、风险日志和系统日志 |
 | 设置 | 管理员账号与改密、注册与邮箱验证开关、服务、备份及系统配置 |
 | 公告与更新 | 从自建地址拉取公告与版本信息，首页横幅提示，「关于」页手动检查更新 |
+| 运行架构 | 单事件循环、SQLite WAL、消息去重落库、账号生命周期任务管理，多账户并发安全 |
+
+## v3.2.0 多账户并发与稳定性改造（本版重点）
+
+本版对运行架构做了一轮系统性加固，按功能拆分为独立提交（见提交历史），**业务逻辑零改动**：
+
+| 改造项 | 解决的问题 |
+| --- | --- |
+| 数据隔离 | 商品指定回复、订单归属、Cookie 配置列全部按账号隔离，杜绝 A 账号的数据串到 B 账号 |
+| 单事件循环 | uvicorn 并入账号主循环，跨事件循环调用故障从构造上消除；手动发货/发消息/人脸通知统一经账号主循环执行 |
+| 消息去重落库 | 去重状态写入数据库（TTL 6 小时），账号重启或断线重连后不再对买家重复回复 |
+| 备份恢复安全化 | 恢复全程持库锁并在原对象上重开连接；备份下载改走 SQLite 在线备份快照，堵死数据损坏窗口 |
+| SQLite WAL | 读写不互斥、commit 不强刷盘，定时备份与分析查询不再互相撞锁 |
+| 账号生命周期 | 后台任务全部登记、随实例一并取消，重启窗口不再有持旧 Cookie 执行自动评价等不可撤销动作的孤儿任务 |
+| 内存纪律 | `gc.freeze`、anyio 线程池收敛、SQL 日志默认关闭，长跑进程内存漂移趋平 |
+| 2C2G 部署包 | systemd 单元（OOM 分级保护主进程）+ 运维手册：[deploy/OPS-2C2G.md](deploy/OPS-2C2G.md) |
+
+容量红线：2核2G 建议 ≤30 账号 / ≤8 用户；更大规模按运维手册的硬件阶梯扩容（4C8G 起可拆进程部署）。
 
 ## 界面预览
 
@@ -92,58 +111,12 @@
 > 此外，海外出口 IP 也会显著增加闲鱼自有风控的触发概率。
 > **推荐部署到本地设备、自有 VPS 或国内服务器。**
 
-### 一条命令直接启动（最快，不用克隆仓库）
-
-有 Docker 就能跑，不需要下载源码：
+### Docker Compose 本地构建（含本版全部改造）
 
 ```bash
-docker run -d --name xianyu-butler \
-  -p 8080:8080 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/logs:/app/logs \
-  -v $(pwd)/backups:/app/backups \
-  -e ADMIN_USERNAME=admin \
-  -e ADMIN_PASSWORD=改成你自己的密码 \
-  --restart unless-stopped \
-  ghcr.io/23star/xianyu-super-butler:latest
-```
-
-浏览器打开 `http://服务器IP:8080` 即可。数据都在当前目录的 `data` / `logs` / `backups` 里，
-升级只需 `docker pull` 后重建容器，数据不丢。
-
-Windows PowerShell 把 `$(pwd)` 换成 `${PWD}`，续行的 `\` 换成反引号 `` ` ``。
-
-### Docker Compose（推荐长期使用）
-
-```bash
-git clone https://github.com/23Star/xianyu-super-butler.git
+git clone https://gitee.com/is-it-day-and-night/xianyu-super-butler.git
 cd xianyu-super-butler
-docker compose -f docker-compose.nas.yml up -d
-```
 
-同样是预构建镜像，不在本机编译任何东西，支持 amd64 / arm64。相比上面一条命令，
-Compose 的好处是配置写在文件里、改起来清楚，升级也只有一行命令。
-
-该配置不依赖 `.env`，管理员账号密码在 `docker-compose.nas.yml` 里的 `CHANGE_ME` 处直接改。
-
-### NAS 与低配设备（飞牛 fnOS、群晖、威联通、软路由、低配 VPS）
-
-**用上面那条命令，不要本地构建。**
-
-`npm ci`、前端打包、Python 依赖编译和 Chromium 下载会同时抢占 CPU 和内存，
-轻则卡十几分钟，重则内存不足被杀，反复重启表现为「装不上、机器卡死」。
-预构建镜像已同时提供 amd64 和 arm64，绕开全部编译步骤。
-
-```bash
-docker compose -f docker-compose.nas.yml up -d
-```
-
-飞牛 fnOS、群晖等图形界面的 Docker 通常没地方放 `.env`，所以这份配置把变量直接写在
-compose 文件里，改完 `CHANGE_ME` 就能用。
-
-### Docker 本地构建（需要改代码时）
-
-```bash
 cp .env.example .env          # 不改也能启动，此时使用默认密码
 docker compose up -d --build
 ```
@@ -156,12 +129,38 @@ docker compose -f docker-compose-cn.yml up -d --build
 
 可选 Nginx：`docker compose --profile with-nginx up -d --build`
 
+> 上游提供的预构建镜像（ghcr.io/23star）**不含本版的稳定性改造**，仅适合体验上游版本；
+> 需要本版能力请本地构建，或用下面的 systemd 裸机部署。
+> NAS / 低配设备注意：本地构建的 `npm ci`、前端打包与依赖编译会同时抢占 CPU 和内存，
+> 内存紧张时优先选择 systemd 裸机方式。
+
+### 低配服务器（2核2G）：systemd 裸机部署
+
+不跑 Docker 守护进程可省下 150~250MB 常驻内存，全部内存留给账号任务与浏览器毛刺：
+
+```bash
+git clone https://gitee.com/is-it-day-and-night/xianyu-super-butler.git
+cd xianyu-super-butler
+
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1          # Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt
+playwright install chromium
+
+sudo cp deploy/xianyu-butler.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now xianyu-butler
+```
+
+服务单元自带 OOM 分级保护（内存不足时先杀浏览器、绝不杀账号监听主进程）和崩溃自动重启。
+容量红线、Litestream 跨机备份、每日计划性重启、排障开关等运维要点见
+[deploy/OPS-2C2G.md](deploy/OPS-2C2G.md)。
+
 ### 源码运行（开发调试）
 
 需要 Python 3.11+、Node.js 20+、npm。
 
 ```bash
-git clone https://github.com/23Star/xianyu-super-butler.git
+git clone https://gitee.com/is-it-day-and-night/xianyu-super-butler.git
 cd xianyu-super-butler
 
 py -3.11 -m venv .venv
@@ -173,6 +172,9 @@ cd frontend && npm ci && npm run build && cd ..
 python Start.py
 ```
 
+启动时默认进入**单事件循环形态**（Web 与账号任务共用一个循环）；如需临时回退旧的双循环
+形态排查问题，设置环境变量 `API_SEPARATE_THREAD=1`。
+
 ### 访问
 
 - 管理页面：`http://localhost:8080/`
@@ -181,16 +183,17 @@ python Start.py
 
 默认管理员 **admin / admin123**，登录后请在「设置 → 账号与同步 → 修改登录密码」立即改掉。
 
-数据持久化到 `./data`（数据库）、`./logs`（日志）、`./backups`（备份）。
+数据持久化到 `./data`（数据库，WAL 模式）、`./logs`（日志）、`./backups`（备份）。
+首次启动会自动为数据库开启 WAL 并创建消息去重表，无需手工迁移。
 
 ### 更新
 
 ```bash
-# 预构建镜像（推荐方式对应的更新命令）
-docker compose -f docker-compose.nas.yml pull && docker compose -f docker-compose.nas.yml up -d
-
-# 本地构建
+# Docker 本地构建
 git pull && docker compose up -d --build
+
+# systemd 裸机
+git pull && sudo systemctl restart xianyu-butler
 ```
 
 > **滑块与人机验证、部署失败排查、使用流程** 见 [docs/deployment.md](docs/deployment.md)。
@@ -213,30 +216,15 @@ git pull && docker compose up -d --build
   </tr>
 </table>
 
-缺陷和功能建议请提交到 [GitHub Issues](https://github.com/23Star/xianyu-super-butler/issues)。
+缺陷和功能建议请提交到 [Gitee Issues](https://gitee.com/is-it-day-and-night/xianyu-super-butler/issues)。
 
 ## 许可与声明
 
-本项目基于 [zhinianboke/xianyu-auto-reply](https://github.com/zhinianboke/xianyu-auto-reply) 二次开发并持续维护，保留原项目核心能力，同时重构管理端、账号监听、商品同步、订单处理和发货规则。感谢原作者的开源工作。
+本项目基于 [23Star/xianyu-super-butler](https://github.com/23Star/xianyu-super-butler)（其自身基于
+[zhinianboke/xianyu-auto-reply](https://github.com/zhinianboke/xianyu-auto-reply)）二次开发并持续维护：
+保留原项目核心能力，v3.2.0 起进行了多账户并发与稳定性架构改造（单事件循环、数据落库去重、
+备份恢复安全化、账号生命周期管理、低配部署优化）。感谢两位上游作者的开源工作。
 
 项目使用 [GNU Affero General Public License v3.0](LICENSE)。修改、部署或通过网络提供服务时，请遵守 AGPL-3.0 的源代码公开义务。
 
 本项目仅供学习、研究和合法自动化使用。使用者应遵守法律法规及平台规则，并自行承担使用风险。
-
-## Star History
-
-<a href="https://www.star-history.com/?type=date&repos=23Star%2Fxianyu-super-butler">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=23Star/xianyu-super-butler&type=date&theme=dark&legend=top-left&sealed_token=AhEE4dCbaUSe6lOSCJhYlDz04x4r2C14buYVYWlJVlulk23LKk5DgHZfMIumVkiNUPsbFO--8IX-0pXCfW8nyyEN3NStTE-16pBQggRCq6gsUZRlegeZdTbWWU-UPKWAWlnyyQyndGhz-lPX0HJrKxSCriOB1fiyJljBO7eNsd4xVYkrByhViWaPMCv9" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=23Star/xianyu-super-butler&type=date&legend=top-left&sealed_token=AhEE4dCbaUSe6lOSCJhYlDz04x4r2C14buYVYWlJVlulk23LKk5DgHZfMIumVkiNUPsbFO--8IX-0pXCfW8nyyEN3NStTE-16pBQggRCq6gsUZRlegeZdTbWWU-UPKWAWlnyyQyndGhz-lPX0HJrKxSCriOB1fiyJljBO7eNsd4xVYkrByhViWaPMCv9" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=23Star/xianyu-super-butler&type=date&legend=top-left&sealed_token=AhEE4dCbaUSe6lOSCJhYlDz04x4r2C14buYVYWlJVlulk23LKk5DgHZfMIumVkiNUPsbFO--8IX-0pXCfW8nyyEN3NStTE-16pBQggRCq6gsUZRlegeZdTbWWU-UPKWAWlnyyQyndGhz-lPX0HJrKxSCriOB1fiyJljBO7eNsd4xVYkrByhViWaPMCv9" />
-  </picture>
-</a>
-
-Star 历史曲线实时读取 GitHub 数据，不需要人工更新。
-
-## Fork 网络总 Star
-
-[![Fork Network Stars](docs/fork-network-stars.svg)](https://github.com/23Star/xianyu-super-butler/network/members)
-
-该统计在主仓库 Star 之外累加全部公开 Fork 获得的 Star，每 6 小时自动刷新。由于同一用户可能同时 Star 多个仓库，此处是各仓库 Star 数之和，并非去重后的独立用户数。
