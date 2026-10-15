@@ -57,9 +57,11 @@ class DBManager:
         self.conn = None
         self.lock = threading.RLock()  # 使用可重入锁保护数据库操作
 
-        # SQL日志配置 - 默认启用
-        self.sql_log_enabled = True  # 默认启用SQL日志
-        self.sql_log_level = 'INFO'  # 默认使用INFO级别
+        # SQL日志配置 - 默认关闭：_execute_sql 在持锁状态下逐条写日志，
+        # 多账号高频消息下会显著放大锁持有时间（2C2G 部署尤其敏感）。
+        # 需要排查时可设环境变量 SQL_LOG_ENABLED=true 开启。
+        self.sql_log_enabled = False  # 默认关闭SQL日志
+        self.sql_log_level = 'INFO'  # 开启时默认使用INFO级别
 
         # 允许通过环境变量覆盖默认设置
         if os.getenv('SQL_LOG_ENABLED'):
@@ -67,14 +69,15 @@ class DBManager:
         if os.getenv('SQL_LOG_LEVEL'):
             self.sql_log_level = os.getenv('SQL_LOG_LEVEL', 'INFO').upper()
 
-        logger.info(f"SQL日志已启用，日志级别: {self.sql_log_level}")
+        logger.info(f"SQL日志当前状态: {'启用' if self.sql_log_enabled else '关闭'}, 日志级别: {self.sql_log_level}")
 
         self.init_db()
     
     def init_db(self):
         """初始化数据库表结构"""
         try:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
+            self._apply_connection_pragmas(self.conn)
             cursor = self.conn.cursor()
             
             # 创建用户表
