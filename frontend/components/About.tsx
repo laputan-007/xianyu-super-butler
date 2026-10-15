@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Info, Megaphone, RefreshCw, Download, ExternalLink, CheckCircle2, Globe, Github, Mail, Users } from 'lucide-react';
-import { getAnnouncement } from '../services/api';
+import { Info, Megaphone, RefreshCw, ExternalLink, Send, Loader2 } from 'lucide-react';
+import { getAnnouncement, testQmsgChannel } from '../services/api';
+import { notify } from '../services/feedback';
 import { AnnouncementPayload } from '../types';
 import { EmptyState, PageHeader } from './ui';
 
 // 与 README「交流与反馈」保持同一个群；mqqapi 协议在装有 QQ 的设备上
-// 点击会直接唤起加群卡片，未安装 QQ 时靠群号文字手动搜索兜底。
-const QQ_GROUP_NUMBER = '704866149';
-const QQ_GROUP_LINK = `mqqapi://card/show_pslcard?src_type=internal&version=1&uin=${QQ_GROUP_NUMBER}&card_type=group&source=qrcode`;
 
 const levelStyles: Record<string, string> = {
   info: 'border-blue-200 bg-blue-50 text-blue-800',
@@ -42,6 +40,23 @@ const About: React.FC = () => {
 
   const announcements = data?.announcements || [];
 
+  // Qmsg 测试：向已配置的 Qmsg 渠道发一条真实消息；未配置时后端返回引导提示。
+  // 可输入自定义文字（留空用默认文案）
+  const [qmsgTesting, setQmsgTesting] = useState(false);
+  const [qmsgTestText, setQmsgTestText] = useState('');
+  const handleQmsgTest = async () => {
+    if (qmsgTesting) return;
+    setQmsgTesting(true);
+    try {
+      const res = await testQmsgChannel(qmsgTestText.trim() || undefined);
+      notify(res.message || '测试消息已发送', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '测试失败', 'error');
+    } finally {
+      setQmsgTesting(false);
+    }
+  };
+
   return (
     <div className="page-stack animate-fade-in">
       <PageHeader
@@ -70,39 +85,40 @@ const About: React.FC = () => {
             </p>
           </div>
 
-          <div className={`rounded-md border p-4 ${
-            data?.has_update ? 'border-amber-200 bg-amber-50' : 'border-gray-200'
-          }`}>
-            <p className="text-xs font-semibold text-gray-500">最新版本</p>
-            {data?.has_update ? (
-              <>
-                <p className="mt-1 text-2xl font-bold text-amber-700">
-                  {data.latest_version}
-                </p>
-                {data.release_notes && (
-                  <p className="mt-2 whitespace-pre-wrap text-xs text-amber-800">
-                    {data.release_notes}
-                  </p>
-                )}
-                {data.download_url && (
-                  <a
-                    href={data.download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ios-btn-primary mt-3 inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs"
-                  >
-                    <Download className="h-4 w-4" />
-                    前往下载
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </>
-            ) : (
-              <p className="mt-1 flex items-center gap-2 text-sm font-bold text-green-700">
-                <CheckCircle2 className="h-5 w-5" />
-                {data?.source_configured ? '已是最新版本' : '未配置更新源'}
-              </p>
-            )}
+          <div className="rounded-md border border-[var(--border-brand)] bg-[var(--brand-soft)] p-4">
+            <p className="text-xs font-semibold text-[var(--brand-text)]">QQ 机器人推送 · Qmsg</p>
+            <a
+              href="https://qmsg.zendee.cn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1.5 text-lg font-bold text-[var(--text)] hover:underline"
+            >
+              qmsg.zendee.cn
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            </a>
+            <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+              在 Qmsg 控制台扫码加机器人好友并完成绑定后，把 KEY 填入
+              「通知与日志 → 通知渠道」的 Qmsg 渠道，新消息提醒、系统公告与版本更新
+              就会实时推送到你的 QQ。邮件通知同理，配置 SMTP 渠道即可。
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                value={qmsgTestText}
+                onChange={event => setQmsgTestText(event.target.value)}
+                placeholder="自定义测试文字（留空用默认文案）"
+                className="ios-input h-9 min-w-0 flex-1 rounded-md px-3 text-xs sm:max-w-56"
+                aria-label="测试消息文字"
+              />
+              <button
+                type="button"
+                onClick={() => void handleQmsgTest()}
+                disabled={qmsgTesting}
+                className="ios-btn-primary h-9 inline-flex shrink-0 items-center gap-2 rounded-md px-3 text-xs"
+              >
+                {qmsgTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {qmsgTesting ? '发送中' : '发送测试消息'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -118,61 +134,6 @@ const About: React.FC = () => {
             拉取公告失败：{data.error}
           </p>
         )}
-
-        <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-semibold text-gray-500">官网</span>
-            <a
-              href="https://xy.corleom.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-[#8c7900] hover:underline"
-            >
-              <Globe className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">xy.corleom.com</span>
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-semibold text-gray-500">QQ 交流群</span>
-            <a
-              href={QQ_GROUP_LINK}
-              className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-[#8c7900] hover:underline"
-            >
-              <Users className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">点击加入 QQ 群 3</span>
-            </a>
-            <span className="text-[11px] text-gray-400">
-              群号 {QQ_GROUP_NUMBER}，未唤起 QQ 时可手动搜索加群
-            </span>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-semibold text-gray-500">开源仓库</span>
-            <a
-              href="https://github.com/23Star/xianyu-super-butler"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-[#8c7900] hover:underline"
-            >
-              <Github className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">23Star/xianyu-super-butler</span>
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs font-semibold text-gray-500">联系邮箱</span>
-            <a
-              href="mailto:admin@corleom.com"
-              className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-[#8c7900] hover:underline"
-            >
-              <Mail className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">admin@corleom.com</span>
-            </a>
-          </div>
-        </div>
       </section>
 
       <section className="section-panel">
