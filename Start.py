@@ -682,9 +682,8 @@ from app import cookie_manager as cm
 from app.file_log_collector import setup_file_logging
 
 
-def _start_api_server():
-    """后台线程启动 FastAPI 服务"""
-    loop = None
+def _resolve_api_address():
+    """解析 Web 服务监听地址（环境变量优先，配置文件兜底）"""
     api_conf = AUTO_REPLY.get('api', {})
 
     # 优先使用环境变量配置
@@ -711,7 +710,15 @@ def _start_api_server():
             host = parsed.hostname
         port = parsed.port or 8080
 
-    logger.info(f"启动Web服务器: http://{host}:{port}")
+    return host, port
+
+
+def _start_api_server():
+    """后台线程启动 FastAPI 服务（兼容回退形态，默认不再使用）"""
+    loop = None
+    host, port = _resolve_api_address()
+
+    logger.info(f"启动Web服务器(独立线程): http://{host}:{port}")
     # 在后台线程中创建独立事件循环并直接运行 server.serve()
     import uvicorn
     try:
@@ -728,6 +735,23 @@ def _start_api_server():
                 loop.stop()
             loop.close()
         asyncio.set_event_loop(None)
+
+
+async def _start_api_server_on_main_loop():
+    """在主事件循环上直接运行 uvicorn（默认形态）。
+
+    单循环：所有账号实例（XianyuLive 的 WebSocket、锁、aiohttp session）
+    与 FastAPI 端点共享同一个事件循环，"attached to a different event
+    loop" 这一整类跨循环故障从构造上消失；同步端点仍由 uvicorn 放进
+    线程池执行，不受影响。信号处理也回归主线程，优雅退出更可靠。
+    """
+    import uvicorn
+
+    host, port = _resolve_api_address()
+    logger.info(f"启动Web服务器(主循环合并): http://{host}:{port}")
+    config = uvicorn.Config("app.reply_server:app", host=host, port=port, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
 
@@ -804,10 +828,26 @@ async def main():
         manager.add_cookie('default', env_cookie)
         logger.info("从环境变量加载 default Cookie")
 
-    # 启动 API 服务线程
-    print("启动 API 服务线程...")
-    threading.Thread(target=_start_api_server, daemon=True).start()
-    print("API 服务线程已启动")
+    # 启动 API 服务：默认与账号任务合并到主事件循环（单循环形态）。
+    # 设置 API_SEPARATE_THREAD=1 可回退到旧的双循环线程形态（一个版本
+    # 周期后移除）。
+    if os.getenv('API_SEPARATE_THREAD', '').lower() in ('1', 'true', 'yes'):
+        print("启动 API 服务线程（兼容模式，双事件循环）...")
+        threading.Thread(target=_start_api_server, daemon=True).start()
+        print("API 服务线程已启动")
+    else:
+        print("启动 API 服务（主循环合并模式）...")
+        api_task = asyncio.create_task(_start_api_server_on_main_loop())
+
+        def _log_api_task_failure(task: asyncio.Task):
+            if task.cancelled():
+                return
+            exc = task.exception()
+            if exc is not None:
+                logger.error(f"API 服务任务异常退出: {exc}")
+
+        api_task.add_done_callback(_log_api_task_failure)
+        print("API 服务已在主循环上启动")
 
     # 启动数据库自动备份：全局一份，不随账号数量重复
     print("启动数据库自动备份任务...")
