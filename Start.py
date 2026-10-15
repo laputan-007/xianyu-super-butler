@@ -782,6 +782,23 @@ def load_keywords_file(path: str):
 async def main():
     print("开始启动主程序...")
 
+    # 内存纪律（2C2G 部署的关键参数）：
+    # - gc.freeze 把导入期对象冻结进永久代，长跑进程减少全代扫描停顿；
+    # - 放宽 gen0 阈值，降低 GC 触发频率（异步服务对象存活率高，频繁
+    #   gen0 扫描的收益小于停顿代价）；
+    # - anyio 线程池（FastAPI 同步端点用）从默认 40 线程收敛到 8，
+    #   每线程 8MB 栈内存在小内存机器上是纯浪费。
+    try:
+        import gc
+        gc.collect()
+        gc.freeze()
+        gc.set_threshold(50000, 50, 50)
+        import anyio
+        anyio.to_thread.current_default_thread_limiter().total_tokens = 8
+        print(f"{_OK} 内存纪律已应用: gc.freeze + 线程池上限 8")
+    except Exception as gc_e:
+        print(f"{_WARN} 内存纪律应用失败（不影响启动）: {gc_e}")
+
     # 初始化文件日志收集器
     print("初始化文件日志收集器...")
     setup_file_logging()
