@@ -1,7 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Check, ChevronDown, LogOut, Menu, Palette, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import type { AccountDetail } from '../types';
 import ThemeToggle from './ThemeToggle';
+import { BrandPreference, BRAND_PREFERENCES, useTheme } from '../theme/ThemeProvider';
+
+/** 主题色下拉的展示名（与设置页外观分区的色板一致） */
+const BRAND_LABELS: Record<BrandPreference, string> = {
+  yellow: '闲鱼黄',
+  sky: '天蓝',
+  jade: '水绿',
+  royal: '皇家蓝',
+  coral: '珊瑚橙',
+  violet: '紫罗兰',
+  rose: '玫红',
+};
 
 interface HeaderProps {
   pageTitle: string;
@@ -46,6 +58,8 @@ const Header: React.FC<HeaderProps> = ({
   const [logoutPinned, setLogoutPinned] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const userChipRef = useRef<HTMLDivElement>(null);
+  // 主题色换肤：顶栏下拉直达，切换即时生效（本浏览器偏好）
+  const { brand, setBrand } = useTheme();
 
   // 账号下拉与退出钉住态互斥 + 点击外部关闭
   useEffect(() => {
@@ -174,6 +188,25 @@ const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* 主题色下拉：调色板图标随当前主题色着色，选择即时生效 */}
+        <div className="relative flex h-9 items-center">
+          <Palette className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--brand-text)]" />
+          <select
+            value={brand}
+            onChange={(event) => setBrand(event.target.value as BrandPreference)}
+            aria-label="主题色"
+            title="切换全站主题色（按钮、图表与强调元素）"
+            className="h-9 cursor-pointer appearance-none rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] pl-7 pr-6 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--border-strong)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+          >
+            {BRAND_PREFERENCES.map((option) => (
+              <option key={option} value={option}>
+                {BRAND_LABELS[option]}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-gray-400" />
         </div>
 
         <ThemeToggle header />

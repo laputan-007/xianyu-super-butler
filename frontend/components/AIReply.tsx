@@ -204,7 +204,7 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
                 type="checkbox"
                 checked={settings.ai_enabled}
                 onChange={event => updateSetting('ai_enabled', event.target.checked)}
-                className="h-5 w-5 accent-yellow-400"
+                className="h-5 w-5 accent-brand"
               />
             </label>
           </section>
@@ -388,7 +388,7 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
                       type="checkbox"
                       checked={settings.context_enabled}
                       onChange={event => updateSetting('context_enabled', event.target.checked)}
-                      className="h-5 w-5 shrink-0 accent-yellow-400"
+                      className="h-5 w-5 shrink-0 accent-brand"
                     />
                   </label>
                   <label>
@@ -445,7 +445,7 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
                     {testing ? '生成中' : '测试回复'}
                   </button>
                   {testReply && (
-                    <div className="mt-4 border-l-4 border-yellow-400 bg-yellow-50 px-4 py-3 text-sm leading-6 text-gray-800">
+                    <div className="mt-4 border-l-4 border-brand-300 bg-brand-50 px-4 py-3 text-sm leading-6 text-gray-800">
                       {testReply}
                     </div>
                   )}

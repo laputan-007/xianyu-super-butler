@@ -8,7 +8,7 @@ import { EmptyState, PageHeader, PageTabs } from './ui';
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
-    processing: 'bg-yellow-100 text-yellow-800',
+    processing: 'bg-brand-100 text-brand-text',
     pending_ship: 'bg-brand text-black',
     shipped: 'bg-blue-100 text-blue-700',
     completed: 'bg-green-100 text-green-700',
@@ -673,7 +673,7 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
                           setRateValue(1);
                           setRateAnonymous(false);
                         }}
-                        className="rounded-md p-2 text-gray-500 transition-colors hover:bg-yellow-50 hover:text-yellow-600"
+                        className="rounded-md p-2 text-gray-500 transition-colors hover:bg-brand-50 hover:text-brand-text"
                         title="给买家评价"
                       >
                         <Star className="w-4 h-4" />
@@ -1002,8 +1002,8 @@ const OrderList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (i
                 className="w-full rounded-md border border-gray-200 p-4 text-left transition-colors hover:border-amber-400 hover:bg-yellow-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-yellow-100">
-                    <PackageCheck className="w-5 h-5 text-yellow-700" />
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand-100">
+                    <PackageCheck className="w-5 h-5 text-brand-text" />
                   </div>
                   <div>
                     <div className="font-bold text-gray-900 text-sm">完整发货（匹配卡券并发送）</div>

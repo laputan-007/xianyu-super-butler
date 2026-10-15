@@ -623,7 +623,7 @@ const AccountList: React.FC = () => {
                     onError={() => setFailedAvatars(previous => new Set(previous).add(account.avatar_url!))}
                   />
                 ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-md bg-yellow-100 text-lg font-bold text-yellow-800">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-md bg-brand-100 text-lg font-bold text-brand-text">
                     {account.nickname?.trim().charAt(0) || account.remark?.trim().charAt(0) || '闲'}
                   </div>
                 )}

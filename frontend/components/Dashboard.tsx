@@ -18,7 +18,7 @@ const sumUsageBy = (counts: Record<string, number> | undefined, prefix: string):
 // 状态徽章组件
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
-    processing: 'bg-yellow-100 text-yellow-800',
+    processing: 'bg-brand-100 text-brand-text',
     pending_ship: 'bg-brand text-black',
     shipped: 'bg-blue-100 text-blue-700',
     completed: 'bg-green-100 text-green-700',

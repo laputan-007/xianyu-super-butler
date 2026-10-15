@@ -646,7 +646,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
                   onClick={() => setFilterForm({ ...filterForm, enabled: !filterForm.enabled })}
                   className="flex items-center gap-2 text-sm font-bold text-gray-700"
                 >
-                  <span className={`relative h-6 w-11 rounded-full ${filterForm.enabled ? 'bg-yellow-400' : 'bg-gray-300'}`}>
+                  <span className={`relative h-6 w-11 rounded-full ${filterForm.enabled ? 'bg-brand' : 'bg-gray-300'}`}>
                     <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${filterForm.enabled ? 'translate-x-5' : ''}`} />
                   </span>
                   启用规则
@@ -789,7 +789,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
                     type="checkbox"
                     checked={deleteForm.skip_reply_activity}
                     onChange={(event) => setDeleteForm({ ...deleteForm, skip_reply_activity: event.target.checked })}
-                    className="h-4 w-4 accent-yellow-400"
+                    className="h-4 w-4 accent-brand"
                   />
                   排除有自动回复活动的商品
                 </label>
@@ -798,7 +798,7 @@ const ProductAutomation: React.FC<{ syncedAccountId?: string; onSyncedAccountCha
                     type="checkbox"
                     checked={deleteForm.skip_order_activity}
                     onChange={(event) => setDeleteForm({ ...deleteForm, skip_order_activity: event.target.checked })}
-                    className="h-4 w-4 accent-yellow-400"
+                    className="h-4 w-4 accent-brand"
                   />
                   排除有订单记录的商品
                 </label>
