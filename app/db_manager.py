@@ -7749,11 +7749,15 @@ class DBManager:
         except Exception as e:
             logger.error(f"升级keywords表失败: {e}")
             raise
-    def get_item_replay(self, item_id: str) -> Optional[Dict[str, Any]]:
+    def get_item_replay(self, cookie_id: str, item_id: str) -> Optional[Dict[str, Any]]:
         """
-        根据商品ID获取商品回复信息，并返回统一格式
+        获取指定账号和商品的回复信息（统一格式）。
+
+        必须带 cookie_id 过滤：item_id 不是账号内唯一键，两个账号可能挂同一
+        商品 ID，按 item_id 全局查询会把别的账号配置的回复内容串过来。
 
         Args:
+            cookie_id (str): 账号ID
             item_id (str): 商品ID
 
         Returns:
@@ -7764,8 +7768,8 @@ class DBManager:
                 cursor = self.conn.cursor()
                 cursor.execute('''
                     SELECT reply_content FROM item_replay
-                    WHERE item_id = ?
-                ''', (item_id,))
+                    WHERE cookie_id = ? AND item_id = ?
+                ''', (cookie_id, item_id))
 
                 row = cursor.fetchone()
                 if row:

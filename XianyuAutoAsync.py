@@ -4496,8 +4496,8 @@ class XianyuLive:
 
             # 进行变量替换
             try:
-                # 获取当前商品是否有设置自动回复
-                item_replay = db_manager.get_item_replay(item_id)
+                # 获取当前商品是否有设置自动回复（必须限定本账号，防止跨账号串内容）
+                item_replay = db_manager.get_item_replay(self.cookie_id, item_id) if item_id else None
 
                 formatted_reply = reply_content.format(
                     send_user_name=send_user_name,
