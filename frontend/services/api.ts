@@ -605,6 +605,30 @@ export const downshelfItem = async (cookieId: string, itemId: string): Promise<{
   return post('/items/downshelf', { cookie_id: cookieId, item_id: itemId });
 };
 
+// ---- 本地公告（管理员发布，全站推送） ----
+
+/** 发布公告：写入本地公告表并实时广播给所有在线用户 */
+export const publishAnnouncement = async (data: {
+  title: string;
+  content: string;
+  level: 'info' | 'warning' | 'danger';
+}): Promise<{ success: boolean; message: string }> => {
+  return post('/announcements/publish', data);
+};
+
+/** 最新一条本地公告（登录后对比已见 ID 决定是否推送铃铛） */
+export const getLatestAnnouncement = async (): Promise<{
+  success: boolean;
+  data: { id: number; level: string; title: string; content: string; published_at: string } | null;
+}> => {
+  return get('/announcements/latest');
+};
+
+/** 测试 Qmsg 渠道：向已配置的第一个启用 Qmsg 渠道发测试消息（可带自定义文字）；未配置返回 400 引导 */
+export const testQmsgChannel = async (message?: string): Promise<{ success: boolean; message: string }> => {
+  return post('/notification-channels/qmsg-test', message !== undefined ? { message } : {});
+};
+
 /** 从闲鱼平台删除商品（本地记录同步移除） */
 export const platformDeleteItem = async (cookieId: string, itemId: string): Promise<{ success: boolean; message: string }> => {
   return post('/items/platform-delete', { cookie_id: cookieId, item_id: itemId });
@@ -1016,7 +1040,12 @@ export interface UsageStatsResponse {
 
 export const getUsageStats = async (days: number): Promise<UsageStatsResponse> => {
     const res = await get<UsageStatsResponse & { data?: UsageStatsResponse }>(`/usage-stats?days=${days}`);
-    return (res as { data?: UsageStatsResponse }).data || (res as UsageStatsResponse);
+    const payload = (res as { data?: UsageStatsResponse }).data || (res as UsageStatsResponse);
+    // 代理漏配/网关异常时可能拿到 HTML 字符串——不校验会流进组件造成运行时崩溃
+    if (!payload || typeof payload !== 'object' || !Array.isArray(payload.daily) || typeof payload.totals !== 'object') {
+        throw new Error('用量统计数据格式异常，请稍后重试');
+    }
+    return payload;
 };
 
 // AI 调用留痕（近 7 天，每次真实 API 调用一行：token 用量 + 回复内容）

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, LogOut, Menu, Palette, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import type { AccountDetail } from '../types';
 import ThemeToggle from './ThemeToggle';
+import NotificationBell from './NotificationBell';
+import BrandLogo from './BrandLogo';
 import { BrandPreference, BRAND_PREFERENCES, useTheme } from '../theme/ThemeProvider';
 
 /** 主题色下拉的展示名（与设置页外观分区的色板一致） */
@@ -22,6 +24,8 @@ interface HeaderProps {
   onAccountChange: (id: string) => void;
   onLogout: () => void;
   onOpenMobileNav: () => void;
+  /** 通知铃铛点击买家消息时跳转消息中心 */
+  onNavigateToMessages: () => void;
   /** 登录用户信息（最右侧展示） */
   username: string;
   isAdmin: boolean;
@@ -48,6 +52,7 @@ const Header: React.FC<HeaderProps> = ({
   onAccountChange,
   onLogout,
   onOpenMobileNav,
+  onNavigateToMessages,
   username,
   isAdmin,
   sidebarCollapsed,
@@ -104,15 +109,20 @@ const Header: React.FC<HeaderProps> = ({
           <PanelLeftClose className="hidden h-5 w-5 lg:block" />
         )}
       </button>
-      <h1 className="min-w-0 truncate text-[15px] font-bold text-[var(--text)]">{pageTitle}</h1>
+      {/* 移动端：汉堡旁常驻品牌（侧栏收进抽屉后顶栏是唯一品牌位） */}
+      <div className="flex min-w-0 items-center gap-1.5 lg:hidden">
+        <BrandLogo className="h-6 w-6" />
+        <span className="brand-wordmark text-[15px] font-black leading-none">鱼小铺</span>
+      </div>
+      <h1 className="hidden min-w-0 truncate text-[15px] font-bold text-[var(--text)] lg:block">{pageTitle}</h1>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-1.5 md:gap-2">
         {/* 账号切换器 */}
         <div ref={accountMenuRef} className="relative">
           <button
             type="button"
             onClick={() => setAccountMenuOpen(open => !open)}
-            className="flex h-9 max-w-[184px] items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]"
+            className="flex h-9 max-w-[184px] items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] px-2 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] md:px-2.5"
             aria-haspopup="listbox"
             aria-expanded={accountMenuOpen}
             title="切换管理的账号"
@@ -122,16 +132,16 @@ const Header: React.FC<HeaderProps> = ({
                 <img src={normalizeAvatarUrl(current.avatar_url)} alt="" className="h-full w-full object-cover" />
               )}
             </span>
-            <span className="truncate text-[13px] font-medium">{displayName(current)}</span>
+            <span className="hidden max-w-[110px] truncate text-[13px] font-medium md:block">{displayName(current)}</span>
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${current?.enabled ? 'bg-emerald-500' : 'bg-gray-400'}`} />
             <ChevronDown
-              className={`h-3.5 w-3.5 shrink-0 text-[var(--text-soft)] transition-transform ${accountMenuOpen ? 'rotate-180' : ''}`}
+              className={`hidden h-3.5 w-3.5 shrink-0 text-[var(--text-soft)] transition-transform md:block ${accountMenuOpen ? 'rotate-180' : ''}`}
             />
           </button>
 
           {accountMenuOpen && (
             <div
-              className="dropdown-pop-in absolute right-0 top-full z-30 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg"
+              className="header-popover dropdown-pop-in absolute right-0 top-full z-30 mt-2 w-64 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-lg"
               role="listbox"
               aria-label="选择管理的账号"
             >
@@ -191,7 +201,7 @@ const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* 主题色下拉：调色板图标随当前主题色着色，选择即时生效 */}
-        <div className="relative flex h-9 items-center">
+        <div className="relative hidden h-9 items-center md:flex">
           <Palette className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--brand-text)]" />
           <select
             value={brand}
@@ -208,6 +218,8 @@ const Header: React.FC<HeaderProps> = ({
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-gray-400" />
         </div>
+
+        <NotificationBell onOpenMessage={onNavigateToMessages} />
 
         <ThemeToggle header />
 

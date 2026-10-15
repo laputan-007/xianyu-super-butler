@@ -4965,6 +4965,20 @@ class XianyuLive:
 
             logger.info(f"📱 开始发送消息通知 - 账号: {self.cookie_id}, 买家: {send_user_name}")
 
+            # 顶栏通知铃铛：通知渠道开始派发即推送一条系统通知事件
+            # （无论渠道成败，用户都该在网页端看到「有一条通知」）
+            try:
+                from app.realtime_hub import realtime_hub
+                realtime_hub.publish_for_cookie(self.cookie_id, {
+                    "type": "notification",
+                    "cookie_id": self.cookie_id,
+                    "title": f"{send_user_name} 的消息已触发通知",
+                    "content": str(send_message)[:120],
+                    "time": int(time.time() * 1000),
+                })
+            except Exception as exc:
+                logger.debug(f"通知事件推送失败: {self._safe_str(exc)}")
+
             # 获取当前账号的通知配置
             notifications = db_manager.get_account_notifications(self.cookie_id)
 

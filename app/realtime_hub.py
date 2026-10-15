@@ -82,6 +82,27 @@ class RealtimeHub:
 
     # -------------------- 发布 --------------------
 
+    def publish_all(self, event: Dict[str, Any]) -> None:
+        """从任意线程调用：把事件推给所有在线订阅者（全站广播，如发布公告）。
+
+        与 publish_for_cookie 同一套线程安全投递；无人在线时是空操作。
+        """
+        with self._lock:
+            entries = [entry for user_entries in self._subscribers.values() for entry in user_entries]
+        for loop, queue in entries:
+            def deliver(target: asyncio.Queue = queue) -> None:
+                if target.full():
+                    try:
+                        target.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                target.put_nowait(event)
+            try:
+                loop.call_soon_threadsafe(deliver)
+            except RuntimeError:
+                # 订阅者所在循环已关闭（服务停止中），跳过
+                pass
+
     def publish_for_cookie(self, cookie_id: str, event: Dict[str, Any]) -> None:
         """从任意线程调用：把事件推给拥有该账号的后台用户的所有订阅。
 

@@ -11,13 +11,13 @@ const backendPrefixes = [
   'login', 'logout', 'register', 'verify', 'change-password',
   'generate-captcha', 'verify-captcha', 'send-verification-code',
   'registration-status', 'login-info-status', 'geetest', 'health',
-  'admin', 'ai-reply-settings', 'ai-reply-test', 'analytics', 'auto-reply-logs',
-  'risk-control-logs', 'blacklist', 'cards', 'chat', 'cookies',
+  'admin', 'ai-reply-settings', 'ai-reply-test', 'analytics', 'announcements', 'auto-reply-logs',
+  'risk-control-logs', 'blacklist', 'cards', 'chat', 'cookies', 'events',
   'default-replies', 'delivery-block-rules', 'delivery-rules',
   'item-delivery-configs', 'items', 'keywords-with-item-id', 'logs',
   'message-filters', 'message-notifications',
   'notification-channels', 'notification-events', 'product-automation',
-  'qr-login', 'quick-phrases', 'system-settings', 'upload-image',
+  'qr-login', 'quick-phrases', 'system-settings', 'upload-image', 'usage-stats',
   'api', 'static',
 ];
 
@@ -28,7 +28,9 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 9999,
     proxy: {
-      [`^/(${backendPrefixes.join('|')})(/|$)`]: {
+      // 末尾的 [?/] 兜住带查询串的根级路由：vite6 用「路径+查询串」整体做正则匹配，
+      // 如 /usage-stats?days=7 若只允许 (/|$) 会漏进 SPA 兜底返回 HTML
+      [`^/(${backendPrefixes.join('|')})([/?]|$)`]: {
         target: BACKEND,
         changeOrigin: true,
         ws: true,
