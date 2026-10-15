@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AdminStats, OrderAnalytics, Order, OrderStatus, Item } from '../types';
 import { getAdminStats, getOrderAnalytics, getValidOrders, getItems } from '../services/api';
 import {TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, BarChart3, PackageCheck, ExternalLink, RefreshCw, Percent, Trophy, Sparkles, BellRing, Mail} from 'lucide-react';
@@ -68,6 +68,9 @@ const Dashboard: React.FC = () => {
   const [previousAnalytics, setPreviousAnalytics] = useState<OrderAnalytics | null>(null); // 用于计算趋势
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  // 内容保留式刷新：仅首次加载显示整页 PageLoading，后续刷新轻微压暗内容
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
+  const firstLoadRef = useRef(true);
   const [reloadToken, setReloadToken] = useState(0);
   // 系统用量（AI 调用 / 通知推送 / 邮件发送，近 7 天；口径随登录身份自动切换）
   const [usageStats, setUsageStats] = useState<UsageStatsResponse | null>(null);
@@ -76,19 +79,20 @@ const Dashboard: React.FC = () => {
     getUsageStats(7).then(setUsageStats).catch(() => setUsageStats(null));
   }, [reloadToken]);
 
-  // 用量汇总与每日序列（分组柱状图数据：邮件是通知的子集，不堆叠避免双计）
-  const usageAiTotal = (usageStats?.totals.ai_ok ?? 0) + (usageStats?.totals.ai_fail ?? 0);
+  // 用量汇总与每日序列（分组柱状图数据：邮件是通知的子集，不堆叠避免双计）。
+  // 接口结构异常时按 0 处理——总览是首页，不能因一个统计接口坏掉而白屏
+  const usageAiTotal = (usageStats?.totals?.ai_ok ?? 0) + (usageStats?.totals?.ai_fail ?? 0);
   const usageNotifyTotal = Object.entries(usageStats?.totals ?? {})
     .filter(([key]) => !key.startsWith('ai_'))
     .reduce((sum, [, value]) => sum + value, 0);
   const usageEmailTotal = sumUsageBy(usageStats?.totals, 'email');
   const usageChartData = (usageStats?.daily ?? []).map(day => ({
-    name: day.date.slice(5),
-    'AI 调用': (day.counts.ai_ok ?? 0) + (day.counts.ai_fail ?? 0),
-    '通知推送': Object.entries(day.counts)
+    name: (day?.date || '').slice(5),
+    'AI 调用': (day?.counts?.ai_ok ?? 0) + (day?.counts?.ai_fail ?? 0),
+    '通知推送': Object.entries(day?.counts ?? {})
       .filter(([key]) => !key.startsWith('ai_'))
       .reduce((sum, [, value]) => sum + value, 0),
-    '邮件发送': (day.counts.email_ok ?? 0) + (day.counts.email_fail ?? 0),
+    '邮件发送': (day?.counts?.email_ok ?? 0) + (day?.counts?.email_fail ?? 0),
   }));
   const usageHasData = usageAiTotal + usageNotifyTotal > 0;
 
@@ -308,7 +312,13 @@ const Dashboard: React.FC = () => {
     let cancelled = false;
 
     const loadDashboard = async () => {
-      setDashboardLoading(true);
+      // 首次进入显示整页加载；之后切时间范围/刷新只轻微压暗内容原地更新，
+      // 不再整页闪烁（数据概览是首页，闪烁感最伤体验）
+      if (firstLoadRef.current) {
+        setDashboardLoading(true);
+      } else {
+        setDashboardRefreshing(true);
+      }
       setDashboardError(null);
 
       try {
@@ -333,7 +343,11 @@ const Dashboard: React.FC = () => {
         console.error('加载仪表盘失败:', error);
         setDashboardError(error instanceof Error ? error.message : '仪表盘数据加载失败');
       } finally {
-        if (!cancelled) setDashboardLoading(false);
+        if (!cancelled) {
+          setDashboardLoading(false);
+          setDashboardRefreshing(false);
+          firstLoadRef.current = false;
+        }
       }
     };
 
@@ -479,9 +493,9 @@ const Dashboard: React.FC = () => {
   ];
 
   return (
-    <div className="page-stack animate-fade-in">
+    <div className={`page-stack animate-fade-in ${dashboardRefreshing ? 'page-stack--refreshing' : ''}`}>
       <PageHeader
-        title="运营概览"
+        title="数据概览"
         description="一屏总览账号、订单、营收与库存：先用指标卡确认经营水位，再从成交趋势、商品销量与下单占比定位爆款，底部订单明细支持关键字检索。"
         icon={BarChart3}
         badge={(
@@ -573,25 +587,28 @@ const Dashboard: React.FC = () => {
           description={`AI 调用、通知推送与邮件发送的近 7 天用量${usageStats?.scope === 'all' ? '（管理员视角，含全部用户）' : ''}。`}
           icon={Activity}
         />
-        <div className="grid gap-4 p-4 pt-0 sm:grid-cols-3">
-          <StatCard
-            title="AI 调用（7天）"
-            value={usageAiTotal.toLocaleString()}
-            icon={Sparkles}
-            colorClass="bg-brand"
-          />
-          <StatCard
-            title="通知推送（7天）"
-            value={usageNotifyTotal.toLocaleString()}
-            icon={BellRing}
-            colorClass="bg-brand-500"
-          />
-          <StatCard
-            title="邮件发送（7天）"
-            value={usageEmailTotal.toLocaleString()}
-            icon={Mail}
-            colorClass="bg-[#8fc7a8]"
-          />
+        {/* 用量三卡：始终一行三列（移动端也够放），横排紧凑卡 */}
+        <div className="grid grid-cols-3 gap-2 p-3 pt-0 sm:gap-3 sm:p-4 sm:pt-0">
+          {[
+            { title: 'AI 调用', value: usageAiTotal.toLocaleString(), icon: Sparkles, colorClass: 'bg-[var(--brand)]' },
+            { title: '通知推送', value: usageNotifyTotal.toLocaleString(), icon: BellRing, colorClass: 'bg-[var(--brand-hover)]' },
+            { title: '邮件发送', value: usageEmailTotal.toLocaleString(), icon: Mail, colorClass: 'bg-[#8fc7a8]' },
+          ].map(({ title, value, icon: Icon, colorClass }) => (
+            <div
+              key={title}
+              className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:gap-3 sm:px-4"
+            >
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${colorClass}`}>
+                <Icon className="h-4 w-4 text-[var(--brand-ink)]" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-lg font-extrabold leading-tight text-[var(--text)] sm:text-xl">{value}</span>
+                <span className="block truncate text-[11px] font-medium text-[var(--text-muted)]">
+                  {title}<span className="hidden sm:inline">（7天）</span>
+                </span>
+              </span>
+            </div>
+          ))}
         </div>
         <div className="h-[280px] w-full px-4 pb-4">
           {usageHasData ? (
