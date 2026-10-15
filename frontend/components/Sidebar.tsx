@@ -1,4 +1,5 @@
 import React from 'react';
+import BrandLogo from './BrandLogo';
 import {
   Bell,
   Bot,
@@ -100,19 +101,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       style={{ borderRight: '1px solid var(--border)' }}
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        {/* 品牌区：与登录页同款 logo，作为整站视觉锚点；收起时只留 logo */}
+        {/* 品牌区：SVG 吉祥物 logo，身体/鱼鳍/描边颜色随主题色联动；收起时只留 logo */}
         <div className={`flex h-[72px] shrink-0 items-center gap-3 ${collapsed ? 'justify-center px-2' : 'px-5'}`}>
           <span className="relative shrink-0">
             <span
               className="login-logo-glow absolute -inset-2 rounded-2xl"
               style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.35) 0%, transparent 65%)' }}
             />
-            <img
-              src="/static/login-cover.png"
-              alt="鱼小铺"
-              className="relative h-10 w-10"
-              draggable={false}
-            />
+            <BrandLogo className="relative h-10 w-10" />
           </span>
           <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
             <p className="brand-wordmark truncate text-[22px] font-black leading-none tracking-[0.1em]">鱼小铺</p>
