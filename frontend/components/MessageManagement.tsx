@@ -284,6 +284,52 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
   const [showPhrases, setShowPhrases] = useState(false);
   // 表情面板与图片发送
   const [showEmoji, setShowEmoji] = useState(false);
+  // 表情面板：在线图片直发（表情包/网络图 URL，不经本地上传）
+  const [emojiImageUrl, setEmojiImageUrl] = useState('');
+
+  const sendOnlineImage = async () => {
+    const url = emojiImageUrl.trim();
+    if (!url || !activeConversation || !activeAccountId || imageSending) return;
+    if (!/^https?:\/\//.test(url)) {
+      notify('请输入以 http(s) 开头的图片地址', 'warning');
+      return;
+    }
+    setImageSending(true);
+    try {
+      const conversation = activeConversation;
+      await sendChatImage(activeAccountId, {
+        cid: conversation.cid,
+        to_user_id: conversation.otherUserId,
+        image_url: url,
+      });
+      lastActivityRef.current = Date.now();
+      // 乐观上屏：与本地选图发送同款占位，随后服务端历史接管
+      setMessages((current) => {
+        if (activeCidRef.current !== conversation.cid) return current;
+        return [...current, {
+          messageId: `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          anchorId: '',
+          senderId: activeAccountId,
+          senderName: '我',
+          isSelf: true,
+          type: 'image' as const,
+          text: '',
+          images: [url],
+          time: Date.now(),
+        }];
+      });
+      setEmojiImageUrl('');
+      notify('图片已发送', 'success');
+      window.setTimeout(() => {
+        void loadMessages(true);
+        void loadConversations(true);
+      }, 1500);
+    } catch (error) {
+      notify(`图片发送失败：${(error as Error).message}`, 'error');
+    } finally {
+      setImageSending(false);
+    }
+  };
   const [imageSending, setImageSending] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   // 消息轮询的活跃标记：发送/切换会话/收到新消息都会刷新它
@@ -1154,14 +1200,14 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                             </div>
                           </div>
                         ) : (
-                          <div className={`flex items-start gap-2.5 ${message.isSelf ? 'justify-end' : ''}`}>
+                          <div className={`flex items-start gap-3 ${message.isSelf ? 'flex-row-reverse justify-start' : 'justify-start'}`}>
                             {!message.isSelf && renderAvatar(
                               activeConversation.otherUserAvatar,
                               senderLabel,
                               'h-9 w-9 shrink-0 rounded-full',
                               activeConversation.otherUserId
                             )}
-                            <div className={`max-w-[76%] rounded-md px-3.5 py-2.5 text-sm leading-6 ${
+                            <div className={`max-w-[76%] rounded-xl px-3.5 py-2.5 text-sm leading-6 ${
                               message.isSelf ? 'bg-[var(--brand)] text-[var(--brand-ink)]' : 'bg-[var(--surface-strong)] text-[var(--text)]'
                             }`}>
                               {message.images.map((url) => (
@@ -1211,7 +1257,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                     <Smile className="h-5 w-5" />
                   </button>
                   {showEmoji && (
-                    <div className="absolute bottom-8 left-0 z-20 w-72 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
+                    <div className="absolute bottom-8 left-0 z-20 w-80 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg">
                       <div className="grid grid-cols-8 gap-1">
                         {EMOJI_CHOICES.map(emoji => (
                           <button
@@ -1225,8 +1271,29 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                           </button>
                         ))}
                       </div>
-                      <p className="mt-1 border-t border-[var(--border)] px-1 pt-1.5 text-[11px] text-[var(--text-soft)]">
-                        点击表情插入到输入框
+                      <div className="mt-2 border-t border-[var(--border)] pt-2">
+                        <p className="px-1 text-[11px] font-bold text-[var(--text-soft)]">在线图片（直接发送给对方）</p>
+                        <div className="mt-1.5 flex items-center gap-1.5 px-1">
+                          <input
+                            value={emojiImageUrl}
+                            onChange={event => setEmojiImageUrl(event.target.value)}
+                            placeholder="粘贴图片地址 https://..."
+                            className="ios-input h-8 min-w-0 flex-1 rounded-md px-2 text-xs"
+                            aria-label="在线图片地址"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void sendOnlineImage()}
+                            disabled={imageSending || !emojiImageUrl.trim() || !activeAccount?.connected}
+                            className="ios-btn-primary flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs"
+                          >
+                            {imageSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Image className="h-3.5 w-3.5" />}
+                            发送
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-1.5 border-t border-[var(--border)] px-1 pt-1.5 text-[11px] text-[var(--text-soft)]">
+                        点击表情插入到输入框；图片地址直接作为图片消息发送
                       </p>
                     </div>
                   )}
@@ -1288,7 +1355,7 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                   )}
                 </div>
               </div>
-              <div className="flex items-end gap-2 sm:gap-3">
+              <div className="flex items-end gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-2 transition-colors focus-within:border-[var(--border-brand)] sm:gap-2.5 sm:p-2.5">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -1299,15 +1366,15 @@ const MessageManagement: React.FC<MessageManagementProps> = ({ isActive = true, 
                     }
                   }}
                   rows={2}
-                  placeholder={activeAccount?.connected ? '输入消息' : '账号离线，暂时无法发送'}
+                  placeholder={activeAccount?.connected ? '输入消息，Enter 发送 / Shift+Enter 换行' : '账号离线，暂时无法发送'}
                   disabled={!activeAccount?.connected}
-                  className="min-h-[56px] min-w-0 flex-1 resize-none border-0 bg-[var(--surface)] px-0 py-1 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--text-soft)] disabled:bg-[var(--surface)] sm:min-h-[72px]"
+                  className="min-h-[44px] min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--text-soft)] disabled:cursor-not-allowed sm:min-h-[52px]"
                 />
                 <button
                   type="button"
                   onClick={() => void sendMessage()}
                   disabled={!draft.trim() || sending || !activeAccount?.connected}
-                  className="flex h-9 shrink-0 items-center gap-2 rounded-md bg-[var(--brand)] px-4 text-sm font-bold text-[var(--brand-ink)] hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-soft)] sm:px-5"
+                  className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-[var(--brand)] px-4 text-sm font-bold text-[var(--brand-ink)] shadow-sm transition-all hover:bg-[var(--brand-hover)] hover:shadow-brand disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-soft)] disabled:shadow-none sm:px-5"
                 >
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   发送
