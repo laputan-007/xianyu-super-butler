@@ -1378,7 +1378,12 @@ def _is_account_connection_alive(instance) -> bool:
     return not closed
 
 
-async def _run_on_account_loop(cookie_id: str, operation):
+async def _run_on_account_loop(cookie_id: str, operation, timeout: float = 25):
+    """把操作提交到账号所在的主事件循环执行。
+
+    timeout 允许按操作时长放宽：聊天发送 25 秒足够，完整发货（多条卡券 +
+    平台确认）可达分钟级，调用方应显式传入更大的值。
+    """
     manager = cookie_manager.manager
     if manager is None or not manager.loop.is_running():
         raise HTTPException(status_code=503, detail="闲鱼账号服务尚未启动")
@@ -1430,7 +1435,7 @@ async def _run_on_account_loop(cookie_id: str, operation):
         if current_loop is manager.loop:
             return await operation(instance)
         future = asyncio.run_coroutine_threadsafe(operation(instance), manager.loop)
-        return await asyncio.wait_for(asyncio.wrap_future(future), timeout=25)
+        return await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout)
     except asyncio.TimeoutError as exc:
         raise HTTPException(status_code=504, detail="闲鱼消息服务响应超时") from exc
     except HTTPException:
@@ -1709,32 +1714,34 @@ async def send_message_api(request: SendMessageRequest):
                     message=f"参数 {param_name} 不能为空"
                 )
 
-        # 直接获取XianyuLive实例，跳过cookie_manager检查
-        from XianyuAutoAsync import XianyuLive
-        live_instance = XianyuLive.get_instance(cleaned_cookie_id)
-
-        if not live_instance:
-            logger.warning(f"账号实例不存在或未连接: {cleaned_cookie_id}")
+        # 归属校验：秘钥是部署级全局的，至少要求目标账号真实存在且归属明确，
+        # 阻止持密钥者对任意账号ID发起操作。
+        from app.db_manager import db_manager as _dbm
+        if _dbm.get_cookie_owner_user_id(cleaned_cookie_id) is None:
+            logger.warning(f"API发送消息被拒绝，账号不存在或无归属: {cleaned_cookie_id}")
             return SendMessageResponse(
                 success=False,
-                message="账号实例不存在或未连接，请检查账号状态"
+                message="账号不存在或未绑定用户，操作被拒绝"
             )
 
-        # 检查WebSocket连接状态
-        if not live_instance.ws or live_instance.ws.closed:
-            logger.warning(f"账号WebSocket连接已断开: {cleaned_cookie_id}")
+        # 发送操作必须提交到主事件循环执行：账号的 WebSocket 绑定在主循环上，
+        # 在本端点的事件循环里直接 await 会触发跨循环错误或静默损坏连接。
+        # _run_on_account_loop 内部会完成实例查找与连接健康检查。
+        async def _send_on_instance(instance):
+            await instance.send_msg(
+                instance.ws,
+                cleaned_chat_id,
+                cleaned_to_user_id,
+                cleaned_message
+            )
+
+        try:
+            await _run_on_account_loop(cleaned_cookie_id, _send_on_instance)
+        except HTTPException as http_exc:
             return SendMessageResponse(
                 success=False,
-                message="账号WebSocket连接已断开，请等待重连"
+                message=http_exc.detail or "消息发送失败"
             )
-
-        # 发送消息（使用清理后的所有参数）
-        await live_instance.send_msg(
-            live_instance.ws,
-            cleaned_chat_id,
-            cleaned_to_user_id,
-            cleaned_message
-        )
 
         logger.info(f"API成功发送消息: {cleaned_cookie_id} -> {cleaned_to_user_id}, 内容: {cleaned_message[:50]}{'...' if len(cleaned_message) > 50 else ''}")
 
@@ -2300,28 +2307,33 @@ async def _execute_password_login(session_id: str, account_id: str, account: str
                             
                             # 尝试获取XianyuLive实例（如果账号已经存在）
                             live_instance = XianyuLive.get_instance(account_id)
-                            
+
                             if live_instance:
                                 log_with_user('info', f"找到账号实例，准备发送通知: {account_id}", current_user)
-                                # 创建新的事件循环来运行异步通知
-                                new_loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(new_loop)
+                                # 把通知协程提交到主事件循环执行：实例的锁与
+                                # aiohttp 会话都绑定在主循环上，在临时新建的
+                                # 循环里跑是跨循环反模式（会随机抛
+                                # "attached to a different loop"）。
                                 try:
-                                    new_loop.run_until_complete(
-                                        live_instance.send_token_refresh_notification(
-                                            error_message=message,
-                                            notification_type="face_verification",
-                                            verification_url=None,
-                                            attachment_path=actual_screenshot_path
+                                    manager = cookie_manager.manager
+                                    if manager and manager.loop.is_running():
+                                        fut = asyncio.run_coroutine_threadsafe(
+                                            live_instance.send_token_refresh_notification(
+                                                error_message=message,
+                                                notification_type="face_verification",
+                                                verification_url=None,
+                                                attachment_path=actual_screenshot_path
+                                            ),
+                                            manager.loop,
                                         )
-                                    )
-                                    log_with_user('info', f"✅ 已发送人脸验证通知: {account_id}", current_user)
+                                        fut.result(timeout=30)
+                                        log_with_user('info', f"✅ 已发送人脸验证通知: {account_id}", current_user)
+                                    else:
+                                        log_with_user('warning', f"主事件循环未运行，无法发送人脸验证通知: {account_id}", current_user)
                                 except Exception as notify_err:
                                     log_with_user('error', f"发送人脸验证通知失败: {str(notify_err)}", current_user)
                                     import traceback
                                     log_with_user('error', f"通知错误详情: {traceback.format_exc()}", current_user)
-                                finally:
-                                    new_loop.close()
                             else:
                                 # 如果账号实例不存在，记录警告并尝试从数据库获取通知配置
                                 log_with_user('warning', f"账号实例不存在: {account_id}，尝试从数据库获取通知配置", current_user)
@@ -2363,27 +2375,29 @@ async def _execute_password_login(session_id: str, account_id: str, account: str
                             
                             # 尝试获取XianyuLive实例（如果账号已经存在）
                             live_instance = XianyuLive.get_instance(account_id)
-                            
+
                             if live_instance:
                                 log_with_user('info', f"找到账号实例，准备发送通知: {account_id}", current_user)
-                                # 创建新的事件循环来运行异步通知
-                                new_loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(new_loop)
+                                # 同上：提交到主事件循环执行，避免跨循环。
                                 try:
-                                    new_loop.run_until_complete(
-                                        live_instance.send_token_refresh_notification(
-                                            error_message=message,
-                                            notification_type="face_verification",
-                                            verification_url=verification_url
+                                    manager = cookie_manager.manager
+                                    if manager and manager.loop.is_running():
+                                        fut = asyncio.run_coroutine_threadsafe(
+                                            live_instance.send_token_refresh_notification(
+                                                error_message=message,
+                                                notification_type="face_verification",
+                                                verification_url=verification_url
+                                            ),
+                                            manager.loop,
                                         )
-                                    )
-                                    log_with_user('info', f"✅ 已发送人脸验证通知: {account_id}", current_user)
+                                        fut.result(timeout=30)
+                                        log_with_user('info', f"✅ 已发送人脸验证通知: {account_id}", current_user)
+                                    else:
+                                        log_with_user('warning', f"主事件循环未运行，无法发送人脸验证通知: {account_id}", current_user)
                                 except Exception as notify_err:
                                     log_with_user('error', f"发送人脸验证通知失败: {str(notify_err)}", current_user)
                                     import traceback
                                     log_with_user('error', f"通知错误详情: {traceback.format_exc()}", current_user)
-                                finally:
-                                    new_loop.close()
                             else:
                                 # 如果账号实例不存在，记录警告并尝试从数据库获取通知配置
                                 log_with_user('warning', f"账号实例不存在: {account_id}，尝试从数据库获取通知配置", current_user)
@@ -9181,25 +9195,7 @@ async def manual_ship_orders(
                         failed_count += 1
                         continue
 
-                    # 必须有运行中的实例（需要WebSocket发送消息）
-                    live_instance = XianyuLive.get_instance(cookie_id)
-                    if not live_instance:
-                        results.append({
-                            'order_id': order_id,
-                            'success': False,
-                            'message': '该账号未在线运行，无法执行完整发货。请先启动账号。'
-                        })
-                        failed_count += 1
-                        continue
-
-                    if not live_instance.ws or live_instance.ws.closed:
-                        results.append({
-                            'order_id': order_id,
-                            'success': False,
-                            'message': '该账号WebSocket连接已断开，无法发送消息。请等待重连后重试。'
-                        })
-                        failed_count += 1
-                        continue
+                    # 实例查找与连接健康检查统一由 _run_on_account_loop 完成（见下方调用）。
 
                     # 查找与买家的chat_id（优先从订单记录获取，回退到AI对话记录）
                     chat_id = order.get('chat_id') or ''
@@ -9214,186 +9210,196 @@ async def manual_ship_orders(
                         failed_count += 1
                         continue
 
-                    protection_result = await live_instance.apply_delivery_block_rules(
-                        order_id=order_id,
-                        buyer_id=buyer_id,
-                        item_id=item_id,
-                        chat_id=chat_id,
-                        websocket=live_instance.ws,
-                        owner_id=user_id,
-                    )
-                    if protection_result["action"] == "block":
-                        results.append({
-                            'order_id': order_id,
-                            'success': False,
-                            'message': (
-                                f'发货已被规则“{protection_result["rule_name"]}”拦截：'
-                                f'{protection_result["reason"]}'
-                            )
-                        })
-                        failed_count += 1
-                        continue
-                    card_only_delivery = protection_result["action"] == "card_only"
-
-                    # 检查多数量发货
-                    quantity_to_send = 1
-                    order_detail = None
-                    multi_quantity_delivery = db_manager.get_item_multi_quantity_delivery_status(cookie_id, item_id)
-                    if multi_quantity_delivery:
-                        try:
-                            order_detail = await live_instance.fetch_order_detail_info(order_id, item_id, buyer_id)
-                            if order_detail and isinstance(order_detail, dict):
-                                qty = int(order_detail.get('quantity') or 1)
-                                if qty > 1:
-                                    quantity_to_send = qty
-                        except Exception as e:
-                            log_with_user('warning', f"获取订单数量失败，使用默认数量1: {str(e)}", current_user)
-
-                    # 获取卡券内容；确认发货必须在消息全部发送成功后执行。
-                    delivery_contents = []
-                    delivery_context = {}
-                    try:
-                        first_content = await live_instance._auto_delivery(
-                            item_id,
-                            '',
-                            order_id,
-                            buyer_id,
-                            order_detail=order_detail,
-                            delivery_context=delivery_context,
-                            requested_item_quantity=quantity_to_send,
+                    # 完整发货必须在账号所在的主事件循环上执行：实例的 WebSocket、
+                    # 类级订单锁（_order_detail_locks）都绑定在主循环上，在端点
+                    # 自己的事件循环里直接 await 会抛跨循环异常，把发货中断在
+                    # "卡券已发、平台未确认"的中间态。整个执行体包进闭包提交。
+                    async def _full_delivery(live_instance):
+                        protection_result = await live_instance.apply_delivery_block_rules(
+                            order_id=order_id,
+                            buyer_id=buyer_id,
+                            item_id=item_id,
+                            chat_id=chat_id,
+                            websocket=live_instance.ws,
+                            owner_id=user_id,
                         )
-                    except Exception as e:
-                        log_with_user('error', f"获取第1个卡券失败: {str(e)}", current_user)
-                        first_content = None
+                        if protection_result["action"] == "block":
+                            return {
+                                'order_id': order_id,
+                                'success': False,
+                                'message': (
+                                    f'发货已被规则“{protection_result["rule_name"]}”拦截：'
+                                    f'{protection_result["reason"]}'
+                                )
+                            }
+                        card_only_delivery = protection_result["action"] == "card_only"
 
-                    if first_content:
-                        delivery_contents.append(first_content)
-                        quantity_to_send *= max(
-                            1,
-                            int(delivery_context.get("delivery_count") or 1),
-                        )
+                        # 检查多数量发货
+                        quantity_to_send = 1
+                        order_detail = None
+                        multi_quantity_delivery = db_manager.get_item_multi_quantity_delivery_status(cookie_id, item_id)
+                        if multi_quantity_delivery:
+                            try:
+                                order_detail = await live_instance.fetch_order_detail_info(order_id, item_id, buyer_id)
+                                if order_detail and isinstance(order_detail, dict):
+                                    qty = int(order_detail.get('quantity') or 1)
+                                    if qty > 1:
+                                        quantity_to_send = qty
+                            except Exception as e:
+                                log_with_user('warning', f"获取订单数量失败，使用默认数量1: {str(e)}", current_user)
 
-                    for i in range(1, quantity_to_send):
-                        if not delivery_contents:
-                            break
+                        # 获取卡券内容；确认发货必须在消息全部发送成功后执行。
+                        delivery_contents = []
+                        delivery_context = {}
                         try:
-                            delivery_content = await live_instance._auto_delivery(
+                            first_content = await live_instance._auto_delivery(
                                 item_id,
                                 '',
                                 order_id,
                                 buyer_id,
                                 order_detail=order_detail,
                                 delivery_context=delivery_context,
-                            )
-                            if delivery_content:
-                                delivery_contents.append(delivery_content)
-                        except Exception as e:
-                            log_with_user('error', f"获取第{i+1}个卡券失败: {str(e)}", current_user)
-
-                    if not delivery_contents:
-                        results.append({
-                            'order_id': order_id,
-                            'success': False,
-                            'message': '未匹配到发货规则或卡券获取失败'
-                        })
-                        failed_count += 1
-                        continue
-
-                    # 发送卡券内容给买家
-                    sent_count = 0
-                    send_errors = []
-                    for idx, content in enumerate(delivery_contents):
-                        try:
-                            segment_count = await send_delivery_payload(
-                                live_instance,
-                                live_instance.ws,
-                                chat_id,
-                                buyer_id,
-                                content,
-                            )
-
-                            # 多条卡券之间间隔1秒；单条卡券内的分段间隔由发送器控制
-                            if len(delivery_contents) > 1 and idx < len(delivery_contents) - 1:
-                                await asyncio.sleep(1)
-                            sent_count += 1
-                            log_with_user(
-                                'info',
-                                f"第{idx+1}条卡券已发送（{segment_count} 段消息）",
-                                current_user,
+                                requested_item_quantity=quantity_to_send,
                             )
                         except Exception as e:
-                            log_with_user('error', f"发送第{idx+1}条卡券消息失败: {str(e)}", current_user)
-                            send_errors.append(f"第{idx + 1}条: {str(e)}")
+                            log_with_user('error', f"获取第1个卡券失败: {str(e)}", current_user)
+                            first_content = None
 
-                    acquired_all = len(delivery_contents) == quantity_to_send
-                    sent_all = sent_count == len(delivery_contents)
+                        if first_content:
+                            delivery_contents.append(first_content)
+                            quantity_to_send *= max(
+                                1,
+                                int(delivery_context.get("delivery_count") or 1),
+                            )
 
-                    if acquired_all and sent_all:
-                        confirm_required = (
-                            live_instance.is_auto_confirm_enabled()
-                            and not card_only_delivery
-                        )
-                        platform_confirmed = False
-                        confirm_error = None
-
-                        if confirm_required:
+                        for i in range(1, quantity_to_send):
+                            if not delivery_contents:
+                                break
                             try:
-                                confirm_result = await live_instance.auto_confirm(order_id, item_id)
-                                platform_confirmed = bool(confirm_result and confirm_result.get('success'))
-                                if platform_confirmed:
-                                    live_instance.confirmed_orders[order_id] = time.time()
-                                else:
-                                    confirm_error = (confirm_result or {}).get('error', '未知错误')
-                            except Exception as e:
-                                confirm_error = str(e)
-
-                        live_instance.mark_delivery_sent(order_id, update_order_status=platform_confirmed)
-                        update_values = {
-                            'order_id': order_id,
-                            'system_shipped': True
-                        }
-                        if platform_confirmed:
-                            update_values['order_status'] = 'shipped'
-                        db_manager.insert_or_update_order(**update_values)
-
-                        if card_only_delivery:
-                            results.append({
-                                'order_id': order_id,
-                                'success': True,
-                                'message': (
-                                    f'订单命中“{protection_result["rule_name"]}”并已关闭，'
-                                    f'仅发送{sent_count}条卡券信息'
+                                delivery_content = await live_instance._auto_delivery(
+                                    item_id,
+                                    '',
+                                    order_id,
+                                    buyer_id,
+                                    order_detail=order_detail,
+                                    delivery_context=delivery_context,
                                 )
-                            })
-                            success_count += 1
-                            continue
+                                if delivery_content:
+                                    delivery_contents.append(delivery_content)
+                            except Exception as e:
+                                log_with_user('error', f"获取第{i+1}个卡券失败: {str(e)}", current_user)
 
-                        if confirm_required and not platform_confirmed:
-                            results.append({
+                        if not delivery_contents:
+                            return {
                                 'order_id': order_id,
                                 'success': False,
-                                'message': f'卡券已全部发送，但闲鱼确认发货失败，请手动确认：{confirm_error}'
-                            })
-                            failed_count += 1
-                            continue
+                                'message': '未匹配到发货规则或卡券获取失败'
+                            }
 
-                        results.append({
-                            'order_id': order_id,
-                            'success': True,
-                            'message': f'完整发货成功，已发送{sent_count}条卡券信息给买家'
-                        })
-                        success_count += 1
-                    else:
+                        # 发送卡券内容给买家
+                        sent_count = 0
+                        send_errors = []
+                        for idx, content in enumerate(delivery_contents):
+                            try:
+                                segment_count = await send_delivery_payload(
+                                    live_instance,
+                                    live_instance.ws,
+                                    chat_id,
+                                    buyer_id,
+                                    content,
+                                )
+
+                                # 多条卡券之间间隔1秒；单条卡券内的分段间隔由发送器控制
+                                if len(delivery_contents) > 1 and idx < len(delivery_contents) - 1:
+                                    await asyncio.sleep(1)
+                                sent_count += 1
+                                log_with_user(
+                                    'info',
+                                    f"第{idx+1}条卡券已发送（{segment_count} 段消息）",
+                                    current_user,
+                                )
+                            except Exception as e:
+                                log_with_user('error', f"发送第{idx+1}条卡券消息失败: {str(e)}", current_user)
+                                send_errors.append(f"第{idx + 1}条: {str(e)}")
+
+                        acquired_all = len(delivery_contents) == quantity_to_send
+                        sent_all = sent_count == len(delivery_contents)
+
+                        if acquired_all and sent_all:
+                            confirm_required = (
+                                live_instance.is_auto_confirm_enabled()
+                                and not card_only_delivery
+                            )
+                            platform_confirmed = False
+                            confirm_error = None
+
+                            if confirm_required:
+                                try:
+                                    confirm_result = await live_instance.auto_confirm(order_id, item_id)
+                                    platform_confirmed = bool(confirm_result and confirm_result.get('success'))
+                                    if platform_confirmed:
+                                        live_instance.confirmed_orders[order_id] = time.time()
+                                    else:
+                                        confirm_error = (confirm_result or {}).get('error', '未知错误')
+                                except Exception as e:
+                                    confirm_error = str(e)
+
+                            live_instance.mark_delivery_sent(order_id, update_order_status=platform_confirmed)
+                            update_values = {
+                                'order_id': order_id,
+                                'system_shipped': True
+                            }
+                            if platform_confirmed:
+                                update_values['order_status'] = 'shipped'
+                            db_manager.insert_or_update_order(**update_values)
+
+                            if card_only_delivery:
+                                return {
+                                    'order_id': order_id,
+                                    'success': True,
+                                    'message': (
+                                        f'订单命中“{protection_result["rule_name"]}”并已关闭，'
+                                        f'仅发送{sent_count}条卡券信息'
+                                    )
+                                }
+
+                            if confirm_required and not platform_confirmed:
+                                return {
+                                    'order_id': order_id,
+                                    'success': False,
+                                    'message': f'卡券已全部发送，但闲鱼确认发货失败，请手动确认：{confirm_error}'
+                                }
+
+                            return {
+                                'order_id': order_id,
+                                'success': True,
+                                'message': f'完整发货成功，已发送{sent_count}条卡券信息给买家'
+                            }
+
                         live_instance.delivery_blocked_orders.add(order_id)
                         live_instance.last_delivery_time[order_id] = time.time()
                         detail = f'应发{quantity_to_send}条，获取{len(delivery_contents)}条，成功发送{sent_count}条'
                         if send_errors:
                             detail += f'；{"；".join(send_errors)}'
-                        results.append({
+                        return {
                             'order_id': order_id,
                             'success': False,
                             'message': f'完整发货未完成：{detail}。已停止自动重试，请人工核对'
-                        })
+                        }
+
+                    # 完整发货含多条卡券与平台确认，放宽到 180 秒
+                    try:
+                        delivery_result = await _run_on_account_loop(cookie_id, _full_delivery, timeout=180)
+                    except HTTPException as http_exc:
+                        delivery_result = {
+                            'order_id': order_id,
+                            'success': False,
+                            'message': str(http_exc.detail) if http_exc.detail else '发货执行失败'
+                        }
+                    results.append(delivery_result)
+                    if delivery_result.get('success'):
+                        success_count += 1
+                    else:
                         failed_count += 1
 
             except Exception as e:
