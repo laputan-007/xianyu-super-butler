@@ -7828,7 +7828,9 @@ class XianyuLive:
             finally:
                 self._buyer_interaction_triggering = False
 
-        asyncio.create_task(run())
+        # 走实例的后台任务登记：实例停止时随生命周期一并取消，
+        # 否则旧实例被替换后这个任务仍持旧 cookie 对外执行评价（不可撤销动作）。
+        self._create_tracked_task(run())
 
     async def _run_buyer_interactions(self, rate_on: bool, flower_on: bool) -> dict:
         """对已完结订单执行评价和求花。
@@ -7929,8 +7931,10 @@ class XianyuLive:
                             logger.warning(f"【{self.cookie_id}】Cookie刷新任务已在执行中，跳过本次触发")
                         else:
                             logger.info(f"【{self.cookie_id}】开始执行Cookie刷新任务...")
-                            # 在独立的任务中执行Cookie刷新，避免阻塞主循环
-                            asyncio.create_task(self._execute_cookie_refresh(current_time))
+                            # 在独立的任务中执行Cookie刷新，避免阻塞主循环。
+                            # 必须走登记任务：裸 create_task 不受生命周期管辖，
+                            # 实例被替换后最长还能再跑 180 秒并二次触发重启。
+                            self._create_tracked_task(self._execute_cookie_refresh(current_time))
 
                     # 每分钟检查一次是否需要执行
                     await self._interruptible_sleep(60)
@@ -7975,10 +7979,12 @@ class XianyuLive:
                     timeout=180.0  # 3分钟超时，减少对WebSocket的影响
                 )
 
-                # 重新启动心跳任务
+                # 重新启动心跳任务（仅当没有活跃心跳时：主循环重连期间可能
+                # 已重建心跳，无守卫地覆盖引用会泄漏一个旧心跳任务）
                 if heartbeat_was_running and self.ws and not self.ws.closed:
-                    logger.warning(f"【{self.cookie_id}】重新启动心跳任务")
-                    self.heartbeat_task = asyncio.create_task(self.heartbeat_loop(self.ws))
+                    if not self.heartbeat_task or self.heartbeat_task.done():
+                        logger.warning(f"【{self.cookie_id}】重新启动心跳任务")
+                        self.heartbeat_task = asyncio.create_task(self.heartbeat_loop(self.ws))
 
                 if success:
                     self.last_cookie_refresh_time = current_time
