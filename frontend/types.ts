@@ -586,6 +586,8 @@ export interface SystemSettings {
   notification_email_batch_count?: string;
   /** 邮件通知聚合时间窗（分钟）：不足 N 条时超过该时长兜底发出，默认 10 */
   notification_email_batch_minutes?: string;
+  /** Token 刷新异常通知熔断上限：连续推送 N 次后停止（默认 10），账号恢复后自动重启提醒 */
+  token_refresh_notify_limit?: string;
   [key: string]: any;
 }
 

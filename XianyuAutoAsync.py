@@ -789,6 +789,12 @@ class XianyuLive:
         # 合并发送一封。只作用于邮件渠道，QQ/钉钉等渠道仍逐条推送。
         self._email_notify_buffers = {}
         self._email_notify_buffer_lock = asyncio.Lock()
+        # Token 刷新异常通知熔断：连续推送达到上限（token_refresh_notify_limit，
+        # 默认 10）后静默，刷新成功自动恢复并补一条恢复通知。计数为实例内存态
+        # ——重新扫码/换 Cookie 会重建实例，天然开启新一轮；夜间计划性重启
+        # 同样重置，重启即新周期，可接受。
+        self._token_fail_notify_count = 0
+        self._token_fail_notify_silenced = False
 
         # 自动发货防重复机制
         self.last_delivery_time = {}  # 记录每个商品的最后发货时间
@@ -2304,6 +2310,9 @@ class XianyuLive:
                                 self.needs_relogin = False
                                 self.relogin_reason = ''
                                 risk_control.registry.get(self.cookie_id).reset()
+                                # Token 刷新恢复 = 异常通知熔断解除（静默期会
+                                # 补一条恢复通知，给用户一个闭环）
+                                self._reset_token_notify_circuit()
                                 return new_token
 
                     # 检查是否需要滑块验证
@@ -5314,6 +5323,37 @@ class XianyuLive:
         for buffer in pending:
             await self._flush_email_buffer(buffer['config'], buffer['entries'])
 
+    def _get_token_notify_limit(self) -> int:
+        """Token 刷新异常通知的熔断上限（系统设置 token_refresh_notify_limit，默认 10）。"""
+        try:
+            from app.db_manager import db_manager
+            raw = str(db_manager.get_system_setting('token_refresh_notify_limit') or '').strip()
+            return int(raw) if raw.isdigit() and int(raw) >= 1 else 10
+        except Exception as e:
+            logger.warning(f"【{self.cookie_id}】读取Token通知熔断上限失败，按默认 10: {self._safe_str(e)}")
+            return 10
+
+    def _reset_token_notify_circuit(self):
+        """Token 刷新成功后解除通知熔断；若此前处于静默期，补发一条恢复通知。
+
+        恢复通知走 tracked task：随实例生命周期取消，不产生孤儿任务。
+        """
+        if not (self._token_fail_notify_count or self._token_fail_notify_silenced):
+            return
+        was_silenced = self._token_fail_notify_silenced
+        self._token_fail_notify_count = 0
+        self._token_fail_notify_silenced = False
+        logger.info(f"【{self.cookie_id}】Token刷新已恢复正常，异常通知计数清零")
+        if was_silenced:
+            logger.info(f"【{self.cookie_id}】Token刷新恢复，异常通知熔断解除")
+            self._create_tracked_task(
+                self.send_token_refresh_notification(
+                    f"Token刷新已恢复正常（账号 {self.cookie_id}），"
+                    f"此前因连续异常而静默的提醒已恢复推送。",
+                    "token_recovered",
+                )
+            )
+
     async def _send_email_notification(self, config_data: dict, message: str, attachment_path: str = None, subject: str = None):
         """发送邮件通知（支持附件）
         
@@ -5611,13 +5651,25 @@ class XianyuLive:
                 logger.warning(f"检测到正常的令牌过期，跳过通知: {error_message}")
                 return
 
+            # 熔断兜底：Token 刷新异常若一直推送会演变成"狼来了"——每次过完
+            # 冷却期就发一条，直到账号被人工处理为止。达到上限后静默，刷新
+            # 成功自动恢复（_reset_token_notify_circuit）。只熔断 Token 类
+            # 异常，人脸/滑块等其他类型的通知不受影响。
+            is_token_error = self._is_token_related_error(error_message)
+            if is_token_error and self._token_fail_notify_silenced:
+                logger.warning(
+                    f"Token刷新异常通知已达上限，静默中，本次跳过"
+                    f"（刷新成功后自动恢复并通知一次）: {self.cookie_id}"
+                )
+                return
+
             # 检查是否在冷却期内
             current_time = time.time()
             last_time = self.last_notification_time.get(notification_type, 0)
 
             # 为Token刷新异常通知使用特殊的3小时冷却时间
             # 基于错误消息内容判断是否为Token相关异常
-            if self._is_token_related_error(error_message):
+            if is_token_error:
                 cooldown_time = self.token_refresh_notification_cooldown
                 cooldown_desc = "3小时"
             else:
@@ -5691,6 +5743,15 @@ class XianyuLive:
 
             logger.info(f"准备发送Token刷新异常通知: {self.cookie_id}")
 
+            # 达到熔断上限的最后一条带上说明：让用户知道"不再推送"是保护
+            # 策略而不是系统悄悄坏了
+            if is_token_error and (self._token_fail_notify_count + 1) >= self._get_token_notify_limit():
+                notification_msg += (
+                    f"\n⚠️ 已连续推送 {self._token_fail_notify_count + 1} 次Token刷新异常通知，"
+                    f"达到上限，此后将停止该类提醒。\n"
+                    f"账号恢复（刷新成功或重新扫码登录）后会自动恢复推送并通知一次。\n"
+                )
+
             # 发送通知到各个渠道
             notification_sent = False
             for notification in notifications:
@@ -5741,7 +5802,7 @@ class XianyuLive:
                 self.last_notification_time[notification_type] = current_time
 
                 # 根据错误消息内容使用不同的冷却时间
-                if self._is_token_related_error(error_message):
+                if is_token_error:
                     next_send_time = current_time + self.token_refresh_notification_cooldown
                     cooldown_desc = "3小时"
                 else:
@@ -5750,6 +5811,17 @@ class XianyuLive:
 
                 next_send_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_send_time))
                 logger.info(f"Token刷新通知已发送，下次可发送时间: {next_send_time_str} (冷却时间: {cooldown_desc})")
+
+                # 熔断计数：只在通知真正发出时计数，冷却期内被跳过的尝试
+                # 不计数（否则重试风暴一天就把上限耗光，用户却只收到两条）。
+                if is_token_error:
+                    self._token_fail_notify_count += 1
+                    if self._token_fail_notify_count >= self._get_token_notify_limit():
+                        self._token_fail_notify_silenced = True
+                        logger.warning(
+                            f"Token刷新异常通知达到上限（{self._token_fail_notify_count} 次），"
+                            f"进入静默直至刷新成功: {self.cookie_id}"
+                        )
 
         except Exception as e:
             logger.error(f"处理Token刷新通知失败: {self._safe_str(e)}")

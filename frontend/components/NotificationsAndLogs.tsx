@@ -205,6 +205,8 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
   // 邮件聚合设置：满 N 条消息合并发一封邮件（仅邮件渠道；1 = 逐条发送）
   const [emailBatchCount, setEmailBatchCount] = useState('1');
   const [emailBatchMinutes, setEmailBatchMinutes] = useState('10');
+  // Token 刷新异常通知熔断上限：连续推送 N 次后停止，账号恢复后自动重启提醒
+  const [tokenNotifyLimit, setTokenNotifyLimit] = useState('10');
   const [savingEmailBatch, setSavingEmailBatch] = useState(false);
 
   const loadBaseData = async () => {
@@ -232,10 +234,12 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
           const settings = await getSystemSettings() as Record<string, string>;
           const count = parseInt(String(settings.notification_email_batch_count ?? ''), 10);
           const minutes = parseInt(String(settings.notification_email_batch_minutes ?? ''), 10);
+          const tokenLimit = parseInt(String(settings.token_refresh_notify_limit ?? ''), 10);
           setEmailBatchCount(Number.isFinite(count) && count >= 1 ? String(count) : '1');
           setEmailBatchMinutes(Number.isFinite(minutes) && minutes >= 1 ? String(minutes) : '10');
+          setTokenNotifyLimit(Number.isFinite(tokenLimit) && tokenLimit >= 1 ? String(tokenLimit) : '10');
         } catch {
-          // 聚合设置加载失败不阻塞页面，保持默认值
+          // 推送策略加载失败不阻塞页面，保持默认值
         }
       }
     } catch (error) {
@@ -248,17 +252,20 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
   const saveEmailBatchSettings = async () => {
     const count = Math.max(1, parseInt(emailBatchCount, 10) || 1);
     const minutes = Math.max(1, parseInt(emailBatchMinutes, 10) || 10);
+    const tokenLimit = Math.max(1, parseInt(tokenNotifyLimit, 10) || 10);
     setSavingEmailBatch(true);
     try {
       await updateSystemSettings({
         notification_email_batch_count: String(count),
         notification_email_batch_minutes: String(minutes),
+        token_refresh_notify_limit: String(tokenLimit),
       });
       setEmailBatchCount(String(count));
       setEmailBatchMinutes(String(minutes));
-      notify('邮件聚合设置已保存，下一条消息通知起生效');
+      setTokenNotifyLimit(String(tokenLimit));
+      notify('推送策略已保存，下一条通知起生效');
     } catch (error) {
-      notify(`保存邮件聚合设置失败：${(error as Error).message}`);
+      notify(`保存推送策略失败：${(error as Error).message}`);
     } finally {
       setSavingEmailBatch(false);
     }
@@ -595,40 +602,61 @@ const NotificationsAndLogs: React.FC<NotificationsAndLogsProps> = ({ isAdmin }) 
             )}
           />
           {isAdmin && (
-            <div className="flex flex-wrap items-center gap-2.5 border-b border-gray-100 px-4 py-3.5 text-sm">
-              <span className="font-bold text-gray-900">邮件聚合</span>
-              <span className="text-xs text-gray-500">满</span>
-              <input
-                type="number"
-                min={1}
-                max={999}
-                value={emailBatchCount}
-                onChange={(event) => setEmailBatchCount(event.target.value)}
-                aria-label="邮件聚合条数"
-                className="ios-input w-24 rounded-md px-3 py-2 text-sm"
-                title="1 = 每条消息发一封邮件（默认）"
-              />
-              <span className="text-xs text-gray-500">条消息合并发送一封邮件；不足条数时</span>
-              <input
-                type="number"
-                min={1}
-                max={1440}
-                value={emailBatchMinutes}
-                onChange={(event) => setEmailBatchMinutes(event.target.value)}
-                aria-label="邮件聚合时间窗（分钟）"
-                className="ios-input w-24 rounded-md px-3 py-2 text-sm"
-                title="超过该时长即使不满条数也会发出，避免末尾消息被拖延"
-              />
-              <span className="text-xs text-gray-500">分钟内兜底发出。仅影响邮件渠道，QQ/钉钉等仍逐条推送。</span>
-              <button
-                type="button"
-                onClick={() => void saveEmailBatchSettings()}
-                disabled={savingEmailBatch}
-                className="ios-btn-secondary flex items-center gap-1.5 rounded-md px-3 py-2 text-xs disabled:opacity-50"
-              >
-                {savingEmailBatch ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                保存
-              </button>
+            <div className="space-y-2.5 border-b border-gray-100 px-4 py-3.5 text-sm">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="w-20 shrink-0 font-bold text-gray-900">邮件聚合</span>
+                <span className="text-xs text-gray-500">满</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={emailBatchCount}
+                  onChange={(event) => setEmailBatchCount(event.target.value)}
+                  aria-label="邮件聚合条数"
+                  className="ios-input w-24 rounded-md px-3 py-2 text-sm"
+                  title="1 = 每条消息发一封邮件（默认）"
+                />
+                <span className="text-xs text-gray-500">条消息合并发送一封邮件；不足条数时</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={emailBatchMinutes}
+                  onChange={(event) => setEmailBatchMinutes(event.target.value)}
+                  aria-label="邮件聚合时间窗（分钟）"
+                  className="ios-input w-24 rounded-md px-3 py-2 text-sm"
+                  title="超过该时长即使不满条数也会发出，避免末尾消息被拖延"
+                />
+                <span className="text-xs text-gray-500">分钟内兜底发出。仅影响邮件渠道，QQ/钉钉等仍逐条推送。</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="w-20 shrink-0 font-bold text-gray-900">异常熔断</span>
+                <span className="text-xs text-gray-500">Token 刷新异常连续推送</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={tokenNotifyLimit}
+                  onChange={(event) => setTokenNotifyLimit(event.target.value)}
+                  aria-label="Token刷新异常通知熔断上限"
+                  className="ios-input w-24 rounded-md px-3 py-2 text-sm"
+                  title="达到上限后停止该类提醒，防止无限推送"
+                />
+                <span className="text-xs text-gray-500">
+                  次后停止提醒，防止「狼来了」；账号恢复（刷新成功或重新扫码）后自动恢复并通知一次。默认 10。
+                </span>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void saveEmailBatchSettings()}
+                  disabled={savingEmailBatch}
+                  className="ios-btn-secondary flex items-center gap-1.5 rounded-md px-3 py-2 text-xs disabled:opacity-50"
+                >
+                  {savingEmailBatch ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  保存推送策略
+                </button>
+              </div>
             </div>
           )}
           <div className="divide-y divide-gray-100 px-4">
