@@ -856,14 +856,39 @@ async def main():
         print("启动 API 服务（主循环合并模式）...")
         api_task = asyncio.create_task(_start_api_server_on_main_loop())
 
-        def _log_api_task_failure(task: asyncio.Task):
-            if task.cancelled():
-                return
-            exc = task.exception()
-            if exc is not None:
-                logger.error(f"API 服务任务异常退出: {exc}")
+        def _on_api_task_done(task: asyncio.Task):
+            """Web 服务退出时让整个进程响亮地结束，绝不半死运行。
 
-        api_task.add_done_callback(_log_api_task_failure)
+            半死状态（账号在跑、Web 死了）比崩溃更糟：用户看不到任何异常，
+            控制面却已失联；旧代码里 uvicorn 线程绑定失败只会静默杀掉线程，
+            进程照样活着——结果就是端口被自己占着、下次启动再失败、
+            多实例并存同一账号被双重处理（真实发生过：旧实例从昨天一直
+            跑到今天，把新实例的端口顶掉）。
+            SystemExit(3) 是 uvicorn 的 STARTUP_FAILURE：端口被占用或应用
+            导入失败。此处硬退（os._exit）而非优雅停机——启动失败时账号
+            任务刚起步，无需清理，让 systemd/控制台直接重试最干净。
+            """
+            if task.cancelled():
+                return  # 正常停机流程中的取消
+            exc = task.exception()
+            if exc is None:
+                logger.warning("API 服务任务已退出（若非停机过程请检查 uvicorn 日志）")
+                return
+            import sys as _sys
+            import traceback as _tb
+            logger.error(f"API 服务任务异常退出: {exc!r}")
+            logger.error("".join(_tb.format_exception(type(exc), exc, exc.__traceback__)))
+            if isinstance(exc, SystemExit) and exc.code == 3:
+                logger.error(
+                    "uvicorn 启动失败（STARTUP_FAILURE=3）。常见原因：端口被其他进程占用，"
+                    "或本程序已有一个实例在运行。排查：netstat -ano | findstr :<端口>"
+                )
+            logger.error("Web 服务不可用，进程主动退出，避免无控制面的半死运行；请排查后重新启动。")
+            _sys.stdout.flush()
+            _sys.stderr.flush()
+            os._exit(1)
+
+        api_task.add_done_callback(_on_api_task_done)
         print("API 服务已在主循环上启动")
 
     # 启动数据库自动备份：全局一份，不随账号数量重复
