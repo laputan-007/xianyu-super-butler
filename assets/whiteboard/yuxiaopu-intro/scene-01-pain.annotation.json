@@ -1,0 +1,171 @@
+{
+  "sceneId": "scene-01-pain",
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "storyBasis": "深夜里卖家被多账号消息与手动发货淹没，引出交给系统自动完成。",
+  "sceneDurationMs": 21900,
+  "elements": [
+    {
+      "id": "seller",
+      "label": "深夜忙乱的卖家",
+      "sequence": 1,
+      "narrativeRole": "场景铺垫：深夜台灯下被消息淹没的卖家",
+      "subtitle": "做闲鱼，你一定经历过这样的夜晚：几个小号同时弹出买家消息，",
+      "type": "structure",
+      "region": {
+        "x": 270,
+        "y": 200,
+        "width": 660,
+        "height": 660
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 200,
+        "durationMs": 4800,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          290,
+          220
+        ],
+        "end": [
+          910,
+          840
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "phones",
+      "label": "三台手机",
+      "sequence": 2,
+      "narrativeRole": "在多台手机间来回切换的困境",
+      "subtitle": "你在一台手机上来回切换；",
+      "type": "structure",
+      "region": {
+        "x": 1060,
+        "y": 300,
+        "width": 740,
+        "height": 614
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 5300,
+        "durationMs": 2100,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1080,
+          320
+        ],
+        "end": [
+          1780,
+          894
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "cards",
+      "label": "订单卡与卡密",
+      "sequence": 3,
+      "narrativeRole": "冲突：订单要手动发卡密、回复慢买家就走了",
+      "subtitle": "订单来了要手动发卡密，回复慢一拍，买家就走了。",
+      "type": "structure",
+      "region": {
+        "x": 140,
+        "y": 880,
+        "width": 420,
+        "height": 180
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 7700,
+        "durationMs": 4300,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          160,
+          900
+        ],
+        "end": [
+          540,
+          1040
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "bubbles",
+      "label": "密集消息气泡",
+      "sequence": 4,
+      "narrativeRole": "升级：人多单多消息多，靠人力盯不过来",
+      "subtitle": "人多、单多、消息多，靠人力盯，永远盯不过来。",
+      "type": "structure",
+      "region": {
+        "x": 1060,
+        "y": 70,
+        "width": 740,
+        "height": 220
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 12400,
+        "durationMs": 4400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1080,
+          90
+        ],
+        "end": [
+          1780,
+          270
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "gear-badge",
+      "label": "自动化齿轮徽章",
+      "sequence": 5,
+      "narrativeRole": "结果：这些事都可以交给系统自动完成",
+      "subtitle": "其实，这些事都可以交给系统自动完成。",
+      "type": "structure",
+      "region": {
+        "x": 1100,
+        "y": 910,
+        "width": 190,
+        "height": 165
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 17100,
+        "durationMs": 3500,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1120,
+          930
+        ],
+        "end": [
+          1270,
+          1055
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:static/assets/ProductAutomation-fzZFOvho.js
 import{c as V,r as n,j as e,aA as Y,e as _e,S as Ne,L as j,aB as ve,aC as fe,aD as we,aE as ke,X as Z,p as Ce,aF as $e,aG as Pe,aH as De,aI as ee,w as r,D as A,aJ as Se,aK as Re,aL as Fe,aM as Me,aN as Le,aO as Ee,aP as Ie,aQ as ze}from"./index-GWaf81AS.js";import{P as Te,a as Ae,b as Be,S as _,E as N,N as Ke}from"./ui-BUstQ2vz.js";import{S as $}from"./search-BTtQ715Z.js";import{T as v}from"./trash-2-ZtGnbE1Y.js";import{E as qe}from"./external-link-D5S-JJVV.js";import{S as B}from"./save-CaY7AkNe.js";import{P as se}from"./play-BULRPW9L.js";import{P as He}from"./package-check-DuUSMMYd.js";import{L as Qe}from"./link-2-BoZYOj96.js";/**
+========
+import{c as V,r as n,j as e,aA as Y,e as _e,S as Ne,L as j,aB as ve,aC as fe,aD as we,aE as ke,X as Z,p as Ce,aF as $e,aG as Pe,aH as De,aI as ee,w as r,D as A,aJ as Se,aK as Re,aL as Fe,aM as Me,aN as Le,aO as Ee,aP as Ie,aQ as ze}from"./index-Df8X5UcB.js";import{P as Te,a as Ae,b as Be,S as _,E as N,N as Ke}from"./ui-BCp9JcAm.js";import{S as $}from"./search-DAh4jDtY.js";import{T as v}from"./trash-2-BvH978Vr.js";import{E as qe}from"./external-link-DNDcaUaO.js";import{S as B}from"./save-DiosPkXb.js";import{P as se}from"./play-BvFfmAq0.js";import{P as He}from"./package-check-BOSz-LkH.js";import{L as Qe}from"./link-2-ByAyVWHX.js";/**
+>>>>>>>> 9d973b9 (TUNING: 客户端窗口去原生标题栏改网页自绘):static/assets/ProductAutomation-ptm5oeT7.js
  * @license lucide-react v0.562.0 - ISC
  *
  * This source code is licensed under the ISC license.

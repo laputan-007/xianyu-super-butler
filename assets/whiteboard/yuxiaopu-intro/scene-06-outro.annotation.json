@@ -1,0 +1,203 @@
+{
+  "sceneId": "scene-06-outro",
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "storyBasis": "轻量架构稳定托管多账号，Docker 一行命令启动，交给鱼小铺自动运转。",
+  "sceneDurationMs": 18400,
+  "elements": [
+    {
+      "id": "server",
+      "label": "服务器与循环",
+      "sequence": 1,
+      "narrativeRole": "场景铺垫：单事件循环 + SQLite WAL 架构",
+      "subtitle": "整个系统跑在单事件循环加 SQLite WAL 架构上，",
+      "type": "structure",
+      "region": {
+        "x": 150,
+        "y": 190,
+        "width": 525,
+        "height": 570
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 100,
+        "durationMs": 4400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          170,
+          210
+        ],
+        "end": [
+          655,
+          740
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "accounts",
+      "label": "账号队列",
+      "sequence": 2,
+      "narrativeRole": "规模：小机器稳定托管三十个账号",
+      "subtitle": "两核两 G 的小机器就能稳定托管三十个账号。",
+      "type": "structure",
+      "region": {
+        "x": 670,
+        "y": 200,
+        "width": 610,
+        "height": 240
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 4800,
+        "durationMs": 3200,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          690,
+          220
+        ],
+        "end": [
+          1260,
+          420
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "container",
+      "label": "Docker 集装箱",
+      "sequence": 3,
+      "narrativeRole": "动作：Docker 启动",
+      "subtitle": "Docker 一行命令启动，扫码接入第一个账号，",
+      "type": "structure",
+      "region": {
+        "x": 670,
+        "y": 520,
+        "width": 610,
+        "height": 390
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 8300,
+        "durationMs": 1700,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          690,
+          540
+        ],
+        "end": [
+          1260,
+          890
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "terminal",
+      "label": "一行命令",
+      "sequence": 4,
+      "narrativeRole": "一行命令启动",
+      "subtitle": "Docker 一行命令启动，扫码接入第一个账号，",
+      "type": "structure",
+      "region": {
+        "x": 1320,
+        "y": 210,
+        "width": 490,
+        "height": 370
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 10200,
+        "durationMs": 1500,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1340,
+          230
+        ],
+        "end": [
+          1790,
+          560
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "fish",
+      "label": "吉祥物小鱼",
+      "sequence": 5,
+      "narrativeRole": "结果：剩下的交给鱼小铺",
+      "subtitle": "剩下的交给鱼小铺。",
+      "type": "structure",
+      "region": {
+        "x": 150,
+        "y": 760,
+        "width": 430,
+        "height": 300
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 12000,
+        "durationMs": 1400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          170,
+          780
+        ],
+        "end": [
+          560,
+          1040
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "launch",
+      "label": "启动旗与上升箭头",
+      "sequence": 6,
+      "narrativeRole": "号召：现在就开始，让生意自动运转",
+      "subtitle": "现在就开始，让你的闲鱼生意自动运转。",
+      "type": "structure",
+      "region": {
+        "x": 1330,
+        "y": 620,
+        "width": 470,
+        "height": 440
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 13700,
+        "durationMs": 3600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1350,
+          640
+        ],
+        "end": [
+          1780,
+          1040
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

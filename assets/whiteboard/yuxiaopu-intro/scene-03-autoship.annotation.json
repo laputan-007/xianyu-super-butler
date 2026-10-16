@@ -1,0 +1,267 @@
+{
+  "sceneId": "scene-03-autoship",
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "storyBasis": "下单后卡密自动发出、规格正确匹配、风险拦截，售后评价小红花致谢全自动。",
+  "sceneDurationMs": 19800,
+  "elements": [
+    {
+      "id": "belt",
+      "label": "传送带",
+      "sequence": 1,
+      "narrativeRole": "场景铺垫：一条自动流转的流程线",
+      "subtitle": "买家一下单，卡密自动发出，",
+      "type": "structure",
+      "region": {
+        "x": 110,
+        "y": 690,
+        "width": 1690,
+        "height": 200
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 100,
+        "durationMs": 1100,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          130,
+          710
+        ],
+        "end": [
+          1780,
+          870
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "order-card",
+      "label": "订单卡",
+      "sequence": 2,
+      "narrativeRole": "动作开始：买家一下单",
+      "subtitle": "买家一下单，卡密自动发出，",
+      "type": "structure",
+      "region": {
+        "x": 160,
+        "y": 390,
+        "width": 200,
+        "height": 290
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 1300,
+        "durationMs": 600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          180,
+          410
+        ],
+        "end": [
+          340,
+          660
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "key-card",
+      "label": "卡密发货",
+      "sequence": 3,
+      "narrativeRole": "卡密自动发出",
+      "subtitle": "买家一下单，卡密自动发出，",
+      "type": "structure",
+      "region": {
+        "x": 420,
+        "y": 390,
+        "width": 260,
+        "height": 290
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2000,
+        "durationMs": 600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          440,
+          410
+        ],
+        "end": [
+          660,
+          660
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "spec-tags",
+      "label": "多规格标签",
+      "sequence": 4,
+      "narrativeRole": "多规格、多数量也能正确匹配",
+      "subtitle": "多规格、多数量的商品也能正确匹配；",
+      "type": "structure",
+      "region": {
+        "x": 680,
+        "y": 380,
+        "width": 220,
+        "height": 300
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2800,
+        "durationMs": 3000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          700,
+          400
+        ],
+        "end": [
+          880,
+          660
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "risk-gate",
+      "label": "风险拦截闸门",
+      "sequence": 5,
+      "narrativeRole": "变化：发货前风险拦截，异常不误发",
+      "subtitle": "发货前还有风险拦截，异常订单不会误发。确认收货之后，",
+      "type": "structure",
+      "region": {
+        "x": 940,
+        "y": 380,
+        "width": 220,
+        "height": 312
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 6100,
+        "durationMs": 2700,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          960,
+          400
+        ],
+        "end": [
+          1140,
+          672
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "confirm",
+      "label": "确认收货",
+      "sequence": 6,
+      "narrativeRole": "确认收货之后",
+      "subtitle": "发货前还有风险拦截，异常订单不会误发。确认收货之后，",
+      "type": "structure",
+      "region": {
+        "x": 1180,
+        "y": 390,
+        "width": 220,
+        "height": 302
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 9100,
+        "durationMs": 2500,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1200,
+          410
+        ],
+        "end": [
+          1380,
+          672
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "praise",
+      "label": "好评三连",
+      "sequence": 7,
+      "narrativeRole": "结果：自动好评、小红花、致谢",
+      "subtitle": "系统自动给出好评、自动求小红花、自动发送致谢，",
+      "type": "structure",
+      "region": {
+        "x": 1440,
+        "y": 340,
+        "width": 360,
+        "height": 340
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 11800,
+        "durationMs": 4000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1460,
+          360
+        ],
+        "end": [
+          1780,
+          660
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "auto-badge",
+      "label": "自动化徽章",
+      "sequence": 8,
+      "narrativeRole": "收尾：整条售后流程不需要你动手",
+      "subtitle": "一整条售后流程不需要你动手。",
+      "type": "structure",
+      "region": {
+        "x": 130,
+        "y": 100,
+        "width": 380,
+        "height": 250
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 16200,
+        "durationMs": 2600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          150,
+          120
+        ],
+        "end": [
+          490,
+          330
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

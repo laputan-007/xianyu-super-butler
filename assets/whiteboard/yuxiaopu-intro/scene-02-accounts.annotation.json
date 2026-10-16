@@ -1,0 +1,203 @@
+{
+  "sceneId": "scene-02-accounts",
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "storyBasis": "扫码把账号接入鱼小铺后台，一个页面管理所有小号并独立配置策略。",
+  "sceneDurationMs": 20000,
+  "elements": [
+    {
+      "id": "monitor",
+      "label": "中央后台显示器",
+      "sequence": 1,
+      "narrativeRole": "场景铺垫：鱼小铺——面向闲鱼卖家的自动化系统",
+      "subtitle": "这是鱼小铺，一个面向闲鱼卖家的自动化管理系统。",
+      "type": "structure",
+      "region": {
+        "x": 730,
+        "y": 340,
+        "width": 460,
+        "height": 480
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 100,
+        "durationMs": 2200,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          750,
+          360
+        ],
+        "end": [
+          1170,
+          800
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "qrcode",
+      "label": "登录二维码",
+      "sequence": 2,
+      "narrativeRole": "动作：扫码接入账号",
+      "subtitle": "用手机扫一下码，就能把账号接入后台；",
+      "type": "structure",
+      "region": {
+        "x": 1380,
+        "y": 110,
+        "width": 320,
+        "height": 310
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2500,
+        "durationMs": 2400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1400,
+          130
+        ],
+        "end": [
+          1680,
+          400
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "left-phones",
+      "label": "左侧手机与连线",
+      "sequence": 3,
+      "narrativeRole": "汇聚：小号接入统一后台",
+      "subtitle": "一个页面，就能管理所有小号。",
+      "type": "structure",
+      "region": {
+        "x": 110,
+        "y": 250,
+        "width": 645,
+        "height": 750
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 5000,
+        "durationMs": 1600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          130,
+          270
+        ],
+        "end": [
+          735,
+          980
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "right-phones",
+      "label": "右侧手机与连线",
+      "sequence": 4,
+      "narrativeRole": "汇聚：更多小号接入统一后台",
+      "subtitle": "一个页面，就能管理所有小号。",
+      "type": "structure",
+      "region": {
+        "x": 1150,
+        "y": 470,
+        "width": 650,
+        "height": 580
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 6800,
+        "durationMs": 1600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1170,
+          490
+        ],
+        "end": [
+          1780,
+          1030
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "toggles",
+      "label": "策略开关面板",
+      "sequence": 5,
+      "narrativeRole": "独立策略：谁开自动回复、谁人工盯着、谁暂停",
+      "subtitle": "每个账号都可以单独设置策略：谁开自动回复、谁要人工盯着、谁暂停接单，互不干扰。",
+      "type": "structure",
+      "region": {
+        "x": 660,
+        "y": 880,
+        "width": 580,
+        "height": 180
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 8700,
+        "durationMs": 6500,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          680,
+          900
+        ],
+        "end": [
+          1220,
+          1040
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "fish-mascot",
+      "label": "吉祥物小鱼",
+      "sequence": 6,
+      "narrativeRole": "结果：所有小号互不干扰地运转",
+      "subtitle": "每个账号都可以单独设置策略：谁开自动回复、谁要人工盯着、谁暂停接单，互不干扰。",
+      "type": "structure",
+      "region": {
+        "x": 800,
+        "y": 40,
+        "width": 370,
+        "height": 300
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 15600,
+        "durationMs": 3600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          820,
+          60
+        ],
+        "end": [
+          1150,
+          320
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "scene-01-pain",
+    "title": "痛点开场",
+    "startSec": 0.0,
+    "endSec": 21.852,
+    "durationSec": 21.852,
+    "mp3Sec": 21.552
+  },
+  {
+    "name": "scene-02-accounts",
+    "title": "多账号管理",
+    "startSec": 21.852,
+    "endSec": 41.808,
+    "durationSec": 19.956,
+    "mp3Sec": 19.656
+  },
+  {
+    "name": "scene-03-autoship",
+    "title": "自动发货与买家互动",
+    "startSec": 41.808,
+    "endSec": 61.62,
+    "durationSec": 19.812,
+    "mp3Sec": 19.512
+  },
+  {
+    "name": "scene-04-aireply",
+    "title": "智能回复",
+    "startSec": 61.62,
+    "endSec": 80.904,
+    "durationSec": 19.284,
+    "mp3Sec": 18.984
+  },
+  {
+    "name": "scene-05-dashboard",
+    "title": "经营看板",
+    "startSec": 80.904,
+    "endSec": 101.868,
+    "durationSec": 20.964,
+    "mp3Sec": 20.664
+  },
+  {
+    "name": "scene-06-outro",
+    "title": "架构与收尾",
+    "startSec": 101.868,
+    "endSec": 120.264,
+    "durationSec": 18.396,
+    "mp3Sec": 18.096
+  }
+]

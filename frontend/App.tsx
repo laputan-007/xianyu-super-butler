@@ -10,6 +10,7 @@ import GlobalFeedback from './components/GlobalFeedback';
 import ThemeToggle from './components/ThemeToggle';
 import CaptchaInput from './components/CaptchaInput';
 import TruckLogo from './components/TruckLogo';
+import DesktopTitleBar, { useDesktopShell } from './components/DesktopTitleBar';
 import { useCaptcha } from './lib/useCaptcha';
 import { validateEmail, validatePassword, validateUsername } from './lib/authValidation';
 import { login, verifyToken, getPublicSettings, register, sendVerificationCode, getAccountDetails } from './services/api';
@@ -71,6 +72,8 @@ const App: React.FC = () => {
   const [loginNotice, setLoginNotice] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  // 打包客户端（pywebview 壳）里启用自定义标题栏；浏览器访问不生效
+  const desktopShell = useDesktopShell();
 
   // 注册相关。是否显示入口由后台「允许用户注册」控制，
   // 是否需要填验证码由后台「注册邮箱验证」控制（没配 SMTP 时可以关掉）。
@@ -546,7 +549,8 @@ const App: React.FC = () => {
   // Login Screen Component
   if (!isLoggedIn) {
     return (
-      <div ref={loginRootRef} className="flex min-h-screen bg-[var(--app-bg)] font-sans text-[var(--text)]">
+      <div ref={loginRootRef} className={`flex min-h-screen bg-[var(--app-bg)] font-sans text-[var(--text)] ${desktopShell ? 'pt-9' : ''}`}>
+        <DesktopTitleBar />
         {/* 左侧封面：暗色底衬托闲鱼黄 logo，与右侧表单形成分屏布局 */}
         <aside
           className="relative hidden w-3/5 shrink-0 select-none flex-col overflow-hidden lg:flex"
@@ -1034,7 +1038,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
+    <div className={`flex min-h-screen bg-[var(--app-bg)] text-[var(--text)] ${desktopShell ? 'pt-9' : ''}`}>
+      <DesktopTitleBar />
       <GlobalFeedback />
       <Sidebar
         activeTab={activeTab}
@@ -1048,7 +1053,7 @@ const App: React.FC = () => {
         collapsed={sidebarCollapsed}
       />
 
-      <main className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[208px]'}`}>
+      <main className={`flex min-w-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[208px]'} ${desktopShell ? 'h-[calc(100vh-2.25rem)]' : 'h-screen'}`}>
         <Header
           pageTitle={pageLabels[activeTab] || '鱼小铺'}
           accounts={accounts}

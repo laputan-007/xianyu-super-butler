@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:static/assets/Dashboard-DGafDIUJ.js
 var Zb=Object.defineProperty;var Qb=(e,t,r)=>t in e?Zb(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var Gi=(e,t,r)=>Qb(e,typeof t!="symbol"?t+"":t,r);import{c as Sn,r as v,a as Nu,g as Jb,R as ex,b as tx,u as rx,d as nx,j as O,C as ix,e as ax,U as ox,P as nl,M as lx,f as ux,h as sx,i as zc}from"./index-GWaf81AS.js";import{P as cx,a as fx,b as dx,S as Xr,E as Zr}from"./ui-BUstQ2vz.js";import{A as il}from"./activity-DcKqg8Gy.js";import{S as vx}from"./sparkles-CJ5MG-Xm.js";import{B as hx}from"./bell-ring-CkQw-fmK.js";import{r as Ru}from"./index-CPDEfOVf.js";import{P as mx}from"./package-check-DuUSMMYd.js";import{E as px}from"./external-link-D5S-JJVV.js";/**
+========
+var Zb=Object.defineProperty;var Qb=(e,t,r)=>t in e?Zb(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var Gi=(e,t,r)=>Qb(e,typeof t!="symbol"?t+"":t,r);import{c as Sn,r as v,a as Nu,g as Jb,R as ex,b as tx,u as rx,d as nx,j as O,C as ix,e as ax,U as ox,P as nl,M as lx,f as ux,h as sx,i as zc}from"./index-Df8X5UcB.js";import{P as cx,a as fx,b as dx,S as Xr,E as Zr}from"./ui-BCp9JcAm.js";import{A as il}from"./activity-BJj-Ad_7.js";import{S as vx}from"./sparkles-DCJa85Rl.js";import{B as hx}from"./bell-ring-BBt6T00E.js";import{r as Ru}from"./index-B67bPLvl.js";import{P as mx}from"./package-check-BOSz-LkH.js";import{E as px}from"./external-link-DNDcaUaO.js";/**
+>>>>>>>> 9d973b9 (TUNING: 客户端窗口去原生标题栏改网页自绘):static/assets/Dashboard-C2TfnxyP.js
  * @license lucide-react v0.562.0 - ISC
  *
  * This source code is licensed under the ISC license.

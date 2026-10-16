@@ -1,0 +1,171 @@
+{
+  "sceneId": "scene-05-dashboard",
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "storyBasis": "商品自动同步素材库、定时擦亮上下架，经营数据一屏掌握、历史订单拉回。",
+  "sceneDurationMs": 21000,
+  "elements": [
+    {
+      "id": "boxes",
+      "label": "商品盒堆",
+      "sequence": 1,
+      "narrativeRole": "场景铺垫：闲鱼上的商品",
+      "subtitle": "商品从闲鱼自动同步，素材库统一管理，",
+      "type": "structure",
+      "region": {
+        "x": 100,
+        "y": 280,
+        "width": 440,
+        "height": 450
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 100,
+        "durationMs": 2000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          120,
+          300
+        ],
+        "end": [
+          520,
+          710
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "cabinet",
+      "label": "素材库柜",
+      "sequence": 2,
+      "narrativeRole": "动作：商品自动同步进素材库统一管理",
+      "subtitle": "商品从闲鱼自动同步，素材库统一管理，",
+      "type": "structure",
+      "region": {
+        "x": 520,
+        "y": 300,
+        "width": 360,
+        "height": 430
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2200,
+        "durationMs": 1800,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          540,
+          320
+        ],
+        "end": [
+          860,
+          710
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "shine",
+      "label": "擦亮星光",
+      "sequence": 3,
+      "narrativeRole": "变化：定时擦亮、自动上下架",
+      "subtitle": "还可以定时擦亮、自动上下架。打开经营看板，",
+      "type": "structure",
+      "region": {
+        "x": 920,
+        "y": 230,
+        "width": 270,
+        "height": 370
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 4300,
+        "durationMs": 2000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          940,
+          250
+        ],
+        "end": [
+          1170,
+          580
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "dashboard",
+      "label": "经营看板",
+      "sequence": 4,
+      "narrativeRole": "结果：成交额、到账、退款、订单、库存一屏掌握",
+      "subtitle": "还可以定时擦亮、自动上下架。打开经营看板，成交额、到账、退款、订单、卡密库存一屏掌握，",
+      "type": "structure",
+      "region": {
+        "x": 1200,
+        "y": 210,
+        "width": 630,
+        "height": 570
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 6600,
+        "durationMs": 6700,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1220,
+          230
+        ],
+        "end": [
+          1810,
+          760
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "laptop",
+      "label": "打开网页看数据",
+      "sequence": 5,
+      "narrativeRole": "收尾：历史订单拉回，从盯手机变成看网页",
+      "subtitle": "历史订单也能一次性拉回。从盯着手机一个个回，变成打开网页看数据。",
+      "type": "structure",
+      "region": {
+        "x": 500,
+        "y": 790,
+        "width": 950,
+        "height": 280
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 13600,
+        "durationMs": 6300,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          520,
+          810
+        ],
+        "end": [
+          1430,
+          1050
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

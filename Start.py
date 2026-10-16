@@ -1006,7 +1006,42 @@ if __name__ == '__main__':
                 break
             except Exception:
                 _time.sleep(1)
-        webview.create_window('鱼小铺', _url, width=1440, height=900, min_size=(1024, 640))
+
+        class _DesktopClientApi:
+            """pywebview JS 桥：网页自定义标题栏的窗口控制。
+
+            frameless 窗口没有原生按钮，最小化/最大化/还原/关闭由前端标题栏
+            经 window.pywebview.api.* 调到这里。
+            """
+            window = None
+
+            def minimize(self):
+                if self.window is not None:
+                    self.window.minimize()
+
+            def maximize(self):
+                if self.window is not None:
+                    self.window.maximize()
+
+            def restore(self):
+                if self.window is not None:
+                    self.window.restore()
+
+            def close(self):
+                if self.window is not None:
+                    self.window.destroy()
+
+        # 无边框窗口：标题栏由网页自绘（pywebview-drag-region 拖拽区 + 自定义按钮），
+        # background_color 与登录页封面同色系，页面加载前不闪白。
+        _api = _DesktopClientApi()
+        _win = webview.create_window(
+            '鱼小铺', _url, width=1440, height=900, min_size=(1024, 640),
+            frameless=True,
+            easy_drag=False,  # 用显式拖拽区类，避免整页拖拽误伤 UI 交互
+            background_color='#17130a',
+            js_api=_api,
+        )
+        _api.window = _win
         webview.start()
         print('窗口已关闭，进程退出')
         os._exit(0)
