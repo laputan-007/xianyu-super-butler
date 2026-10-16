@@ -1,4 +1,4 @@
-# 鱼小铺（闲鱼超级管家 · 多账户稳定增强版）
+# 鱼小铺（多账户稳定增强版）
 
 面向闲鱼卖家的账号、商品、订单、消息、自动回复与自动发货一体化管理系统。
 *一款能让你的想法'变现'的强大作品*
@@ -49,6 +49,7 @@
 | 设置 | 管理员账号与改密、注册与邮箱验证开关、服务、备份及系统配置 |
 | 公告与更新 | 从自建地址拉取公告与版本信息，首页横幅提示，「关于」页手动检查更新 |
 | 主题外观 | 浅色/深色/自动外观 + 七种主题色预设即时切换，本浏览器偏好持久化 |
+| 登录页动效 | 漂浮吉祥物贝塞尔航迹巡航 + 侧倾/远近多层合成、封面鼠标视差与悬停躲闪，尊重系统减弱动效设置 |
 | 运行架构 | 单事件循环、SQLite WAL、消息去重落库、账号生命周期任务管理，多账户并发安全 |
 
 ## v3.2.0 多账户并发与稳定性改造（本版重点）
@@ -74,10 +75,11 @@
 | 场景化 AI 提示词 | 「商品问答指引」（买家咨询商品参数/成色怎么答）与「无关话题处理」（聊到无关话题怎么接）两个每账号可配提示词，空值回落内置默认 |
 | 用量统计 | AI 调用、通知推送、邮件发送按用户按天累计（usage_stats 表，90 天保留），普通用户看自己、管理员看全部 |
 | 主题色换肤 | 七套 data-brand 预设（CSS 变量驱动零重编译），启动脚本预置防闪烁，经营看板图表色板联动 |
+| 登录页动效重写 | 漂浮吉祥物改三层变换合成（贝塞尔闭合航迹 + 侧倾姿态 + 远近呼吸，周期互不同步永不重复），封面新增鼠标视差级联（大鱼顺向/小飞机反向/水印慢速），悬停从单纯放大改为躲闪与歪头摇摆；prefers-reduced-motion 下全部静默 |
 
 容量红线：2核2G 建议 ≤30 账号 / ≤8 用户；更大规模按运维手册的硬件阶梯扩容（4C8G 起可拆进程部署）。
 
-## 界面预览（v3.2.0 实拍）
+## 界面预览
 
 ### 运营总览：一屏看清经营水位
 
@@ -211,31 +213,9 @@ git pull && sudo systemctl restart xianyu-butler
 > **滑块与人机验证、部署失败排查、使用流程** 见 [docs/deployment.md](docs/deployment.md)。
 > 自动过滑块受平台风控限制不保证成功，自动失败时可在账号页转人工验证。
 
-## 交流与反馈
-
-<table>
-  <tr>
-    <th align="center">微信群</th>
-    <th align="center">QQ群</th>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/community/wechat-group.jpg" alt="鱼小铺微信群二维码" width="180"></td>
-    <td align="center"><img src="docs/community/qq-group.jpg" alt="鱼小铺QQ群二维码" width="180"></td>
-  </tr>
-  <tr>
-    <td align="center">二维码失效后会在仓库更新</td>
-    <td align="center">群号：704866149</td>
-  </tr>
-</table>
-
 缺陷和功能建议请提交到 [Gitee Issues](https://gitee.com/is-it-day-and-night/xianyu-super-butler/issues)。
 
 ## 许可与声明
-
-本项目基于 [23Star/xianyu-super-butler](https://github.com/23Star/xianyu-super-butler)（其自身基于
-[zhinianboke/xianyu-auto-reply](https://github.com/zhinianboke/xianyu-auto-reply)）二次开发并持续维护：
-保留原项目核心能力，v3.2.0 起进行了多账户并发与稳定性架构改造（单事件循环、数据落库去重、
-备份恢复安全化、账号生命周期管理、低配部署优化）。感谢两位上游作者的开源工作。
 
 项目使用 [GNU Affero General Public License v3.0](LICENSE)。修改、部署或通过网络提供服务时，请遵守 AGPL-3.0 的源代码公开义务。
 
