@@ -438,6 +438,8 @@ if not os.path.exists(uploads_dir):
 @app.get('/health')
 async def health_check():
     """健康检查端点，用于Docker健康检查和负载均衡器"""
+    from app.version import get_version_summary
+    logger.info(f"当前运行 {get_version_summary()}")
     try:
         # 检查Cookie管理器状态
         manager_status = "ok" if cookie_manager.manager is not None else "error"

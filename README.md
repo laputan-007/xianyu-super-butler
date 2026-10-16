@@ -3,7 +3,7 @@
 面向闲鱼卖家的账号、商品、订单、消息、自动回复与自动发货一体化管理系统。
 *一款能让你的想法'变现'的强大作品*
 
-[![Version](https://img.shields.io/badge/Version-3.2.0-52c41a)](https://gitee.com/is-it-day-and-night/xianyu-super-butler)
+[![Version](https://img.shields.io/badge/Version-3.3.0-52c41a)](https://gitee.com/is-it-day-and-night/xianyu-super-butler)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-222222)](LICENSE)

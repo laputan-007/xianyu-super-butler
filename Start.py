@@ -10,6 +10,14 @@ import sys
 import shutil
 from pathlib import Path
 
+# 打包模式（PyInstaller frozen）初始化：必须发生在任何 app.* 导入之前——
+# db_manager 在导入时就按相对路径创建 data/xianyu_data.db，config 读
+# PROJECT_ROOT/global_config.yml，先落好工作目录与浏览器路径再进业务代码。
+if getattr(sys, 'frozen', False):
+    _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    os.chdir(_exe_dir)  # 数据/日志/浏览器配置目录全部落在 exe 旁边，双击即用
+    os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, '_internal', 'browsers'))
+
 # 设置标准输出编码为UTF-8（Windows兼容）
 def _setup_console_encoding():
     """设置控制台编码为UTF-8，避免Windows GBK编码问题"""
@@ -855,6 +863,15 @@ async def main():
     else:
         print("启动 API 服务（主循环合并模式）...")
         api_task = asyncio.create_task(_start_api_server_on_main_loop())
+
+        # 打包版（PyInstaller frozen）：服务就绪后自动拉起默认浏览器打开管理后台。
+        # 源码运行不触发，避免开发时反复弹页。
+        if getattr(sys, 'frozen', False):
+            import webbrowser
+            _host, _open_port = _resolve_api_address()
+            _open_url = f"http://127.0.0.1:{_open_port}/"
+            threading.Timer(6.0, lambda: webbrowser.open(_open_url)).start()
+            print(f"检测到打包模式，{_open_url} 将在服务就绪后自动打开")
 
         def _on_api_task_done(task: asyncio.Task):
             """Web 服务退出时让整个进程响亮地结束，绝不半死运行。

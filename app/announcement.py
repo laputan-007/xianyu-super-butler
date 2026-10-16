@@ -75,15 +75,16 @@ CACHE_TTL = 600
 FETCH_TIMEOUT = 8
 
 
-# 本软件版本号。发布新版时改这里，并同步更新公网服务器上 JSON 的 latest_version。
+# 本软件版本号统一维护在 app/version.py（单一来源），此处仅做兼容转发。
+# 发布新版时改 app/version.py，并同步更新公网服务器上 JSON 的 latest_version。
 # 注意不要复用 global_config.yml 里的 APP_CONFIG.app_version —— 那是伪装成闲鱼
 # 客户端时上报给平台的协议版本，与本软件版本无关。
-APP_VERSION = '1.0.0'
+from app.version import read_dist_version as _read_dist_version
 
 
 def get_local_version() -> str:
-    """当前运行的软件版本号。"""
-    return APP_VERSION
+    """当前运行的软件版本号（打包版优先读 exe 旁的 version.txt）。"""
+    return _read_dist_version()
 
 
 def _normalize(payload: Any) -> Dict[str, Any]:

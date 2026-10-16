@@ -21,6 +21,7 @@ wheels/
 MANIFEST
 *.manifest
 *.spec
+!packaging/*.spec
 .cache
 *.log
 local_settings.py
