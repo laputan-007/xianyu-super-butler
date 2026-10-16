@@ -1,5 +1,8 @@
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
+import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
+
+gsap.registerPlugin(MotionPathPlugin);
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import GlobalFeedback from './components/GlobalFeedback';
@@ -295,20 +298,94 @@ const App: React.FC = () => {
       gsap.utils.toArray<HTMLElement>('.login-glow').forEach((el, i) => {
         gsap.to(el, { scale: 1.15, duration: 4 + i * 1.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
       });
-      gsap.utils.toArray<HTMLElement>('.login-floaty').forEach((el, i) => {
-        gsap.to(el, {
-          y: 14 + i * 7,
-          x: i % 2 ? 10 : -8,
-          rotation: i % 2 ? 6 : -5,
-          duration: 3.2 + i * 0.9,
-          yoyo: true,
-          repeat: -1,
-          ease: 'sine.inOut',
-        });
-      });
       gsap.to('.login-mascot-watermark', { rotation: 4, duration: 9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
-      // 主视觉吉祥物：缓慢游动，带 x 轴轻摆更像在游
-      gsap.to('.login-hero', { y: 7, x: 6, rotation: 2.5, duration: 3.6, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+
+      // ===== 漂浮吉祥物：三层变换分离，视差/巡航/交互互不抢属性 =====
+      // 外层 .login-hero-layer / .login-floaty-layer：定位锚点 + 鼠标视差（quickTo）
+      // 中层 .login-hero-drift / .login-floaty-drift：有机游动 / 贝塞尔航迹巡航
+      // 内层 img：悬停交互（摇摆、躲闪）
+
+      // 主视觉吉祥物：变节奏多段折返——每段的时长/幅度/转向都不同，
+      // 循环起来不再是"去-回-去-回"的镜像往返，像在原地不紧不慢地游
+      gsap.to('.login-hero-drift', {
+        keyframes: [
+          { x: 12, y: -7, rotation: 2.4, duration: 3.6, ease: 'sine.inOut' },
+          { x: 21, y: 4, rotation: -1.5, duration: 2.9, ease: 'sine.inOut' },
+          { x: -4, y: 11, rotation: 1.8, duration: 3.8, ease: 'sine.inOut' },
+          { x: -16, y: -6, rotation: -2.2, duration: 3.1, ease: 'sine.inOut' },
+          { x: -6, y: -13, rotation: 1.2, duration: 4.2, ease: 'sine.inOut' },
+          { x: 0, y: 0, rotation: 0, duration: 3.4, ease: 'sine.inOut' },
+        ],
+        repeat: -1,
+      });
+      // 呼吸：缩放层的小起伏，周期与位移刻意错开，避免"放大即上升"的同步感
+      gsap.to('.login-hero-drift', { scale: 1.03, duration: 4.7, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+
+      // 小吉祥物：闭合贝塞尔航迹懒散巡航。motionPath 只接管 x/y，
+      // 姿态（rotation）与远近（scale）独立叠加，三者周期互不成整数比，
+      // 合成出来的姿态变化不重复——这是"活"与"假"的分界
+      gsap.to('.login-floaty-drift', {
+        motionPath: {
+          path: [
+            { x: 0, y: 0 },
+            { x: 66, y: -32 },
+            { x: 138, y: 4 },
+            { x: 158, y: 52 },
+            { x: 92, y: 94 },
+            { x: 6, y: 86 },
+            { x: -62, y: 42 },
+            { x: -76, y: -10 },
+            { x: 0, y: 0 },
+          ],
+          curviness: 1.5,
+        },
+        duration: 16,
+        repeat: -1,
+        ease: 'none',
+      });
+      // 侧倾姿态：不等幅、不等时的多段摆动，叠加出转向时的"甩尾"感
+      gsap.to('.login-floaty-drift', {
+        keyframes: [
+          { rotation: 14, duration: 1.6, ease: 'sine.inOut' },
+          { rotation: 5, duration: 2.2, ease: 'sine.inOut' },
+          { rotation: -11, duration: 1.9, ease: 'sine.inOut' },
+          { rotation: -4, duration: 2.6, ease: 'sine.inOut' },
+          { rotation: 0, duration: 1.3, ease: 'sine.inOut' },
+        ],
+        repeat: -1,
+      });
+      // 远近呼吸：忽远忽近的深度错觉
+      gsap.to('.login-floaty-drift', { scale: 1.18, duration: 5.3, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+
+      // 鼠标视差：光标在封面滑动时各层带惯性跟随，越小的元素反而动得越多（近大远小反向）
+      const parallaxLayers: Array<{ el: HTMLElement | null; ax: number; ay: number; dur: number }> = [
+        { el: loginRootRef.current.querySelector<HTMLElement>('.login-hero-layer'), ax: 14, ay: 10, dur: 0.9 },
+        { el: loginRootRef.current.querySelector<HTMLElement>('.login-floaty-layer'), ax: -24, ay: -16, dur: 1.3 },
+        { el: loginRootRef.current.querySelector<HTMLElement>('.login-mascot-watermark'), ax: -8, ay: -6, dur: 1.7 },
+      ];
+      const movers = parallaxLayers
+        .filter((layer): layer is { el: HTMLElement; ax: number; ay: number; dur: number } => layer.el !== null)
+        .map(({ el, ax, ay, dur }) => ({
+          xTo: gsap.quickTo(el, 'x', { duration: dur, ease: 'power3.out' }),
+          yTo: gsap.quickTo(el, 'y', { duration: dur, ease: 'power3.out' }),
+          ax,
+          ay,
+        }));
+      const onCoverMove = (event: MouseEvent) => {
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const nx = (event.clientX - rect.left) / rect.width - 0.5;
+        const ny = (event.clientY - rect.top) / rect.height - 0.5;
+        movers.forEach(m => { m.xTo(nx * m.ax * 2); m.yTo(ny * m.ay * 2); });
+      };
+      const onCoverLeave = () => movers.forEach(m => { m.xTo(0); m.yTo(0); });
+      const cover = loginRootRef.current.querySelector<HTMLElement>('aside');
+      cover?.addEventListener('mousemove', onCoverMove);
+      cover?.addEventListener('mouseleave', onCoverLeave);
+      // 手动绑定的监听要随 context 一起注销（gsap.context 支持在末尾返回清理函数）
+      const cleanupParallax = () => {
+        cover?.removeEventListener('mousemove', onCoverMove);
+        cover?.removeEventListener('mouseleave', onCoverLeave);
+      };
       // 接缝流光：一缕亮光沿金色接缝周期性下行
       gsap.fromTo('.login-seam-light', { top: '-18%' }, { top: '104%', duration: 2, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.8 });
       // 标题流光：一道暖金色高光周期性从左向右扫过标题文字
@@ -318,6 +395,7 @@ const App: React.FC = () => {
         { backgroundPosition: '0% 0%, 0% 0%', duration: 2.4, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.6 });
       // 标题金色光晕缓慢呼吸
       gsap.to('.login-title', { filter: 'drop-shadow(0px 4px 28px rgb(var(--brand-rgb)/0.32))', duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      return cleanupParallax;
     }, loginRootRef);
 
     return () => ctx.revert();
@@ -467,27 +545,43 @@ const App: React.FC = () => {
           >
             <div className="login-seam-light absolute inset-x-0 h-[16%] bg-gradient-to-b from-transparent via-brand-300 to-transparent blur-[1px]" />
           </div>
-          {/* 封面主视觉：小黄鱼吉祥物，缓慢游动，悬停弹跳 */}
+          {/* 封面主视觉：小黄鱼吉祥物。外层锚点管视差、中层管游动、img 管悬停 */}
           <div className="login-hero-layer absolute right-8 top-12">
-            <img
-              src="/static/login-mascot.png"
-              alt="闲鱼吉祥物"
-              draggable={false}
-              className="login-hero h-40 w-40 drop-shadow-[0_16px_36px_rgb(var(--brand-rgb)/0.4)]"
-              onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.1, duration: 0.35, ease: 'back.out(2)' })}
-              onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
-            />
+            <div className="login-hero-drift">
+              <img
+                src="/static/login-mascot.png"
+                alt="闲鱼吉祥物"
+                draggable={false}
+                className="login-hero h-40 w-40 drop-shadow-[0_16px_36px_rgb(var(--brand-rgb)/0.4)]"
+                onMouseEnter={e => {
+                  gsap.to(e.currentTarget, { scale: 1.09, duration: 0.4, ease: 'back.out(2.2)', overwrite: 'auto' });
+                  gsap.fromTo(e.currentTarget, { rotation: 0 }, {
+                    keyframes: { rotation: [0, -6, 4, -2, 0] },
+                    duration: 0.75,
+                    ease: 'power2.out',
+                    overwrite: 'auto',
+                  });
+                }}
+                onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, rotation: 0, duration: 0.35, ease: 'power2.out', overwrite: 'auto' })}
+              />
+            </div>
           </div>
-          {/* 小吉祥物：主视觉与中部文字之间的空档游动，与主视觉形成"大小鱼同游"的层次 */}
+          {/* 小吉祥物：主视觉与中部文字之间的空档巡航，与主视觉形成"大小鱼同游"的层次 */}
           <div className="login-floaty-layer absolute right-32 top-56">
-            <img
-              src="/static/login-mascot.png"
-              alt=""
-              draggable={false}
-              className="login-floaty h-9 w-9 opacity-50"
-              onMouseEnter={e => gsap.to(e.currentTarget, { scale: 1.4, duration: 0.35, ease: 'back.out(2)' })}
-              onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, duration: 0.3, ease: 'power2.out' })}
-            />
+            <div className="login-floaty-drift">
+              <img
+                src="/static/login-mascot.png"
+                alt=""
+                draggable={false}
+                className="login-floaty h-9 w-9 opacity-50"
+                onMouseEnter={e => gsap
+                  .timeline({ defaults: { ease: 'power2.out', overwrite: 'auto' } })
+                  .to(e.currentTarget, { scale: 1.35, duration: 0.28, ease: 'back.out(2.4)' }, 0)
+                  .to(e.currentTarget, { rotation: -18, duration: 0.22 }, 0)
+                  .to(e.currentTarget, { rotation: 6, duration: 0.4 }, 0.26)}
+                onMouseLeave={e => gsap.to(e.currentTarget, { scale: 1, rotation: 0, duration: 0.5, ease: 'elastic.out(1, 0.6)', overwrite: 'auto' })}
+              />
+            </div>
           </div>
 
           <div className="login-cover-content relative flex h-full flex-col p-12">
