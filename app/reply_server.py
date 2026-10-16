@@ -4128,6 +4128,29 @@ def get_usage_stats_endpoint(days: int = 7, user_id: int = None,
     return db_manager.get_usage_stats(user_id=effective_user, days=days)
 
 
+@app.get('/ai-call-logs')
+def get_ai_call_logs_endpoint(limit: int = 50, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """AI 调用留痕（近 7 天，每次真实 API 调用一行：token 用量 + 回复内容）。
+
+    普通用户只能看自己名下账号的调用；admin 看全部。数据由 cleanup_old_data
+    每日按 7 天滚动清理。
+    """
+    from app.db_manager import db_manager
+
+    is_admin = (
+        current_user.get('is_admin', False)
+        or current_user.get('username') == ADMIN_USERNAME
+    )
+    effective_user: Optional[int] = None if is_admin else current_user.get('user_id')
+
+    try:
+        limit = max(1, min(200, int(limit)))
+    except (TypeError, ValueError):
+        limit = 50
+
+    return {'success': True, 'logs': db_manager.get_ai_call_logs(user_id=effective_user, limit=limit)}
+
+
 @app.put('/system-settings/{key}')
 def update_system_setting(key: str, setting_data: SystemSettingIn,
                           _: Dict[str, Any] = Depends(require_admin)):

@@ -5,9 +5,11 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  History,
   Loader2,
   MessageSquareText,
   Play,
+  RefreshCw,
   Save,
   ShieldCheck,
 } from 'lucide-react';
@@ -15,8 +17,10 @@ import { AccountDetail, AIReplySettings } from '../types';
 import {
   getAccountAISettings,
   getAccountDetails,
+  getAiCallLogs,
   testAIConnection,
   updateAccountAISettings,
+  type AiCallLog,
 } from '../services/api';
 import { notify } from '../services/feedback';
 import { EmptyState, PageHeader, PageLoading, SectionHeader } from './ui';
@@ -43,7 +47,7 @@ const defaultSettings: AIReplySettings = {
   off_topic_prompt: '',
 };
 
-const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void }> = ({ syncedAccountId, onSyncedAccountChange }) => {
+const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id: string) => void; isAdmin?: boolean }> = ({ syncedAccountId, onSyncedAccountChange, isAdmin = false }) => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [settings, setSettings] = useState<AIReplySettings>(defaultSettings);
@@ -53,6 +57,23 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
   const [showApiKey, setShowApiKey] = useState(false);
   const [testMessage, setTestMessage] = useState('你好，这个商品现在还能买吗？');
   const [testReply, setTestReply] = useState('');
+  // AI 调用留痕（管理员，近 7 天滚动）
+  const [callLogs, setCallLogs] = useState<AiCallLog[]>([]);
+  const [callLogsLoading, setCallLogsLoading] = useState(false);
+
+  const loadCallLogs = () => {
+    if (!isAdmin) return;
+    setCallLogsLoading(true);
+    getAiCallLogs(50)
+      .then(setCallLogs)
+      .catch(() => setCallLogs([]))
+      .finally(() => setCallLogsLoading(false));
+  };
+
+  useEffect(() => {
+    loadCallLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   const selectedAccount = useMemo(
     () => accounts.find(account => account.id === selectedAccountId),
@@ -465,6 +486,81 @@ const AIReply: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id:
               </section>
             </aside>
           </div>
+
+          {/* AI 调用留痕：每次真实 API 调用（含重试）一行，token 用量与回复内容同处，保留 7 天 */}
+          {isAdmin && (
+            <section className="section-panel mt-5">
+              <SectionHeader
+                title="AI 调用留痕"
+                description="每次真实 API 调用（含重试）的 token 用量与回复内容，滚动保留 7 天。"
+                icon={History}
+                actions={(
+                  <button
+                    type="button"
+                    onClick={loadCallLogs}
+                    disabled={callLogsLoading}
+                    className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${callLogsLoading ? 'animate-spin' : ''}`} />
+                    刷新
+                  </button>
+                )}
+              />
+              <div className="overflow-x-auto px-4 pb-4">
+                {callLogs.length === 0 ? (
+                  <EmptyState
+                    compact
+                    title="暂无调用记录"
+                    description="发生 AI 回复（或设置页回复测试）后，这里会出现带 token 用量的调用留痕，7 天后自动清理。"
+                    icon={History}
+                  />
+                ) : (
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead>
+                      <tr className="text-xs text-[var(--text-soft)]">
+                        <th className="pb-2 font-bold">时间</th>
+                        <th className="pb-2 font-bold">账号</th>
+                        <th className="pb-2 font-bold">意图</th>
+                        <th className="pb-2 font-bold">模型</th>
+                        <th className="pb-2 font-bold">Token (入/出)</th>
+                        <th className="pb-2 font-bold">回复内容 / 错误</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {callLogs.map(log => (
+                        <tr key={log.id} className="border-t border-[var(--border)]">
+                          <td className="whitespace-nowrap py-2 text-xs text-[var(--text-soft)]">
+                            {log.created_at ? log.created_at.replace('T', ' ').slice(0, 19) : '-'}
+                          </td>
+                          <td className="max-w-24 truncate py-2 text-xs text-[var(--text-soft)]" title={log.cookie_id}>
+                            {log.cookie_id.slice(-6)}
+                          </td>
+                          <td className="py-2 text-xs">
+                            {log.intent === 'price' ? '议价' : log.intent === 'tech' ? '技术' : '常规'}
+                          </td>
+                          <td className="max-w-36 truncate py-2 text-xs" title={`${log.api_type} · ${log.model}`}>
+                            {log.model || log.api_type}
+                          </td>
+                          <td className="whitespace-nowrap py-2 text-xs font-bold">
+                            {log.prompt_tokens.toLocaleString()} / {log.completion_tokens.toLocaleString()}
+                          </td>
+                          <td className="max-w-md py-2 text-xs">
+                            {log.ok ? (
+                              <span className="line-clamp-1 text-[var(--text)]" title={log.reply_text}>{log.reply_text || '-'}</span>
+                            ) : (
+                              <span className="line-clamp-1 text-[var(--danger)]" title={log.error_summary}>
+                                {log.error_summary || '调用失败'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          )}
 
         </>
       )}

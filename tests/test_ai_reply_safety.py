@@ -183,7 +183,7 @@ class BudgetEscalationTests(unittest.TestCase):
             seen.append(max_tokens)
             if max_tokens < 6000:
                 raise ReasoningBudgetExhausted('思维链吃光了预算')
-            return '170包邮成交～'
+            return ('170包邮成交～', {'prompt_tokens': 30, 'completion_tokens': 9, 'total_tokens': 39})
 
         with patch.object(AIReplyEngine, '_dispatch_api_call', fake_call):
             reply = self.engine._generate_with_retry({}, [], 'acc')

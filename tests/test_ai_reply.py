@@ -56,7 +56,7 @@ class AIReplyEngineTests(unittest.TestCase):
             patch.object(
                 self.engine,
                 "_call_openai_api",
-                return_value='  "有货，可以直接拍。"  ',
+                return_value=('  "有货，可以直接拍。"  ', {'prompt_tokens': 10, 'completion_tokens': 5, 'total_tokens': 15}),
             ) as call_openai,
             patch("app.ai_reply_engine.db_manager.get_ai_reply_settings", return_value=settings),
         ):
@@ -113,7 +113,7 @@ class AIReplyEngineTests(unittest.TestCase):
             patch.object(self.engine, "_is_dashscope_api", return_value=False),
             patch.object(self.engine, "_is_gemini_api", return_value=False),
             patch.object(self.engine, "_create_openai_client", return_value=Mock()),
-            patch.object(self.engine, "_call_openai_api", return_value="按说明激活即可。") as call_openai,
+            patch.object(self.engine, "_call_openai_api", return_value=("按说明激活即可。", {})) as call_openai,
             patch("app.ai_reply_engine.db_manager.get_ai_reply_settings", return_value=settings),
         ):
             self.engine.generate_reply(
@@ -160,7 +160,7 @@ class AIReplyEngineTests(unittest.TestCase):
             patch.object(self.engine, "_is_dashscope_api", return_value=False),
             patch.object(self.engine, "_is_gemini_api", return_value=False),
             patch.object(self.engine, "_create_openai_client", return_value=Mock()),
-            patch.object(self.engine, "_call_openai_api", return_value="你好"),
+            patch.object(self.engine, "_call_openai_api", return_value=("你好", {})),
             patch("app.ai_reply_engine.db_manager.get_ai_reply_settings", return_value=settings),
         ):
             self.engine.generate_reply("你好", {}, "chat", "account", "buyer", "item", True)
@@ -170,7 +170,8 @@ class AIReplyEngineTests(unittest.TestCase):
         response = Mock()
         response.status_code = 200
         response.json.return_value = {
-            "candidates": [{"content": {"parts": [{"text": "可以"}]}}]
+            "candidates": [{"content": {"parts": [{"text": "可以"}]}}],
+            "usageMetadata": {"promptTokenCount": 21, "candidatesTokenCount": 7, "totalTokenCount": 28},
         }
         settings = {"api_key": "secret", "model_name": "gemini-test"}
         messages = [
@@ -180,9 +181,10 @@ class AIReplyEngineTests(unittest.TestCase):
             {"role": "user", "content": "第二问"},
         ]
         with patch("app.ai_reply_engine.requests.post", return_value=response) as post:
-            result = self.engine._call_gemini_api(settings, messages)
+            result, usage = self.engine._call_gemini_api(settings, messages)
 
         self.assertEqual(result, "可以")
+        self.assertEqual(usage, {"prompt_tokens": 21, "completion_tokens": 7, "total_tokens": 28})
         payload = post.call_args.kwargs["json"]
         self.assertEqual(
             [entry["role"] for entry in payload["contents"]],

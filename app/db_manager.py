@@ -145,6 +145,29 @@ class DBManager:
             )
             ''')
 
+            # AI 调用留痕：每次真实 API 调用一行（含重试），token 用量与回复内容同处。
+            # 只保留 7 天（cleanup_old_data 清理），供排查回复质量与核算 token 消耗。
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_call_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                user_id INTEGER,
+                chat_id TEXT,
+                intent TEXT,
+                api_type TEXT,
+                model TEXT,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                reply_text TEXT,
+                ok INTEGER NOT NULL DEFAULT 1,
+                error_summary TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_call_logs_time ON ai_call_logs(created_at DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_call_logs_account_time ON ai_call_logs(cookie_id, created_at DESC)')
+
             # 创建cookies表（添加user_id字段和auto_confirm字段）
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS cookies (
@@ -2287,6 +2310,65 @@ class DBManager:
             except Exception as e:
                 logger.debug(f"用量计数失败（不影响业务）: {dimension}/{detail} - {e}")
                 return False
+
+    # -------------------- AI 调用留痕 --------------------
+    def add_ai_call_log(self, cookie_id: str, user_id: int = None, chat_id: str = '',
+                        intent: str = '', api_type: str = '', model: str = '',
+                        prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int = 0,
+                        reply_text: str = '', ok: bool = True, error_summary: str = '') -> bool:
+        """写入一条 AI 调用留痕（每次真实 API 调用一行，含重试）。
+
+        与用量统计同属旁路能力：落库失败静默，绝不影响回复链路。
+        """
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "INSERT INTO ai_call_logs "
+                    "(cookie_id, user_id, chat_id, intent, api_type, model, "
+                    "prompt_tokens, completion_tokens, total_tokens, reply_text, ok, error_summary) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (str(cookie_id), user_id, str(chat_id or ''), str(intent or ''),
+                     str(api_type or ''), str(model or ''),
+                     max(0, int(prompt_tokens or 0)), max(0, int(completion_tokens or 0)),
+                     max(0, int(total_tokens or 0)),
+                     (reply_text or '')[:2000], 1 if ok else 0, (error_summary or '')[:500])
+                )
+                self.conn.commit()
+                return True
+        except Exception as e:
+            logger.debug(f"AI 调用留痕写入失败（不影响业务）: {e}")
+            return False
+
+    def get_ai_call_logs(self, user_id: int = None, limit: int = 50) -> list:
+        """查询近期 AI 调用留痕（7 天窗口内，按时间倒序）。
+
+        user_id=None 查全部（admin 视角）；指定 user_id 只查该用户名下账号的调用。
+        """
+        limit = max(1, min(200, int(limit)))
+        where = "created_at >= datetime('now', '-7 days')"
+        params: list = []
+        if user_id is not None:
+            where += " AND user_id = ?"
+            params.append(user_id)
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    f"SELECT id, datetime(created_at, 'localtime'), cookie_id, user_id, chat_id, intent, "
+                    f"api_type, model, prompt_tokens, completion_tokens, total_tokens, "
+                    f"reply_text, ok, error_summary FROM ai_call_logs "
+                    f"WHERE {where} ORDER BY created_at DESC, id DESC LIMIT ?",
+                    params + [limit]
+                )
+                rows = cursor.fetchall()
+            keys = ('id', 'created_at', 'cookie_id', 'user_id', 'chat_id', 'intent',
+                    'api_type', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens',
+                    'reply_text', 'ok', 'error_summary')
+            return [dict(zip(keys, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"查询 AI 调用留痕失败: {e}")
+            return []
 
     def get_usage_stats(self, user_id: int = None, days: int = 7) -> Dict[str, Any]:
         """查询用量统计，供 /usage-stats 接口与前端展示。
@@ -8519,7 +8601,31 @@ class DBManager:
                 except Exception as e:
                     logger.warning(f"清理邮箱验证记录失败: {e}")
                     stats['email_verifications'] = 0
-                
+
+                # 清理 AI 调用留痕（固定保留最近 7 天——token 用量与回复内容的滚动留痕）
+                try:
+                    cursor.execute(
+                        "DELETE FROM ai_call_logs WHERE created_at < datetime('now', '-7 days')"
+                    )
+                    stats['ai_call_logs'] = cursor.rowcount
+                    if cursor.rowcount > 0:
+                        logger.info(f"清理了 {cursor.rowcount} 条过期的AI调用留痕（7天前）")
+                except Exception as e:
+                    logger.warning(f"清理AI调用留痕失败: {e}")
+                    stats['ai_call_logs'] = 0
+
+                # 清理自动回复决策日志（固定保留最近 7 天——此前无清理任务会无限增长）
+                try:
+                    cursor.execute(
+                        "DELETE FROM auto_reply_message_logs WHERE created_at < datetime('now', '-7 days')"
+                    )
+                    stats['auto_reply_message_logs'] = cursor.rowcount
+                    if cursor.rowcount > 0:
+                        logger.info(f"清理了 {cursor.rowcount} 条过期的自动回复决策日志（7天前）")
+                except Exception as e:
+                    logger.warning(f"清理自动回复决策日志失败: {e}")
+                    stats['auto_reply_message_logs'] = 0
+
                 # 提交更改
                 self.conn.commit()
                 

@@ -1019,6 +1019,30 @@ export const getUsageStats = async (days: number): Promise<UsageStatsResponse> =
     return (res as { data?: UsageStatsResponse }).data || (res as UsageStatsResponse);
 };
 
+// AI 调用留痕（近 7 天，每次真实 API 调用一行：token 用量 + 回复内容）
+export interface AiCallLog {
+    id: number;
+    created_at: string;
+    cookie_id: string;
+    user_id: number | null;
+    chat_id: string;
+    intent: string;
+    api_type: string;
+    model: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    reply_text: string;
+    ok: number;
+    error_summary: string;
+}
+
+export const getAiCallLogs = async (limit: number = 50): Promise<AiCallLog[]> => {
+    const res = await get<{ success: boolean; logs: AiCallLog[] } & { data?: { logs: AiCallLog[] } }>(`/ai-call-logs?limit=${limit}`);
+    const body = (res as { data?: { logs: AiCallLog[] } }).data || (res as { logs: AiCallLog[] });
+    return body.logs || [];
+};
+
 export const updateSystemSettings = async (settings: Partial<SystemSettings>): Promise<ApiResponse> => {
     // API expects individual PUTs, but we'll loop in the service for convenience or assume bulk endpoint if updated
     // Based on docs 12.2, we iterate.

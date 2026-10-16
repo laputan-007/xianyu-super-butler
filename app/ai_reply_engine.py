@@ -145,7 +145,14 @@ class AIReplyEngine:
 
         result = response.json()
         if 'output' in result and 'text' in result['output']:
-            return result['output']['text'].strip()
+            # DashScope 应用调用：usage 形如 {input_tokens, output_tokens, total_tokens}
+            usage = result.get('usage') or {}
+            token_usage = {
+                'prompt_tokens': usage.get('input_tokens') or 0,
+                'completion_tokens': usage.get('output_tokens') or 0,
+                'total_tokens': usage.get('total_tokens') or 0,
+            }
+            return result['output']['text'].strip(), token_usage
         else:
             raise RuntimeError("DashScope API响应格式错误")
 
@@ -198,7 +205,14 @@ class AIReplyEngine:
         result = response.json()
         try:
             reply_text = result['candidates'][0]['content']['parts'][0]['text']
-            return reply_text.strip()
+            # Gemini：usageMetadata 形如 {promptTokenCount, candidatesTokenCount, totalTokenCount}
+            usage = result.get('usageMetadata') or {}
+            token_usage = {
+                'prompt_tokens': usage.get('promptTokenCount') or 0,
+                'completion_tokens': usage.get('candidatesTokenCount') or 0,
+                'total_tokens': usage.get('totalTokenCount') or 0,
+            }
+            return reply_text.strip(), token_usage
         except (KeyError, IndexError, TypeError) as e:
             logger.error(f"Gemini API 响应格式错误: {type(e).__name__}")
             raise RuntimeError("Gemini API 响应格式错误")
@@ -213,7 +227,15 @@ class AIReplyEngine:
                 max_tokens=max_tokens,
                 temperature=temperature
             )
-            return self._extract_openai_content(response)
+            content = self._extract_openai_content(response)
+            # OpenAI 兼容：response.usage 带三段 token 计数（部分代理会缺，全量兜 0）
+            usage = getattr(response, 'usage', None)
+            token_usage = {
+                'prompt_tokens': getattr(usage, 'prompt_tokens', 0) or 0,
+                'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
+                'total_tokens': getattr(usage, 'total_tokens', 0) or 0,
+            }
+            return content, token_usage
         except Exception as e:
             status_code = getattr(getattr(e, 'response', None), 'status_code', None)
             logger.error(
@@ -327,7 +349,44 @@ class AIReplyEngine:
         except Exception:
             pass
 
-    def _generate_with_retry(self, settings: dict, messages: list, cookie_id: str) -> Optional[str]:
+    def _api_type(self, settings: dict) -> str:
+        """当前配置命中的 API 通道名（留痕用）。"""
+        if self._is_dashscope_api(settings):
+            return 'dashscope'
+        if self._is_gemini_api(settings):
+            return 'gemini'
+        return 'openai'
+
+    def _log_ai_call(self, cookie_id: str, chat_id: str, intent: str, settings: dict,
+                      token_usage: Optional[dict], reply_text: str = '',
+                      ok: bool = True, error: Optional[Exception] = None) -> None:
+        """AI 调用留痕旁路：token 用量 + 回复内容落 ai_call_logs（7 天保留），
+        并把 token 按用户按天聚合进 usage_stats。任何失败静默，绝不影响回复链路。"""
+        try:
+            from app.db_manager import db_manager
+            user_id = db_manager.get_cookie_owner_user_id(cookie_id)
+            usage = token_usage or {}
+            db_manager.add_ai_call_log(
+                cookie_id=cookie_id, user_id=user_id, chat_id=chat_id, intent=intent,
+                api_type=self._api_type(settings), model=str(settings.get('model_name') or ''),
+                prompt_tokens=usage.get('prompt_tokens') or 0,
+                completion_tokens=usage.get('completion_tokens') or 0,
+                total_tokens=usage.get('total_tokens') or 0,
+                reply_text=reply_text or '', ok=ok,
+                error_summary=(f"{type(error).__name__}: {error}"[:500] if error else ''),
+            )
+            if user_id is not None and usage:
+                prompt_tokens = usage.get('prompt_tokens') or 0
+                completion_tokens = usage.get('completion_tokens') or 0
+                if prompt_tokens:
+                    db_manager.bump_usage_stat(user_id, 'ai', 'prompt_tokens', prompt_tokens)
+                if completion_tokens:
+                    db_manager.bump_usage_stat(user_id, 'ai', 'completion_tokens', completion_tokens)
+        except Exception:
+            pass
+
+    def _generate_with_retry(self, settings: dict, messages: list, cookie_id: str,
+                             chat_id: str = '', intent: str = '') -> Optional[str]:
         """调用 AI 服务，对暂时性故障做有限重试。
 
         没有重试是此前失败率偏高的主因：一次限流或网络抖动就直接放弃，
@@ -336,7 +395,7 @@ class AIReplyEngine:
         「思维链吃光预算」是另一类失败：换时间重试没有意义，必须加大额度再试。
         碰到就把 max_tokens 翻三倍重来，直到触到上限。
 
-        每次真实 API 调用（含重试）都计入用量统计——重试同样消耗 token。
+        每次真实 API 调用（含重试）都计入用量统计并留痕——重试同样消耗 token。
         """
         max_tokens = self._resolve_max_tokens(settings)
         attempts = 3
@@ -344,12 +403,16 @@ class AIReplyEngine:
 
         for attempt in range(1, attempts + 1):
             try:
-                result = self._dispatch_api_call(settings, messages, cookie_id, max_tokens)
+                result, token_usage = self._dispatch_api_call(settings, messages, cookie_id, max_tokens)
                 self._bump_ai_stat(cookie_id, ok=True)
+                self._log_ai_call(cookie_id, chat_id, intent, settings, token_usage,
+                                  reply_text=result, ok=True)
                 return result
             except ReasoningBudgetExhausted as exc:
                 last_exc = exc
                 self._bump_ai_stat(cookie_id, ok=False)
+                self._log_ai_call(cookie_id, chat_id, intent, settings, None,
+                                  ok=False, error=exc)
                 escalated = min(max_tokens * 3, self.MAX_TOKENS_CEILING)
                 if attempt >= attempts or escalated <= max_tokens:
                     break
@@ -363,6 +426,8 @@ class AIReplyEngine:
             except Exception as exc:
                 last_exc = exc
                 self._bump_ai_stat(cookie_id, ok=False)
+                self._log_ai_call(cookie_id, chat_id, intent, settings, None,
+                                  ok=False, error=exc)
                 if attempt >= attempts or not self._is_retryable(exc):
                     break
                 delay = 0.8 * (2 ** (attempt - 1))  # 0.8s、1.6s
@@ -755,7 +820,8 @@ class AIReplyEngine:
                     {"role": "user", "content": message},
                 ]
 
-                reply = self._generate_with_retry(settings, messages, cookie_id)
+                reply = self._generate_with_retry(settings, messages, cookie_id,
+                                                  chat_id=chat_id, intent=intent)
 
                 reply = self._normalize_reply(reply)
                 if not reply:
