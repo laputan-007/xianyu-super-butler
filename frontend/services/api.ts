@@ -624,6 +624,19 @@ export const getLatestAnnouncement = async (): Promise<{
   return get('/announcements/latest');
 };
 
+/** 已发布的历史公告列表（新→旧），「关于」页与公告源合并展示 */
+export const getAnnouncementHistory = async (): Promise<{
+  success: boolean;
+  data: { id: number; level: string; title: string; content: string; published_at: string }[];
+}> => {
+  return get('/announcements');
+};
+
+/** 删除一条已发布的历史公告（仅超管） */
+export const deleteAnnouncement = async (id: number): Promise<{ success: boolean; message: string }> => {
+  return del(`/announcements/${id}`);
+};
+
 /** 测试 Qmsg 渠道：向已配置的第一个启用 Qmsg 渠道发测试消息（可带自定义文字）；未配置返回 400 引导 */
 export const testQmsgChannel = async (message?: string): Promise<{ success: boolean; message: string }> => {
   return post('/notification-channels/qmsg-test', message !== undefined ? { message } : {});

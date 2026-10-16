@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { Info, Megaphone, RefreshCw, ExternalLink, Send, Loader2 } from 'lucide-react';
-import { getAnnouncement, testQmsgChannel } from '../services/api';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Info, Megaphone, RefreshCw, ExternalLink, Send, Loader2, Trash2 } from 'lucide-react';
+import { getAnnouncement, getAnnouncementHistory, deleteAnnouncement, testQmsgChannel } from '../services/api';
 import { notify } from '../services/feedback';
-import { AnnouncementPayload } from '../types';
+import { AnnouncementItem, AnnouncementPayload } from '../types';
 import { EmptyState, PageHeader } from './ui';
+
+// 本地已发布公告：带数据库自增 ID，超管可删除；公告源条目没有 localId
+type LocalAnnouncementItem = AnnouncementItem & { localId: number };
+type HistoryItem = AnnouncementItem & { localId?: number };
+
+// 历史公告滚动区最多显示的条数
+const HISTORY_MAX_VISIBLE = 5;
 
 // 与 README「交流与反馈」保持同一个群；mqqapi 协议在装有 QQ 的设备上
 
@@ -19,16 +26,31 @@ const levelLabels: Record<string, string> = {
   danger: '重要',
 };
 
-const About: React.FC = () => {
+const About: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
   const [data, setData] = useState<AnnouncementPayload | null>(null);
+  const [localHistory, setLocalHistory] = useState<LocalAnnouncementItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const load = async (force = false) => {
     setLoading(true);
     try {
-      setData(await getAnnouncement(force));
-    } catch {
-      // 拉取失败时保留上一次内容，页面不至于空白
+      // 公告源与本地已发布历史并行拉取，失败互不影响
+      const [payload, history] = await Promise.all([
+        getAnnouncement(force).catch(() => null),
+        getAnnouncementHistory().catch(() => null),
+      ]);
+      if (payload) setData(payload);
+      if (history?.data) {
+        setLocalHistory(history.data.map(item => ({
+          id: `local-${item.id}`,
+          localId: item.id,
+          title: item.title,
+          content: item.content,
+          level: (['info', 'warning', 'danger'].includes(item.level) ? item.level : 'info') as AnnouncementItem['level'],
+          published_at: item.published_at,
+        })));
+      }
     } finally {
       setLoading(false);
     }
@@ -38,7 +60,38 @@ const About: React.FC = () => {
     void load();
   }, []);
 
-  const announcements = data?.announcements || [];
+  // 超管删除已发布公告：本地记录移除，所有用户的历史公告列表不再显示
+  const handleDelete = async (localId: number) => {
+    if (deletingId !== null) return;
+    if (!window.confirm('删除该公告？删除后所有用户的历史公告里都不再显示。')) return;
+    setDeletingId(localId);
+    try {
+      const res = await deleteAnnouncement(localId);
+      notify(res.message || '公告已删除', 'success');
+      setLocalHistory(current => current.filter(item => item.localId !== localId));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '删除失败', 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // 历史公告 = 本地已发布记录 + 公告源内容，按发布时间新→旧
+  const announcements: HistoryItem[] = [
+    ...localHistory,
+    ...(data?.announcements || []),
+  ].sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''));
+
+  // 最多显示 5 条：条目高度不固定（内容行数不同），渲染后量出第 6 条
+  // 顶边（即第 5 条底边）作为滚动区实际高度，其余滚动查看
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listMaxHeight, setListMaxHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const sixth = el.children[HISTORY_MAX_VISIBLE] as HTMLElement | undefined;
+    setListMaxHeight(sixth ? sixth.offsetTop : el.scrollHeight);
+  }, [announcements]);
 
   // Qmsg 测试：向已配置的 Qmsg 渠道发一条真实消息；未配置时后端返回引导提示。
   // 可输入自定义文字（留空用默认文案）
@@ -144,7 +197,11 @@ const About: React.FC = () => {
         </div>
 
         {announcements.length > 0 ? (
-          <div className="divide-y divide-gray-100">
+          <div
+            ref={listRef}
+            className="relative divide-y divide-gray-100 overflow-y-auto"
+            style={listMaxHeight !== null ? { maxHeight: listMaxHeight } : undefined}
+          >
             {announcements.map(item => (
               <article key={item.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -157,6 +214,18 @@ const About: React.FC = () => {
                   {item.published_at && (
                     <span className="text-xs text-gray-400">{item.published_at}</span>
                   )}
+                  {isAdmin && item.localId !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(item.localId!)}
+                      disabled={deletingId === item.localId}
+                      title="删除该公告"
+                      aria-label="删除该公告"
+                      className="ml-auto flex h-6 w-6 items-center justify-center rounded text-gray-400 opacity-50 transition-colors hover:bg-red-50 hover:text-red-600 hover:opacity-100 disabled:opacity-30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
                   {item.content}
@@ -167,7 +236,7 @@ const About: React.FC = () => {
         ) : (
           <EmptyState
             title="暂无公告"
-            description="配置更新源后，发布方的公告会显示在这里。"
+            description="在「系统设置 → 发布公告」发布后，历史记录会保留在这里。"
             icon={Megaphone}
           />
         )}

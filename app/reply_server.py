@@ -1670,6 +1670,21 @@ def get_latest_announcement_route(current_user: Dict[str, Any] = Depends(get_cur
     return {"success": True, "data": db_manager.get_latest_announcement()}
 
 
+@app.get("/announcements")
+def list_announcements_route(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """已发布的历史公告列表，新→旧。「关于」页历史公告与内置公告合并展示。"""
+    return {"success": True, "data": db_manager.get_announcements()}
+
+
+@app.delete("/announcements/{announcement_id}")
+def delete_announcement_route(announcement_id: int, _: Dict[str, Any] = Depends(require_admin)):
+    """删除一条已发布的历史公告（仅超管）。"""
+    if not db_manager.delete_announcement(announcement_id):
+        raise HTTPException(status_code=404, detail="公告不存在或已删除")
+    logger.info(f"超管删除公告 #{announcement_id}")
+    return {"success": True, "message": "公告已删除"}
+
+
 class QmsgTestIn(BaseModel):
     message: Optional[str] = None
 

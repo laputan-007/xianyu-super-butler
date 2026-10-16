@@ -35,10 +35,33 @@ ANNOUNCEMENT_ENABLED_KEY = 'announcement_enabled'
 ANNOUNCEMENT_SHOW_NOTICE_KEY = 'announcement_show_notice'
 ANNOUNCEMENT_SHOW_UPDATE_KEY = 'announcement_show_update'
 
-# 官方公告源。不配置就用它，否则新装的用户在「关于」页只会看到
-# 「未配置更新源」，发布方也就没有任何办法把公告和新版本推送出去。
-# 想换成自建地址、或者不想连官方源，在系统设置里改掉或关掉开关即可。
-DEFAULT_ANNOUNCEMENT_URL = 'https://connect.corleom.com/announcement.json'
+# 内置默认公告。没配置自建公告源时直接展示这份鱼小铺介绍，
+# 不请求任何外部服务器——旧版默认连接的上游官方源内容不受我们控制。
+# 想自己发公告和版本推送，在系统设置里填公告 JSON 地址即可替换。
+BUILTIN_PAYLOAD: Dict[str, Any] = {
+    'announcements': [
+        {
+            'id': 'yuxiaopu-intro',
+            'title': '欢迎使用鱼小铺',
+            'content': '鱼小铺（yu xiao pu）是闲鱼卖家的一体化运营工作台：统一管理账号、商品、'
+                       '订单、消息与回复，支持卡密自动发货、AI 智能应答、邮箱通知与 QQ 推送，'
+                       '让每一笔闲鱼生意自动运转。',
+            'level': 'info',
+            'published_at': '2026-10-16 10:00',
+        },
+        {
+            'id': 'yuxiaopu-features',
+            'title': '核心能力一览',
+            'content': '账号同步（多号托管）、订单发货（卡密自动）、消息回复（智能应答）、'
+                       '邮箱通知（新消息即达）、QQ 推送（Qmsg 机器人）、公告系统（版本与运营）。',
+            'level': 'info',
+            'published_at': '2026-10-16 10:00',
+        },
+    ],
+    'latest_version': '',
+    'download_url': '',
+    'release_notes': '',
+}
 
 # 远端不可用时沿用上一次成功的结果，避免公告栏忽隐忽现
 _cache: Dict[str, Any] = {
@@ -162,9 +185,11 @@ async def get_announcement_payload(force: bool = False) -> Dict[str, Any]:
 
     url = str(db_manager.get_system_setting(ANNOUNCEMENT_URL_KEY) or '').strip()
     if not url:
-        # 没填就用官方源。用户想换自建地址可以在设置里改，
-        # 完全不想连外网则关掉「启用公告与更新检查」。
-        url = DEFAULT_ANNOUNCEMENT_URL
+        # 没填自建地址就用内置的鱼小铺介绍，不连任何外部服务器。
+        # 完全不想看公告则关掉「启用公告与更新检查」。
+        base['source_configured'] = True
+        base.update(BUILTIN_PAYLOAD)
+        return base
 
     base['source_configured'] = True
 

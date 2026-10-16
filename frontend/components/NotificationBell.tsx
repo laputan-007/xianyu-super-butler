@@ -138,10 +138,28 @@ const NotificationBell: React.FC<{ onOpenMessage?: () => void }> = ({ onOpenMess
   // 已读即移除：列表只保留未处理的通知，全部已读 = 清空
   const markAllRead = () => setItems([]);
   const dismissItem = (id: string) => setItems(current => current.filter(item => item.id !== id));
-  // 买家消息类通知：点击跳转消息中心并移除本条；系统通知/公告点击仅移除
+  // 买家消息类通知：点击跳转消息中心并移除本条（逻辑保持不变）；
+  // 系统/公告类通知：点击弹出详情弹窗，点行尾叉叉才是删除。
+  const [detail, setDetail] = useState<BellItem | null>(null);
   const handleItemClick = (item: BellItem) => {
-    if (item.kind === 'message') onOpenMessage?.();
-    dismissItem(item.id);
+    if (item.kind === 'message') {
+      onOpenMessage?.();
+      dismissItem(item.id);
+      return;
+    }
+    setDetail(item);
+  };
+  // 叉叉删除：必须阻断冒泡，否则会先触发行点击（消息类会跳走消息中心）
+  const handleDismissClick = (event: React.MouseEvent, id: string) => {
+    event.stopPropagation();
+    dismissItem(id);
+  };
+  const handleDismissKey = (event: React.KeyboardEvent, id: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      dismissItem(id);
+    }
   };
 
   return (
@@ -197,7 +215,7 @@ const NotificationBell: React.FC<{ onOpenMessage?: () => void }> = ({ onOpenMess
                     handleItemClick(item);
                   }
                 }}
-                title={item.kind === 'message' ? '点击前往消息中心' : '点击移除该通知'}
+                title={item.kind === 'message' ? '点击前往消息中心' : '点击查看详情'}
                 className="group flex cursor-pointer items-start gap-2.5 border-b border-[var(--border)] px-3 py-2.5 transition-colors last:border-b-0 hover:bg-[var(--surface-hover)]"
               >
                 <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
@@ -222,9 +240,84 @@ const NotificationBell: React.FC<{ onOpenMessage?: () => void }> = ({ onOpenMess
                     </span>
                   )}
                 </span>
-                <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-soft)] opacity-0 transition-opacity group-hover:opacity-60" />
+                <button
+                  type="button"
+                  onClick={event => handleDismissClick(event, item.id)}
+                  onKeyDown={event => handleDismissKey(event, item.id)}
+                  title="删除该通知"
+                  aria-label="删除该通知"
+                  className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-soft)] opacity-40 transition-opacity hover:bg-[var(--surface-strong)] hover:opacity-100"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 系统/公告类通知的详情弹窗。渲染在 rootRef 内，
+          点击弹窗不会触发“点击外部关闭下拉”的逻辑 */}
+      {detail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setDetail(null);
+          }}
+        >
+          <div className="dropdown-pop-in w-full max-w-md overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+              <p className="text-sm font-bold text-[var(--text)]">通知详情</p>
+              <button
+                type="button"
+                onClick={() => setDetail(null)}
+                title="关闭详情"
+                aria-label="关闭详情"
+                className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-4 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${
+                  detail.kind === 'announcement'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-600'
+                }`}>
+                  {detail.kind === 'announcement' ? '公告' : '系统通知'}
+                </span>
+                <h3 className="text-sm font-bold text-[var(--text)]">{detail.title}</h3>
+              </div>
+              <p className="mt-1 text-[11px] text-[var(--text-soft)]">
+                {new Date(detail.time).toLocaleString('zh-CN', { hour12: false })}
+              </p>
+              {detail.content && (
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-muted)]">
+                  {detail.content}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  dismissItem(detail.id);
+                  setDetail(null);
+                }}
+                className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50"
+              >
+                <X className="h-3.5 w-3.5" />
+                删除通知
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetail(null)}
+                className="ios-btn-secondary rounded-md px-3 py-1.5 text-xs"
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

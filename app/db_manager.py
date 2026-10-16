@@ -7065,6 +7065,45 @@ class DBManager:
             logger.error(f"查询最新公告失败: {e}")
             return None
 
+    def get_announcements(self, limit: int = 50) -> list:
+        """全部已发布公告，新→旧。「关于」页历史公告列表的数据源。"""
+        self._ensure_announcement_table()
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'SELECT id, level, title, content, published_at FROM local_announcements '
+                    'ORDER BY published_at DESC, id DESC LIMIT ?',
+                    (max(1, min(int(limit), 200)),)
+                )
+                return [
+                    {
+                        'id': row[0], 'level': row[1], 'title': row[2],
+                        'content': row[3], 'published_at': row[4],
+                    }
+                    for row in cursor.fetchall()
+                ]
+        except Exception as e:
+            logger.error(f"查询公告列表失败: {e}")
+            return []
+
+    def delete_announcement(self, announcement_id: int) -> bool:
+        """删除一条已发布公告（仅超管）。返回是否真的删了。"""
+        self._ensure_announcement_table()
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'DELETE FROM local_announcements WHERE id = ?',
+                    (int(announcement_id),)
+                )
+                self.conn.commit()
+                return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"删除公告失败: {e}")
+            self.conn.rollback()
+            return False
+
     def migrate_item_id(self, cookie_id: str, old_item_id: str, new_item_id: str,
                         image_url: Optional[str] = None, price: Optional[str] = None) -> bool:
         """本地商品发布成功后，把本地记录的商品 ID 换成平台返回的新 ID。
