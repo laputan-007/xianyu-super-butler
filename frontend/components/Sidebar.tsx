@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDesktopShell } from './DesktopTitleBar';
 import BrandLogo from './BrandLogo';
 import {
   Bell,
@@ -39,6 +40,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   // 系统级页面只对管理员开放：普通用户看不到入口，后端接口也会拒绝其访问。
   // 「通知与日志」保留：通知渠道按用户隔离（页面内系统日志已单独按权限隐藏）。
   const adminOnly = (item: { id: string }) => isAdmin || !['settings', 'users'].includes(item.id);
+  // 打包客户端（pywebview 壳）里让位于自绘标题栏；浏览器版不受影响
+  const desktopShell = useDesktopShell();
 
   // 分组原则：按业务对象归拢，消灭只有单项的「孤儿分组」——
   // 商品自动化并入商品组、买家互动归入订单语境、回复三件套独立成组。
@@ -95,7 +98,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       />
     )}
     <aside
-      className={`fixed left-0 top-0 z-40 flex h-screen flex-col bg-[var(--surface)] transition-all lg:translate-x-0 ${
+      className={`fixed left-0 z-40 flex flex-col bg-[var(--surface)] transition-all lg:translate-x-0 ${
+        desktopShell ? 'top-9 h-[calc(100vh-2.25rem)]' : 'top-0 h-screen'
+      } ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full'
       } ${collapsed ? 'max-lg:w-[208px] lg:w-[72px]' : 'w-[208px]'}`}
       style={{ borderRight: '1px solid var(--border)' }}

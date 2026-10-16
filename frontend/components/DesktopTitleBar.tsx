@@ -47,8 +47,12 @@ export const useDesktopShell = (): boolean => {
 };
 
 const DesktopTitleBar: React.FC = () => {
+  // 仅在 pywebview 壳内渲染：浏览器访问 window.pywebview 不存在，整体不显示
+  const shellActive = useDesktopShell();
   const [maximized, setMaximized] = useState(false);
   const api = () => (window as PyWebViewBridge).pywebview?.api;
+
+  if (!shellActive) return null;
 
   const handleToggleMaximize = () => {
     const bridge = api();

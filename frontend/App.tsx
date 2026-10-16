@@ -762,7 +762,7 @@ const App: React.FC = () => {
         </aside>
 
         {/* 右侧登录/注册表单 */}
-        <main className="relative flex min-h-screen flex-1 flex-col">
+        <main className={`relative flex flex-1 flex-col ${desktopShell ? 'min-h-[calc(100vh-2.25rem)]' : 'min-h-screen'}`}>
           <ThemeToggle compact className="absolute right-5 top-5 z-10" />
           {/* 顶部品牌色微光：呼应左侧封面，弱化纯色底的平板感 */}
           <div
