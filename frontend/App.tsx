@@ -233,6 +233,14 @@ const App: React.FC = () => {
   }, [isAdmin]);
 
   const loginRootRef = useRef<HTMLDivElement>(null);
+  // 纸飞机航线：显示的虚线轨迹、发光尾迹与飞机 offset-path 由同一段航线生成（单一数据源），
+  // 飞机必须严格骑在画出来的虚线上；宽度变化时由 ResizeObserver 重建
+  const loginPlaneSceneRef = useRef<HTMLDivElement>(null);
+  const loginPlaneFlyRef = useRef<HTMLDivElement>(null);
+  const loginPlaneTrailRef = useRef<SVGPathElement>(null);
+  const loginPlaneGlowSvgRef = useRef<SVGSVGElement>(null);
+  const loginPlaneGlowCoreRef = useRef<SVGPathElement>(null);
+  const loginPlaneGlowHaloRef = useRef<SVGPathElement>(null);
 
   // 当前登录用户（顶栏最右侧展示）：登录或 token 校验时写入，localStorage 兜底
   const [currentUsername, setCurrentUsername] = useState<string>(
@@ -397,10 +405,71 @@ const App: React.FC = () => {
         { backgroundPosition: '0% 0%, 0% 0%', duration: 2.4, ease: 'power1.inOut', repeat: -1, repeatDelay: 2.6 });
       // 标题金色光晕缓慢呼吸
       gsap.to('.login-title', { filter: 'drop-shadow(0px 4px 28px rgb(var(--brand-rgb)/0.32))', duration: 2.2, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+      // 纸飞机为 CSS Motion Path 动画：航线（贝塞尔爬升/俯冲 + 正圆筋斗）由下方
+      // effect 按宽度生成写入 offset-path，姿态贴合切线（见 index.css 的
+      // .login-plane-fly/.login-plane-bob）——不走 GSAP motionPath，动效栈保持简单。
       return cleanupParallax;
     }, loginRootRef);
 
     return () => ctx.revert();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, checkingAuth]);
+
+  // 纸飞机航线：一条连续平滑曲线（贝塞尔 + 两段正圆弧筋斗），
+  // 各段切线相接（G1 连续），配合 CSS 的 offset-rotate: auto 让机头全程贴住航向。
+  // 显示的虚线轨迹（viewBox 1200×90）、发光尾迹（px 坐标系）与飞机 offset-path（场景 px）
+  // 从同一段归一化航线生成——飞机严格沿画出来的线飞，尾迹沿飞过的航迹弯曲。
+  useEffect(() => {
+    const scene = loginPlaneSceneRef.current;
+    const fly = loginPlaneFlyRef.current;
+    const trail = loginPlaneTrailRef.current;
+    const glowSvg = loginPlaneGlowSvgRef.current;
+    const glowCore = loginPlaneGlowCoreRef.current;
+    const glowHalo = loginPlaneGlowHaloRef.current;
+    if (!scene || !fly || !trail || !glowSvg || !glowCore || !glowHalo || isLoggedIn || checkingAuth) return;
+    const setRoute = () => {
+      const w = scene.clientWidth;
+      if (!w) return;
+      const sx = w / 1200;          // viewBox → 场景 的横向缩放
+      const sy = 96 / 90;           // 纵向缩放（preserveAspectRatio="none" 同款）
+      const R = 24;                 // 筋斗半径（px）
+      const rxVb = Math.round(R / sx);          // viewBox 空间筋斗椭圆 x 半径
+      const ryVb = Math.round((R / sy) * 10) / 10;  // y 半径（≈22.5）
+      const loopX = 700;            // 筋斗圆心 x（viewBox 空间）
+      const bY = 74;                // 筋斗底部 y（= 谷底改平高度）
+      const tY = Math.round((bY - 2 * (R / sy)) * 10) / 10;  // 筋斗顶部 y
+      // 归一化航线：起点低左 → 爬升至顶点 → 俯冲入谷 → 谷底改平 → 正圆筋斗 →
+      // 拉起爬升 → 高位滑出（各段切线相接）
+      const X = (v: number) => Math.round(v * sx * 10) / 10;
+      const Y = (v: number) => Math.round(v * sy * 10) / 10;
+      trail.setAttribute('d',
+        `M 4 68 C 260 10 420 14 560 70 C 600 86 665 ${bY} ${loopX} ${bY} ` +
+        `A ${rxVb} ${ryVb} 0 0 0 ${loopX} ${tY} A ${rxVb} ${ryVb} 0 0 0 ${loopX} ${bY} ` +
+        `C 740 ${bY} 830 40 920 28 C 1010 20 1110 16 1196 22`);
+      // 飞机 + 尾迹共用同一条 px 航线：尾迹是贴在航线上的 dash 光带，
+      // 与飞机共用同一条缓动曲线（见 index.css），dash 窗口末端始终追着飞机
+      const pxPath =
+        `M ${X(4)} ${Y(68)} C ${X(260)} ${Y(10)} ${X(420)} ${Y(14)} ${X(560)} ${Y(70)} ` +
+        `C ${X(600)} ${Y(86)} ${X(665)} ${Y(bY)} ${X(loopX)} ${Y(bY)} ` +
+        `A ${R} ${R} 0 0 0 ${X(loopX)} ${Y(tY)} A ${R} ${R} 0 0 0 ${X(loopX)} ${Y(bY)} ` +
+        `C ${X(740)} ${Y(bY)} ${X(830)} ${Y(40)} ${X(920)} ${Y(28)} ` +
+        `C ${X(1010)} ${Y(20)} ${X(1110)} ${Y(16)} ${X(1196)} ${Y(22)}`;
+      fly.style.offsetPath = `path("${pxPath}")`;
+      glowSvg.setAttribute('viewBox', `0 0 ${w} 96`);
+      glowCore.setAttribute('d', pxPath);
+      glowHalo.setAttribute('d', pxPath);
+      // 尾迹 dash 窗口参数：光带长 72，gap = 航线总长（保证窗口唯一）。
+      // 终点偏移（72−L）在 JS 里算成纯长度——calc(var()) 写进关键帧
+      // 不会被 Chrome 解析成可插值，尾迹会变成离散跳变
+      const L = Math.round(glowCore.getTotalLength());
+      scene.style.setProperty('--trail-dash', '72px');
+      scene.style.setProperty('--trail-len', `${L}px`);
+      scene.style.setProperty('--trail-end', `${72 - L}px`);
+    };
+    setRoute();
+    const ro = new ResizeObserver(setRoute);
+    ro.observe(scene);
+    return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, checkingAuth]);
 
@@ -618,7 +687,7 @@ const App: React.FC = () => {
                 className="login-title mt-5 text-6xl font-extrabold leading-tight text-transparent drop-shadow-[0_4px_24px_rgb(var(--brand-rgb)/0.2)]"
                 aria-label="鱼小铺"
                 style={{
-                  backgroundImage: 'linear-gradient(110deg, transparent 38%, rgba(255,244,190,0.95) 50%, transparent 62%), linear-gradient(to bottom, #ffffff 20%, #ffedb0 100%)',
+                  backgroundImage: 'linear-gradient(110deg, transparent 38%, rgb(var(--brand-300-rgb)/0.95) 50%, transparent 62%), linear-gradient(to bottom, #ffffff 20%, var(--brand-300) 100%)',
                   backgroundSize: '260% 100%, 100% 100%',
                   backgroundPosition: '100% 0%, 0% 0%',
                   WebkitBackgroundClip: 'text',
@@ -659,23 +728,24 @@ const App: React.FC = () => {
               </div>
             </div>
 
-              {/* 纸飞机航线：漫画风格飞行动画（纯 CSS，reduced-motion 时为静态装饰） */}
-              <div className="login-plane-scene pointer-events-none relative mt-5 h-24 select-none" aria-hidden="true">
+              {/* 纸飞机航线：CSS Motion Path 丝滑飞行——虚线轨迹、发光尾迹与飞机路径由同一段航线生成（见 setRoute effect）；reduced-motion 时为静态装饰 */}
+              <div ref={loginPlaneSceneRef} className="login-plane-scene pointer-events-none relative mt-5 h-24 select-none" aria-hidden="true">
                 <svg viewBox="0 0 1200 90" className="absolute inset-0 h-full w-full" fill="none" preserveAspectRatio="none">
                   <path
+                    ref={loginPlaneTrailRef}
                     className="login-plane-trail-path"
-                    d="M 4 68 C 300 4, 640 96, 940 30 C 1040 10, 1130 14, 1196 22"
                     stroke="rgba(255, 229, 0, 0.16)"
                     strokeWidth="1.5"
                     strokeDasharray="2 6"
                     strokeLinecap="round"
                   />
                 </svg>
-                <div className="login-plane-fly absolute left-0 top-0 h-6 w-6">
-                  {/* 漫画速度线：飞机后方三条渐隐短线 */}
-                  <span className="absolute right-full top-1/2 mr-1 h-px w-6 -translate-y-3 bg-gradient-to-l from-brand-300/70 to-transparent" />
-                  <span className="absolute right-full top-1/2 mr-1 h-px w-9 -translate-y-0.5 bg-gradient-to-l from-brand-300/50 to-transparent" />
-                  <span className="absolute right-full top-1/2 mr-1 h-px w-5 translate-y-2.5 bg-gradient-to-l from-brand-300/40 to-transparent" />
+                {/* 尾迹：贴着航线的发光光带（px 坐标系与飞机路径完全一致，dash 窗口与飞机同步推进） */}
+                <svg ref={loginPlaneGlowSvgRef} viewBox="0 0 576 96" className="absolute inset-0 h-full w-full" fill="none">
+                  <path ref={loginPlaneGlowHaloRef} className="login-plane-glow login-plane-glow-halo" />
+                  <path ref={loginPlaneGlowCoreRef} className="login-plane-glow login-plane-glow-core" />
+                </svg>
+                <div ref={loginPlaneFlyRef} className="login-plane-fly absolute left-0 top-0 h-6 w-6">
                   <svg className="login-plane-bob h-full w-full" viewBox="0 0 1024 1024" fill="none">
                     <path d="M180.737 346.816l38.784 224.96 57.856-175.041 591.871-274.944L180.737 346.816z" fill="var(--brand-300)" opacity="0.9" />
                     <path d="M311.681 428.48l213.376 298.304L1024 58.304 0 180.928l154.753 129.92L989.76 72.384 311.681 428.48z" fill="var(--brand-300)" opacity="0.75" />
@@ -1053,7 +1123,7 @@ const App: React.FC = () => {
             <Suspense fallback={activeTab === 'buyer-interaction' ? <PageLoader /> : null}><BuyerInteraction /></Suspense>
           </section>
           <section hidden={activeTab !== 'about'}>
-            <Suspense fallback={activeTab === 'about' ? <PageLoader /> : null}><About /></Suspense>
+            <Suspense fallback={activeTab === 'about' ? <PageLoader /> : null}><About isAdmin={isAdmin} /></Suspense>
           </section>
           </div>
         </div>

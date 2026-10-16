@@ -410,85 +410,120 @@ select:-webkit-autofill {
 }
 
 /* ============================================================
-   登录页纸飞机航线（漫画风格，纯 CSS）：
-   - 外层 .login-plane-fly 沿弧线 waypoint 往返起伏（left 0→97%），
-     机身随爬升/俯冲左右倾斜，首尾淡入淡出；
-   - 内层 .login-plane-bob 快速轻颤（漫画的生动感）；
-   - 机后三条渐隐速度线随行；
+   登录页纸飞机航线（CSS Motion Path，丝滑飞行）：
+   - 航线由 App.tsx 的 setRoute 按场景宽度生成（贝塞尔爬升/俯冲
+     + 两段正圆弧筋斗），写入 .login-plane-fly 的 offset-path；
+   - offset-rotate: auto 45deg——机头每一帧都贴合航线切线
+     （机身素材机头朝右上 45°，auto 基础上补偿 45°），
+     爬升抬头、俯冲压低、筋斗整圈翻转，姿态连续无跳变；
+   - 速度用单一 ease-out 曲线（出手快 → 滑翔减速，纸飞机物理感），
+     不分段变速，速度全程连续，这是"不生硬"的关键；
+   - 内层 .login-plane-bob 低频小幅摇摆（气流颠簸感）+ 品牌色光晕；
+   - 机尾 .login-plane-tail 渐隐彗尾（实线 + 模糊光晕两层），
+     随航向旋转、缓慢呼吸；
    - 虚线轨迹缓慢向右流动。
    ============================================================ */
 .login-plane-scene {
-  --plane-cycle: 11s; /* 9s 飞行 + 2s 停顿 */
+  --plane-cycle: 11s;
 }
 
 .login-plane-fly {
-  animation: login-plane-fly var(--plane-cycle) ease-in-out infinite;
+  offset-rotate: auto 45deg;
+  animation: login-plane-glide var(--plane-cycle) cubic-bezier(0.25, 0.55, 0.3, 1) infinite;
   opacity: 0;
-  will-change: left, top, opacity;
+  will-change: offset-distance, opacity;
 }
 
-@keyframes login-plane-fly {
+/* offset-distance 只在首尾定义：中途不出现关键帧，
+   整段位移走同一条速度曲线，位置/姿态永不跳变 */
+@keyframes login-plane-glide {
   0% {
-    left: 0%;
-    top: 76%;
+    offset-distance: 0%;
     opacity: 0;
   }
-  4% {
+  7% {
     opacity: 1;
   }
-  /* 爬升段：机头微抬 */
-  18% {
-    left: 24%;
-    top: 10%;
-    transform: rotate(-10deg);
-  }
-  /* 高位平飞 */
-  32% {
-    left: 42%;
-    top: 26%;
-    transform: rotate(2deg);
-  }
-  /* 俯冲段：机头压低 */
-  48% {
-    left: 58%;
-    top: 68%;
-    transform: rotate(10deg);
-  }
-  /* 拉起回稳 */
-  64% {
-    left: 74%;
-    top: 34%;
-    transform: rotate(-4deg);
-  }
-  78% {
-    left: 88%;
-    top: 26%;
-    transform: rotate(4deg);
-  }
-  84% {
+  86% {
     opacity: 1;
   }
-  /* 到达终点后隐身，剩余 16% 时间为停顿（原地不可见） */
-  90%,
+  96%,
   100% {
-    left: 96%;
-    top: 24%;
-    transform: rotate(6deg);
+    offset-distance: 100%;
     opacity: 0;
   }
 }
 
-/* 机身轻颤：漫画飞行的"活"感 */
+/* 机身气流摇摆：低频小幅，叠加在切线姿态之上 */
 .login-plane-bob {
-  animation: login-plane-bob 1.1s ease-in-out infinite alternate;
+  animation: login-plane-bob 2.4s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 5px rgb(var(--brand-rgb) / 0.35));
 }
 
 @keyframes login-plane-bob {
   from {
-    transform: translateY(-2.5px) rotate(-3deg);
+    transform: translateY(-1.5px) rotate(-2deg);
   }
   to {
-    transform: translateY(2.5px) rotate(3deg);
+    transform: translateY(1.5px) rotate(2deg);
+  }
+}
+
+/* 尾迹：贴着航线的一截发光光带（SVG 描边 dash 窗口）。
+   关键在"沿航迹弯曲"：光带画的正是飞机脚下那条 px 航线，
+   dash 窗口与飞机 offset-distance 共用同一条 ease-out 缓动曲线、
+   同一个周期，因此窗口末端永远追着飞机——
+   俯时光贴着俯冲弧线下坠，筋斗时光带包住整个圆，
+   尾迹方向由"飞过的轨迹"决定，而非刚性拖在机后 */
+.login-plane-glow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: var(--trail-dash) var(--trail-len);
+  animation: login-plane-glow-slide var(--plane-cycle) cubic-bezier(0.25, 0.55, 0.3, 1) infinite;
+}
+
+.login-plane-glow-core {
+  stroke: rgb(var(--brand-rgb) / 0.65);
+  stroke-width: 2;
+}
+
+.login-plane-glow-halo {
+  stroke: rgb(var(--brand-rgb) / 0.3);
+  filter: blur(3px);
+  animation:
+    login-plane-glow-slide var(--plane-cycle) cubic-bezier(0.25, 0.55, 0.3, 1) infinite,
+    login-plane-glow-pulse 0.4s ease-in-out infinite alternate;
+}
+
+/* dashoffset 只在首尾出现 → 整段走同一条缓动曲线，与飞机的
+   offset-distance 完全同步。关键帧结构与 login-plane-glide 一一对应
+   （0/7/86/96%），插值跨度才会完全一致；终点值由 setRoute 写入纯长度变量
+   ——calc 不能进关键帧，Chrome 不解析成可插值 */
+@keyframes login-plane-glow-slide {
+  0% {
+    stroke-dashoffset: var(--trail-dash);
+    opacity: 0;
+  }
+  7% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  96%,
+  100% {
+    stroke-dashoffset: var(--trail-end);
+    opacity: 0;
+  }
+}
+
+/* 排气光晕呼吸（只动 stroke-width，不与 slide 的属性冲突） */
+@keyframes login-plane-glow-pulse {
+  from {
+    stroke-width: 4.5;
+  }
+  to {
+    stroke-width: 6.5;
   }
 }
 
@@ -506,15 +541,20 @@ select:-webkit-autofill {
 @media (prefers-reduced-motion: reduce) {
   .login-plane-fly,
   .login-plane-bob,
-  .login-plane-trail-path {
+  .login-plane-trail-path,
+  .login-plane-glow {
     animation: none;
   }
 
-  /* 静态装饰态：飞机停在航线中段，保持可见 */
+  /* 静态装饰态：飞机停在航线中段，尾迹光带停在飞机身后 */
   .login-plane-fly {
-    left: 42%;
-    top: 26%;
+    offset-distance: 42%;
     opacity: 0.85;
+  }
+
+  .login-plane-glow {
+    stroke-dashoffset: calc(var(--trail-dash) - var(--trail-len) * 0.42);
+    opacity: 0.8;
   }
 }
 
