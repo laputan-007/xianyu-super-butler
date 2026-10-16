@@ -16,3 +16,4 @@ zstandard>=0.22.0
 # Windows 客户端打包（scripts/build_client.py 实际使用的方案，基于 PyInstaller）
 pyinstaller>=6.10.0
 pillow>=10.0.0
+pywebview>=5.0

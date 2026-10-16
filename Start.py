@@ -16,7 +16,18 @@ from pathlib import Path
 if getattr(sys, 'frozen', False):
     _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
     os.chdir(_exe_dir)  # 数据/日志/浏览器配置目录全部落在 exe 旁边，双击即用
-    os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, '_internal', 'browsers'))
+    # 打包版默认端口 18099：避开 8080/8090 等常用端口冲突（用户可用环境变量 API_PORT 覆盖）
+    os.environ.setdefault('API_PORT', '18099')
+    # 浏览器装在 exe 旁的 playwright/ 目录（_check_and_install_playwright
+    # 预检函数约定的布局：playwright/chromium-*/chrome-win/chrome.exe）
+    os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, 'playwright'))
+    # 窗口模式（console=False）下 sys.stdout/stderr 为 None，loguru/uvicorn
+    # 的控制台输出流会异常——统一重定向到 exe 旁的日志文件。
+    if sys.stdout is None or sys.stderr is None:
+        os.makedirs('logs', exist_ok=True)
+        _stream = open(os.path.join(_exe_dir, 'logs', 'stdout.log'), 'a', encoding='utf-8', buffering=1)
+        sys.stdout = _stream
+        sys.stderr = _stream
 
 # 设置标准输出编码为UTF-8（Windows兼容）
 def _setup_console_encoding():
@@ -183,8 +194,14 @@ def _check_and_install_playwright():
             chromium_dirs = list(playwright_dir.glob('chromium-*'))
             if chromium_dirs:
                 chromium_dir = chromium_dirs[0]
-                chrome_exe = chromium_dir / 'chrome-win' / 'chrome.exe'
-                if chrome_exe.exists() and chrome_exe.stat().st_size > 0:
+                # Playwright 新版（1.5x+）Windows 布局是 chrome-win64，旧版是 chrome-win，两种都认
+                chrome_exe = None
+                for _sub in ('chrome-win', 'chrome-win64'):
+                    _cand = chromium_dir / _sub / 'chrome.exe'
+                    if _cand.exists() and _cand.stat().st_size > 0:
+                        chrome_exe = _cand
+                        break
+                if chrome_exe is not None:
                     print(f"{_OK} 找到已提取的Playwright浏览器: {chrome_exe}")
                     print(f"{_INFO} 浏览器版本: {chromium_dir.name}")
                     # 清除可能存在的旧环境变量，使用实际存在的浏览器
@@ -230,6 +247,7 @@ def _check_and_install_playwright():
     # 新版 Playwright 在 macOS 上改用 Chrome for Testing，旧版是 Chromium。
     browser_exe_candidates = (
         Path('chrome-win') / 'chrome.exe',
+        Path('chrome-win64') / 'chrome.exe',
         Path('chrome-mac') / 'Chromium.app' / 'Contents' / 'MacOS' / 'Chromium',
         Path('chrome-mac-arm64') / 'Chromium.app' / 'Contents' / 'MacOS' / 'Chromium',
         Path('chrome-mac') / 'Google Chrome for Testing.app' / 'Contents' / 'MacOS' / 'Google Chrome for Testing',
@@ -864,9 +882,9 @@ async def main():
         print("启动 API 服务（主循环合并模式）...")
         api_task = asyncio.create_task(_start_api_server_on_main_loop())
 
-        # 打包版（PyInstaller frozen）：服务就绪后自动拉起默认浏览器打开管理后台。
-        # 源码运行不触发，避免开发时反复弹页。
-        if getattr(sys, 'frozen', False):
+        # 打包版兜底（无 pywebview 时）：服务就绪后拉起默认浏览器。
+        # 有 pywebview 时走 __main__ 的原生窗口形态，这里跳过。
+        if getattr(sys, 'frozen', False) and not os.getenv('YXP_WINDOW_MODE'):
             import webbrowser
             _host, _open_port = _resolve_api_address()
             _open_url = f"http://127.0.0.1:{_open_port}/"
@@ -962,4 +980,35 @@ async def _db_backup_loop():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # 打包版且带 pywebview：桌面窗口形态——整个应用（uvicorn + 账号任务）跑
+    # 后台线程，主线程运行原生 WebView 窗口（Windows 走 Edge WebView2 内核），
+    # 用户看到的就是一个标题为「鱼小铺」的桌面应用，不弹浏览器、无控制台。
+    # 窗口关闭即整个进程退出（后台线程为 daemon，硬退干净）。
+    _window_mode = False
+    if getattr(sys, 'frozen', False):
+        try:
+            import webview  # noqa: F401
+            _window_mode = True
+        except ImportError:
+            _window_mode = False
+
+    if _window_mode:
+        os.environ['YXP_WINDOW_MODE'] = '1'
+        threading.Thread(target=asyncio.run, args=(main(),), name='app', daemon=True).start()
+
+        import time as _time
+        import urllib.request
+        _host, _port = _resolve_api_address()
+        _url = f'http://127.0.0.1:{_port}/'
+        for _ in range(120):  # 最多等 2 分钟服务就绪
+            try:
+                urllib.request.urlopen(_url, timeout=1)
+                break
+            except Exception:
+                _time.sleep(1)
+        webview.create_window('鱼小铺', _url, width=1440, height=900, min_size=(1024, 640))
+        webview.start()
+        print('窗口已关闭，进程退出')
+        os._exit(0)
+    else:
+        asyncio.run(main())

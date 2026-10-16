@@ -117,9 +117,14 @@ def assemble(version: str, build_time: str, commit: str) -> Path:
 
 
 def install_browsers(app_dir: Path) -> None:
-    """把 Playwright Chromium 装进发行目录（随包分发，双击即用）。"""
+    """把 Playwright Chromium 装进发行目录（随包分发，双击即用）。
+
+    装到 exe 旁的 playwright/ 目录——这是 Start.py 里 _check_and_install_playwright
+    预检函数认可的布局（playwright/chromium-*/chrome-win/chrome.exe），
+    与运行期 PLAYWRIGHT_BROWSERS_PATH 指向保持一致。
+    """
     env = dict(os.environ)
-    env['PLAYWRIGHT_BROWSERS_PATH'] = str(app_dir / '_internal' / 'browsers')
+    env['PLAYWRIGHT_BROWSERS_PATH'] = str(app_dir / 'playwright')
     print('+ python -m playwright install chromium（装进发行目录）')
     subprocess.run(
         [sys.executable, '-m', 'playwright', 'install', 'chromium'],
@@ -167,8 +172,8 @@ def main() -> None:
 README_CN = """鱼小铺 - Windows 客户端（单机版）
 
 【启动】
-双击「鱼小铺.exe」，等待服务就绪后会自动打开浏览器进入管理后台
-（也可以手动访问 http://127.0.0.1:8090/）。
+双击「鱼小铺.exe」，会弹出「鱼小铺」桌面窗口（就是管理后台界面），
+窗口关闭即退出程序。也可以用普通浏览器访问 http://127.0.0.1:18099/ 。
 
 【首次登录】
 默认管理员账号 admin，默认密码 admin123（请在设置页立即修改）。
@@ -184,8 +189,7 @@ README_CN = """鱼小铺 - Windows 客户端（单机版）
 - version.txt 记录当前发行版本，勿删除
 
 【常见问题】
-- 端口冲突：默认端口 8080（global_config.yml 的 AUTO_REPLY.api.port），
-  被占用时可设置环境变量 API_PORT 后再启动
+- 端口冲突：默认端口 18099（可用环境变量 API_PORT 覆盖）
 - 闪退：查看 logs/ 目录下最新日志定位原因
 """
 

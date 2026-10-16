@@ -19,6 +19,15 @@ datas = [
     (str(ROOT / 'global_config.yml'), '.'),     # 全局配置模板（PROJECT_ROOT 解析到 _internal）
 ]
 
+# Playwright 的 node driver（driver/node.exe + package/cli.js）必须显式收进包——
+# PyInstaller 常规分析收不到它，缺失时 chromium.launch 报 WinError 2
+# （官方打包文档的做法）。driver 位置以构建环境实际安装的 playwright 为准。
+try:
+    import playwright as _pw
+    datas.append((str(Path(_pw.__file__).resolve().parent / 'driver'), 'playwright/driver'))
+except ImportError:
+    pass
+
 # Anaconda/conda 底座的 venv：_ssl 依赖的 OpenSSL DLL 在 Library/bin 下，
 # PyInstaller 的常规 hook 覆盖不到，手动收进包（python.org 官方发行版不需要）。
 import sys as _sys
@@ -64,7 +73,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,        # 服务型应用：保留控制台窗口看日志，后续版本可换托盘
+    console=False,       # 桌面窗口形态：pywebview 原生窗口承载界面，无控制台黑窗
     icon=icon_path,
 )
 coll = COLLECT(
