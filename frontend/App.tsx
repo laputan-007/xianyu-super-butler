@@ -8,6 +8,7 @@ import Header from './components/Header';
 import GlobalFeedback from './components/GlobalFeedback';
 import ThemeToggle from './components/ThemeToggle';
 import CaptchaInput from './components/CaptchaInput';
+import TruckLogo from './components/TruckLogo';
 import { useCaptcha } from './lib/useCaptcha';
 import { validateEmail, validatePassword, validateUsername } from './lib/authValidation';
 import { login, verifyToken, getPublicSettings, register, sendVerificationCode, getAccountDetails } from './services/api';
@@ -598,12 +599,7 @@ const App: React.FC = () => {
                   className="login-logo-glow absolute -inset-3 rounded-2xl"
                   style={{ background: 'radial-gradient(circle, rgb(var(--brand-rgb)/0.35) 0%, transparent 65%)' }}
                 />
-                <img
-                  src="/static/login-cover.png"
-                  alt="鱼小铺"
-                  className="login-cover-logo relative h-12 w-12"
-                  draggable={false}
-                />
+                <TruckLogo className="login-cover-logo relative h-12 w-12" />
               </span>
               <span className="leading-none">
                 <span className="block text-[17px] font-extrabold tracking-wide text-white">鱼小铺</span>
