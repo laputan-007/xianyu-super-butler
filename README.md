@@ -213,6 +213,7 @@ git pull && sudo systemctl restart xianyu-butler
 ```
 
 > **滑块与人机验证、部署失败排查、使用流程** 见 [docs/deployment.md](docs/deployment.md)。
+> **Windows 桌面客户端（EXE）打包** 见 [docs/packaging.md](docs/packaging.md)。
 > 自动过滑块受平台风控限制不保证成功，自动失败时可在账号页转人工验证。
 
 缺陷和功能建议请提交到 [Gitee Issues](https://gitee.com/is-it-day-and-night/xianyu-super-butler/issues)。
