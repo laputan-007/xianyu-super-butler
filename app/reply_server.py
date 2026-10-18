@@ -4283,6 +4283,102 @@ def update_system_setting(key: str, setting_data: SystemSettingIn,
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class StorageLocationIn(BaseModel):
+    path: str
+
+
+def _storage_marker_path() -> str:
+    import sys as _sys
+    return os.path.join(os.path.dirname(os.path.abspath(_sys.executable)), 'storage_path.txt')
+
+
+@app.get('/storage-location')
+def get_storage_location(_: Dict[str, Any] = Depends(require_admin)):
+    """当前数据存储根目录（关于页「桌面客户端」卡片用）。
+
+    打包版 Start.py 在启动时已按 storage_path.txt 完成迁移与 chdir，
+    这里读 cwd 即为生效中的存储根目录。
+    """
+    import sys as _sys
+    frozen = bool(getattr(_sys, 'frozen', False))
+    exe_dir = os.path.dirname(os.path.abspath(_sys.executable)) if frozen else None
+    marker = _storage_marker_path() if exe_dir else None
+    return {
+        'frozen': frozen,
+        'root': os.path.abspath(os.getcwd()),
+        'default_root': exe_dir,
+        'custom': bool(marker and os.path.exists(marker)),
+    }
+
+
+@app.post('/storage-location')
+def set_storage_location(data: StorageLocationIn, _: Dict[str, Any] = Depends(require_admin)):
+    """记录自定义数据存储根目录（写入 exe 旁 storage_path.txt，重启后生效）。
+
+    实际迁移发生在下次启动的冻结块里：启动早期（任何业务模块导入前）
+    把 data/logs/browser_data 整体 shutil.move 过去再 chdir，避开
+    SQLite/浏览器进程的文件锁。
+    """
+    import sys as _sys
+    if not getattr(_sys, 'frozen', False):
+        raise HTTPException(400, '仅打包客户端支持修改数据存储路径')
+    path = (data.path or '').strip().strip('"').strip("'")
+    if not path or not os.path.isabs(path):
+        raise HTTPException(400, '请提供绝对路径（例如 D:\\鱼小铺数据）')
+    if not os.path.isdir(path):
+        raise HTTPException(400, '目录不存在，请先创建')
+    try:
+        probe = os.path.join(path, '.yxp_write_test')
+        with open(probe, 'w', encoding='utf-8') as f:
+            f.write('t')
+        os.remove(probe)
+    except OSError:
+        raise HTTPException(400, '目录不可写，请检查权限')
+    if os.path.normcase(os.path.normpath(path)) == os.path.normcase(os.path.normpath(os.path.dirname(os.path.abspath(_sys.executable)))):
+        raise HTTPException(400, '新路径与程序目录相同，请选择其他目录')
+    with open(_storage_marker_path(), 'w', encoding='utf-8') as f:
+        f.write(os.path.normpath(path))
+    # 目标里已有数据库文件（旧实例的数据目录）：合法（采纳旧数据），但若那个
+    # 实例还活着（比如网页版正跑在同一目录），两个服务共用一份数据会互相干扰
+    # ——必须确认对方已停止再重启本客户端。
+    warning = None
+    if os.path.exists(os.path.join(path, 'data', 'xianyu_data.db')):
+        warning = '目标目录已有数据库文件：若它属于另一个正在运行的实例（如网页版），请先停掉该实例再重启本客户端，否则两边会互相干扰。'
+    return {
+        'success': True,
+        'root': os.path.normpath(path),
+        'need_restart': True,
+        'warning': warning,
+        'message': '已记录新存储路径，重启客户端后生效（数据将自动迁移过去）',
+    }
+
+
+@app.delete('/storage-location')
+def reset_storage_location(_: Dict[str, Any] = Depends(require_admin)):
+    """恢复默认存储路径。
+
+    写入 storage_revert.txt 记录当前自定义根目录，下次启动的冻结块会把
+    data/logs/browser_data 迁回 exe 同目录后自删标记——数据不丢。
+    """
+    import sys as _sys
+    if not getattr(_sys, 'frozen', False):
+        raise HTTPException(400, '仅打包客户端支持修改数据存储路径')
+    marker = _storage_marker_path()
+    revert = marker.replace('storage_path.txt', 'storage_revert.txt')
+    if not os.path.exists(marker):
+        return {'success': True, 'removed': False, 'need_restart': False,
+                'message': '当前已是默认存储路径'}
+    with open(revert, 'w', encoding='utf-8') as f:
+        f.write(os.path.abspath(os.getcwd()))
+    os.remove(marker)
+    return {
+        'success': True,
+        'removed': True,
+        'need_restart': True,
+        'message': '已恢复默认存储路径，重启客户端后数据将自动迁回 exe 同目录',
+    }
+
+
 @app.post('/system-settings/email-test')
 async def send_email_test(data: EmailTestIn, _: Dict[str, Any] = Depends(require_admin)):
     """用设置页表单当前的 SMTP 配置发一封测试邮件，验证邮件服务可用性。"""

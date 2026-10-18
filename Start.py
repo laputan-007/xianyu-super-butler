@@ -8,6 +8,7 @@
 import os
 import sys
 import shutil
+import subprocess
 from pathlib import Path
 
 # 打包模式（PyInstaller frozen）初始化：必须发生在任何 app.* 导入之前——
@@ -16,16 +17,48 @@ from pathlib import Path
 if getattr(sys, 'frozen', False):
     _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
     os.chdir(_exe_dir)  # 数据/日志/浏览器配置目录全部落在 exe 旁边，双击即用
+    # 数据存储路径可选：exe 旁的 storage_path.txt 记录用户选择的自定义根目录
+    # （关于页「桌面客户端」卡片写入）。首次切换时把 data/logs/browser_data
+    # 整体迁移过去，然后 chdir——之后所有相对路径（数据库、日志、浏览器配置）
+    # 都落在新根目录，与程序文件彻底分离，升级覆盖程序目录不动数据。
+    # 恢复默认走对称流程：storage_revert.txt 记录要迁回的旧根目录，迁回后自删。
+    _DATA_DIRS = ('data', 'logs', 'browser_data')
+    try:
+        _marker = os.path.join(_exe_dir, 'storage_path.txt')
+        _revert = os.path.join(_exe_dir, 'storage_revert.txt')
+        if os.path.exists(_revert) and not os.path.exists(_marker):
+            _old_root = open(_revert, encoding='utf-8').read().strip()
+            if _old_root and os.path.isabs(_old_root) and os.path.isdir(_old_root):
+                for _d in _DATA_DIRS:
+                    _src = os.path.join(_old_root, _d)
+                    _dst = os.path.join(_exe_dir, _d)
+                    if os.path.isdir(_src) and not os.path.exists(_dst):
+                        shutil.move(_src, _dst)
+                print(f'数据已迁回默认目录: {_old_root} -> {_exe_dir}')
+            os.remove(_revert)
+        if os.path.exists(_marker):
+            _root = open(_marker, encoding='utf-8').read().strip()
+            if _root and os.path.isabs(_root) and os.path.isdir(_root):
+                _root = os.path.normpath(_root)
+                for _d in _DATA_DIRS:
+                    _src = os.path.join(_exe_dir, _d)
+                    _dst = os.path.join(_root, _d)
+                    if os.path.isdir(_src) and not os.path.exists(_dst):
+                        shutil.move(_src, _dst)
+                os.chdir(_root)
+                print(f'数据存储目录: {_root}')
+    except Exception as _e:
+        print(f'读取自定义存储路径失败，回落 exe 同目录: {_e}')
     # 打包版默认端口 18099：避开 8080/8090 等常用端口冲突（用户可用环境变量 API_PORT 覆盖）
     os.environ.setdefault('API_PORT', '18099')
     # 浏览器装在 exe 旁的 playwright/ 目录（_check_and_install_playwright
     # 预检函数约定的布局：playwright/chromium-*/chrome-win/chrome.exe）
     os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, 'playwright'))
     # 窗口模式（console=False）下 sys.stdout/stderr 为 None，loguru/uvicorn
-    # 的控制台输出流会异常——统一重定向到 exe 旁的日志文件。
+    # 的控制台输出流会异常——统一重定向到当前存储根目录的日志文件。
     if sys.stdout is None or sys.stderr is None:
         os.makedirs('logs', exist_ok=True)
-        _stream = open(os.path.join(_exe_dir, 'logs', 'stdout.log'), 'a', encoding='utf-8', buffering=1)
+        _stream = open(os.path.join('logs', 'stdout.log'), 'a', encoding='utf-8', buffering=1)
         sys.stdout = _stream
         sys.stderr = _stream
 
@@ -1008,40 +1041,191 @@ if __name__ == '__main__':
                 _time.sleep(1)
 
         class _DesktopClientApi:
-            """pywebview JS 桥：网页自定义标题栏的窗口控制。
+            """pywebview JS 桥：桌面客户端能力。
 
-            frameless 窗口没有原生按钮，最小化/最大化/还原/关闭由前端标题栏
-            经 window.pywebview.api.* 调到这里。
+            - 窗口控制（minimize/maximize/restore/close）：前端自绘标题栏用；
+            - 桌面快捷方式 / 数据目录选择 / 打开数据目录 / 重启：关于页
+              「桌面客户端」卡片用。
+
+            属性一律下划线开头：pywebview 6.x 注入 JS 桥时会递归遍历 js_api
+            对象的全部公开属性（嵌套对象暴露特性），公开的 window 引用会沿
+            window.native 走进 WinForms/.NET 对象图（AccessibilityObject→
+            Bounds→Rectangle.Empty×∞），在 UI 主线程上无限递归 + 巨量 .NET
+            反射，窗口与服务全部冻结（实测"运行就无响应"）。js_api 的调用
+            本身在主 STA 线程上执行，弹文件夹对话框是安全的。
             """
-            window = None
+            _window = None
 
             def minimize(self):
-                if self.window is not None:
-                    self.window.minimize()
+                if self._window is not None:
+                    self._window.minimize()
 
             def maximize(self):
-                if self.window is not None:
-                    self.window.maximize()
+                if self._window is not None:
+                    self._window.maximize()
 
             def restore(self):
-                if self.window is not None:
-                    self.window.restore()
+                if self._window is not None:
+                    self._window.restore()
 
             def close(self):
-                if self.window is not None:
-                    self.window.destroy()
+                if self._window is not None:
+                    self._window.destroy()
+
+            def create_desktop_shortcut(self):
+                """在桌面创建「鱼小铺.lnk」，指向当前 exe（图标取自 exe）。"""
+                try:
+                    import win32com.client
+                    shell = win32com.client.Dispatch('WScript.Shell')
+                    desktop = shell.SpecialFolders('Desktop')
+                    exe = os.path.abspath(sys.executable)
+                    lnk_path = os.path.join(desktop, '鱼小铺.lnk')
+                    lnk = shell.CreateShortCut(lnk_path)
+                    lnk.TargetPath = exe
+                    lnk.WorkingDirectory = os.path.dirname(exe)
+                    lnk.IconLocation = f'{exe},0'
+                    lnk.Description = '鱼小铺 - 闲鱼一体化运营工作台'
+                    lnk.Save()
+                    return {'success': True, 'path': lnk_path}
+                except Exception as e:
+                    return {'success': False, 'message': f'创建失败: {e}'}
+
+            def select_storage_dir(self):
+                """弹出系统文件夹选择框，返回用户选中的目录。"""
+                if self._window is None:
+                    return {'success': False, 'message': '窗口未就绪'}
+                try:
+                    result = self._window.create_file_dialog(
+                        webview.FOLDER_DIALOG, allow_multiple=False)
+                    if result:
+                        return {'success': True, 'path': str(result[0])}
+                    return {'success': False, 'cancelled': True}
+                except Exception as e:
+                    return {'success': False, 'message': f'打开目录选择框失败: {e}'}
+
+            def open_data_dir(self):
+                """在资源管理器中打开当前数据存储目录。"""
+                try:
+                    os.startfile(os.getcwd())
+                    return {'success': True}
+                except Exception as e:
+                    return {'success': False, 'message': f'打开失败: {e}'}
+
+            def restart(self):
+                """重启客户端（切换数据存储路径后生效用）。"""
+                try:
+                    exe = os.path.abspath(sys.executable)
+                    subprocess.Popen([exe], cwd=os.path.dirname(exe), close_fds=True)
+                    # 稍等新进程拉起再硬退，避免端口还没释放就绑定失败
+                    import time as _t
+                    _t.sleep(0.5)
+                    os._exit(0)
+                except Exception as e:
+                    return {'success': False, 'message': f'重启失败: {e}'}
 
         # 无边框窗口：标题栏由网页自绘（pywebview-drag-region 拖拽区 + 自定义按钮），
         # background_color 与登录页封面同色系，页面加载前不闪白。
         _api = _DesktopClientApi()
         _win = webview.create_window(
-            '鱼小铺', _url, width=1440, height=900, min_size=(1024, 640),
+            '鱼小铺', _url, width=1440, height=900,
+            # 不设 min_size：拉伸不限制最小宽度（用户常在窄分屏里用），
+            # pywebview 自带 200x100 兜底下限防止窗口缩没
             frameless=True,
             easy_drag=False,  # 用显式拖拽区类，避免整页拖拽误伤 UI 交互
             background_color='#17130a',
             js_api=_api,
         )
-        _api.window = _win
+        _api._window = _win
+
+        # frameless 窗体两个系统级能力都要手动补：
+        # 1. 样式位：WinForms FormBorderStyle.None 缺 WS_MINIMIZEBOX/WS_MAXIMIZEBOX
+        #    → 任务栏图标的点击切换（激活→最小化、最小化→还原）失效；
+        # 2. 边缘拉伸：无边框窗口的客户区铺满整个窗口矩形，没有非客户区边框可
+        #    供 DefWindowProc 命中——即使补上 WS_THICKFRAME，边缘照样返回 HTCLIENT。
+        #    需子类化窗口过程，在 8px 边缘感应区内自己回报 HT*resize 命中码。
+        def _patch_window_styles(window):
+            import ctypes
+            from ctypes import wintypes
+            GWL_STYLE, GWL_WNDPROC = -16, -4
+            WS_MINIMIZEBOX, WS_MAXIMIZEBOX, WS_THICKFRAME = 0x00020000, 0x00010000, 0x00040000
+            WM_NCHITTEST = 0x0084
+            HT = {'L': 10, 'R': 11, 'T': 12, 'TL': 13, 'TR': 14,
+                  'B': 15, 'BL': 16, 'BR': 17}
+            MARGIN = 8  # 边缘拉伸感应宽度（px）
+
+            class _RECT(ctypes.Structure):
+                _fields_ = [('left', ctypes.c_long), ('top', ctypes.c_long),
+                            ('right', ctypes.c_long), ('bottom', ctypes.c_long)]
+
+            user32 = ctypes.windll.user32
+            user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+            user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+            user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+            user32.CallWindowProcW.restype = ctypes.c_ssize_t
+            user32.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND,
+                                               wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            hwnd = wintypes.HWND(int(window.native.Handle.ToInt64()))
+            style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+            user32.SetWindowLongW(hwnd, GWL_STYLE,
+                                  style | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME)
+
+            def _hit_test(lparam):
+                r = _RECT()
+                if not user32.GetWindowRect(hwnd, ctypes.byref(r)):
+                    return None
+                x = ctypes.c_short(lparam & 0xFFFF).value
+                y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
+                # WM_NCHITTEST 屏幕坐标可能带负值/越界，只在窗口附近算
+                if not (r.left - MARGIN <= x <= r.right + MARGIN):
+                    return None
+                if not (r.top - MARGIN <= y <= r.bottom + MARGIN):
+                    return None
+                left = (x - r.left) < MARGIN
+                right = (r.right - x) < MARGIN
+                top = (y - r.top) < MARGIN
+                bottom = (r.bottom - y) < MARGIN
+                if not (left or right or top or bottom):
+                    return None
+                if top and left:
+                    return HT['TL']
+                if top and right:
+                    return HT['TR']
+                if bottom and left:
+                    return HT['BL']
+                if bottom and right:
+                    return HT['BR']
+                if left:
+                    return HT['L']
+                if right:
+                    return HT['R']
+                if top:
+                    return HT['T']
+                return HT['B']
+
+            WNDPROC = ctypes.WINFUNCTYPE(
+                ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+                wintypes.WPARAM, wintypes.LPARAM)
+            state = {'orig': 0}
+
+            def _wnd_proc(h, msg, wparam, lparam):
+                try:
+                    if msg == WM_NCHITTEST and not user32.IsZoomed(h):
+                        hit = _hit_test(lparam)
+                        if hit is not None:
+                            return hit
+                except Exception:
+                    pass  # 回调里绝不能抛异常（ctypes 会吞掉并返回 0 弄坏窗口），回落原过程
+                return user32.CallWindowProcW(
+                    state['orig'], h, msg, wparam, lparam)
+
+            proc = WNDPROC(_wnd_proc)
+            state['orig'] = user32.GetWindowLongPtrW(hwnd, GWL_WNDPROC)
+            # ctypes 回调对象必须长期持引用（防 GC），挂在窗口对象上与窗口同寿命
+            window._resize_proc_ref = proc
+            user32.SetWindowLongPtrW(hwnd, GWL_WNDPROC, ctypes.cast(proc, ctypes.c_void_p).value)
+
+        _win.events.shown += lambda: _patch_window_styles(_win)
         webview.start()
         print('窗口已关闭，进程退出')
         os._exit(0)

@@ -37,6 +37,34 @@ export const getPublicSettings = async (): Promise<{
   return get('/system-settings/public');
 };
 
+// ============ 桌面客户端：数据存储路径 ============
+export interface StorageLocationInfo {
+  /** 是否运行在打包客户端（exe）里 */
+  frozen: boolean;
+  /** 当前生效的数据存储根目录 */
+  root: string;
+  /** 默认根目录（exe 同目录），源码运行为 null */
+  default_root: string | null;
+  /** 是否已设置自定义路径（storage_path.txt 存在） */
+  custom: boolean;
+}
+
+export const getStorageLocation = async (): Promise<StorageLocationInfo> => {
+  return get('/storage-location');
+};
+
+export const setStorageLocation = async (path: string): Promise<{
+  success: boolean; root: string; need_restart: boolean; warning?: string | null; message?: string;
+}> => {
+  return post('/storage-location', { path });
+};
+
+export const resetStorageLocation = async (): Promise<{
+  success: boolean; removed: boolean; need_restart: boolean; message?: string;
+}> => {
+  return del('/storage-location');
+};
+
 export const register = async (data: {
   username: string;
   email: string;

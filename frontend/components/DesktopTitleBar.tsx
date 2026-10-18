@@ -11,13 +11,18 @@ import { Minus, Square, X } from 'lucide-react';
  * 浏览器访问时不渲染（window.pywebview 不存在）。
  */
 
-interface PyWebViewBridge {
+/** pywebview 注入的 JS 桥（Start.py 的 _DesktopClientApi）。 */
+export interface PyWebViewBridge {
   pywebview?: {
     api?: {
       minimize?: () => void;
       maximize?: () => void;
       restore?: () => void;
       close?: () => void;
+      create_desktop_shortcut?: () => Promise<{ success: boolean; path?: string; message?: string }>;
+      select_storage_dir?: () => Promise<{ success: boolean; path?: string; cancelled?: boolean; message?: string }>;
+      open_data_dir?: () => Promise<{ success: boolean; message?: string }>;
+      restart?: () => void | Promise<{ success: boolean; message?: string }>;
     };
   };
 }
