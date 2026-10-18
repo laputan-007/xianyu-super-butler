@@ -4897,13 +4897,13 @@ class DBManager:
                               smtp_use_tls: bool, smtp_use_ssl: bool) -> tuple:
         """发送一封测试邮件，返回 (是否成功, 面向用户的中文原因)。"""
         import smtplib
-        subject = "鱼小铺 - SMTP 测试邮件"
+        subject = "【鱼小铺】SMTP 配置测试邮件"
         text_content = (
-            "这是一封测试邮件。\n\n"
-            "收到本邮件，说明「系统设置 → 邮件服务」中的 SMTP 配置可以正常发信，\n"
-            "注册验证码与系统通知邮件都将通过该配置发出。\n\n"
-            f"收件地址：{email_to}\n"
-            "---\n此邮件由系统自动发送，请勿直接回复"
+            "您好！\n\n"
+            "这是一封用于验证邮件服务配置的测试邮件。收到本邮件，说明\n"
+            "「系统设置 → 邮件服务」中的 SMTP 配置可以正常发信，\n"
+            "此后注册验证码与系统通知邮件都将通过该配置发出。\n\n"
+            "本邮件由系统自动发送，请勿直接回复。"
         )
         try:
             ok = await self._send_email_via_smtp(email_to, subject, text_content,
