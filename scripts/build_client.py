@@ -30,6 +30,10 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / 'app' / 'version.py'
 DIST = ROOT / 'dist'
 APP_DIR_NAME = '鱼小铺'
+# exe 打包的前端产物暂存目录——刻意与仓库 static/ 隔离：static/ 由网页版部署
+# 专用（后端直接托管），打包在这里重建会打断正在运行的网页版；exe 的前端
+# 快照一律进出 packaging/static-dist/，两边互不干扰。
+STAGING = ROOT / 'packaging' / 'static-dist'
 
 
 def read_version() -> str:
@@ -70,22 +74,38 @@ def run(cmd, cwd=ROOT, **kwargs):
 
 def build_frontend(skip: bool) -> None:
     if skip:
-        print('跳过前端构建（--skip-frontend）')
+        if not (STAGING / 'index.html').exists():
+            raise SystemExit(
+                f'--skip-frontend 需要先完整构建过一次（{STAGING} 里没有产物）。\n'
+                '请先不带该参数跑一次 build_client.py，生成 exe 专用的前端快照。')
+        print('跳过前端构建（--skip-frontend，使用 packaging/static-dist 现有快照）')
         return
+    # 暂存目录做成仓库 static/ 的完整镜像（签名 JS、登录图等源文件都要进包），
+    # 再把 vite 产物构建进去——仓库 static/ 保持原样，归网页版使用。
+    if STAGING.exists():
+        shutil.rmtree(STAGING)
+    shutil.copytree(ROOT / 'static', STAGING)
     npm = shutil.which('npm') or 'npm.cmd'
-    run([npm, 'run', 'build'], cwd=ROOT / 'frontend')
+    env = dict(os.environ)
+    env['VITE_OUT_DIR'] = str(STAGING)
+    print(f'+ {npm} run build（VITE_OUT_DIR=packaging/static-dist，不碰仓库 static/）')
+    subprocess.run([str(npm), 'run', 'build'], cwd=str(ROOT / 'frontend'),
+                   env=env, check=True)
 
 
 def make_icon() -> None:
-    logo = ROOT / 'frontend' / 'public' / 'logo.png'
+    # 优先用 packaging/app-icon.png（exe 专用图标）；没有时回落前端 logo
+    candidates = [ROOT / 'packaging' / 'app-icon.png',
+                  ROOT / 'frontend' / 'public' / 'logo.png']
+    logo = next((p for p in candidates if p.exists()), None)
     ico = ROOT / 'packaging' / 'app.ico'
-    if not logo.exists():
-        print('未找到 logo.png，跳过图标')
+    if logo is None:
+        print('未找到 app-icon.png / logo.png，跳过图标')
         return
     from PIL import Image
     img = Image.open(logo).convert('RGBA')
     img.save(str(ico), sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
-    print(f'图标已生成: {ico.name}')
+    print(f'图标已生成: {ico.name}（来源 {logo.name}）')
 
 
 def ensure_pyinstaller() -> None:

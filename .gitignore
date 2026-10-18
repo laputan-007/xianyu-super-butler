@@ -22,6 +22,8 @@ MANIFEST
 *.manifest
 *.spec
 !packaging/*.spec
+# exe 打包的前端产物暂存目录（仓库 static/ 归网页版使用，打包不碰）
+packaging/static-dist/
 .cache
 *.log
 local_settings.py

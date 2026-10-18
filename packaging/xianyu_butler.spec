@@ -15,7 +15,9 @@ from pathlib import Path
 ROOT = Path(SPECPATH).parent
 
 datas = [
-    (str(ROOT / 'static'), 'static'),           # 前端构建产物 + 签名 JS（xianyu_js_version_2.js）
+    # 前端产物 + 签名 JS：从打包暂存目录收（build_client.py 先把仓库 static/
+    # 镜像过来再把 vite 产物构建进去），仓库 static/ 归网页版使用、打包不碰
+    (str(ROOT / 'packaging' / 'static-dist'), 'static'),
     (str(ROOT / 'global_config.yml'), '.'),     # 全局配置模板（PROJECT_ROOT 解析到 _internal）
 ]
 
