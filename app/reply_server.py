@@ -6053,6 +6053,8 @@ class ItemPublishRequest(BaseModel):
     shipping_mode: str = 'free'
     # 宝贝所在地（从 /items/publish/addresses 返回的地址对象，不传用默认地址）
     address: Optional[Dict[str, Any]] = None
+    # 所在地隐私模式（默认开）：隐去精确 POI，买家只看到省市区；显式选了地址时传 False
+    location_privacy: bool = True
     # 分类（推荐接口返回的候选对象，用户手动选择时传入，不传取识别首选）
     category: Optional[Dict[str, Any]] = None
     # 已上传到闲鱼图片空间的图片：[{url, widthSize, heightSize}]，第一张为主图
@@ -6167,6 +6169,7 @@ async def publish_item_to_xianyu(
             shipping_mode=request.shipping_mode,
             address=request.address,
             category=request.category,
+            location_privacy=request.location_privacy,
         )
     except ItemPublishError as exc:
         raise HTTPException(status_code=502, detail=str(exc))

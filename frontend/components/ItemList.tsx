@@ -54,6 +54,7 @@ import {
   uploadImage,
 } from '../services/api';
 import { confirmAction } from '../services/feedback';
+import { REGIONS } from '../data/regions';
 import DeliveryProtection from './DeliveryProtection';
 import GeneralDeliveryRules from './GeneralDeliveryRules';
 import {EmptyState, NoticeBanner, PageHeader, PageLoading, PageTabs} from './ui';
@@ -304,7 +305,13 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
     shippingMode: 'free' | 'freight' | 'self';
     images: Array<{ url: string; widthSize: number; heightSize: number; preview: string }>;
     address: Record<string, string> | null;
-  }>({ cookieId: '', title: '', price: '', originalPrice: '', shippingMode: 'free', images: [], address: null });
+    /** 所在地三模式：privacy=隐私（默认，仅显示省市）/ auto=账号定位地址 / manual=自主选省市区 */
+    locationMode: 'privacy' | 'auto' | 'manual';
+    /** 自主选择模式下的省/市/区划码（区级联的值是区划码，如 '440103'） */
+    regionProv: string;
+    regionCity: string;
+    regionArea: string;
+  }>({ cookieId: '', title: '', price: '', originalPrice: '', shippingMode: 'free', images: [], address: null, locationMode: 'privacy', regionProv: '', regionCity: '', regionArea: '' });
   const [addressOptions, setAddressOptions] = useState<Array<Record<string, string>>>([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [publishConfirm, setPublishConfirm] = useState<{
@@ -319,6 +326,7 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
     price?: string;
     originalPrice?: string;
     images?: string;
+    address?: string;
   }>({});
   const [publishing, setPublishing] = useState(false);
   const [publishUploading, setPublishUploading] = useState(false);
@@ -593,15 +601,13 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
       shippingMode: 'free',
       images: [],
       address: null,
+      locationMode: 'privacy',
+      regionProv: '',
+      regionCity: '',
+      regionArea: '',
     });
     setShowPublishModal(true);
-    void loadPublishAddresses(cookieId).then(options => {
-      if (options.length) {
-        setPublishForm(current => (current.cookieId === cookieId && !current.address
-          ? { ...current, address: options[0] }
-          : current));
-      }
-    });
+    void loadPublishAddresses(cookieId);
   };
 
   const handlePublishImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -647,9 +653,19 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
     if (publishForm.originalPrice.trim() && (!Number.isFinite(originalPrice) || originalPrice <= 0)) {
       errors.originalPrice = '原价需为大于 0 的数字，或留空';
     }
+    if (publishForm.locationMode === 'manual' && !publishForm.regionArea) {
+      errors.address = '自主选择位置时请选完 省/市/区';
+    }
     setPublishFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
     const platformImages = publishForm.images.map(({ url, widthSize, heightSize }) => ({ url, widthSize, heightSize }));
+    // 自主选择模式：从前端内置的省市区数据组装区划级地址（无 POI，买家只看到所选城市）
+    const regionProv = REGIONS.find(p => p.n === publishForm.regionProv);
+    const regionCity = regionProv?.c.find(c => c.n === publishForm.regionCity);
+    const regionArea = regionCity?.a.find(a => a[1] === publishForm.regionArea);
+    const manualAddress = regionProv && regionCity && regionArea
+      ? { prov: regionProv.n, city: regionCity.n, area: regionArea[0], divisionId: Number(regionArea[1]) }
+      : null;
 
     setPublishing(true);
     try {
@@ -673,7 +689,8 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
           quantity: 1,
           original_price: publishForm.originalPrice.trim() ? originalPrice : null,
           shipping_mode: publishForm.shippingMode,
-          address: publishForm.address,
+          address: publishForm.locationMode === 'manual' ? manualAddress : publishForm.address,
+          location_privacy: publishForm.locationMode === 'privacy',
           category: publishConfirm.category,
           images: platformImages,
         });
@@ -1953,15 +1970,9 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                     value={publishForm.cookieId}
                     onChange={event => {
                       const cookieId = event.target.value;
-                      setPublishForm(current => ({ ...current, cookieId, address: null }));
+                      setPublishForm(current => ({ ...current, cookieId, address: null, locationMode: 'privacy', regionProv: '', regionCity: '', regionArea: '' }));
                       setPublishFieldErrors(current => ({ ...current, cookieId: undefined }));
-                      void loadPublishAddresses(cookieId).then(options => {
-                        if (options.length) {
-                          setPublishForm(current => (current.cookieId === cookieId && !current.address
-                            ? { ...current, address: options[0] }
-                            : current));
-                        }
-                      });
+                      void loadPublishAddresses(cookieId);
                     }}
                     className="ios-input w-full rounded-md px-3 py-2.5"
                   >
@@ -2054,23 +2065,89 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                   <label className="mb-2 block text-sm font-bold text-gray-700" htmlFor="publish-address">宝贝所在地</label>
                   <select
                     id="publish-address"
-                    value={publishForm.address ? String(publishForm.address.poiId || '') : ''}
+                    value={publishForm.locationMode === 'privacy'
+                      ? '__privacy__'
+                      : publishForm.locationMode === 'manual' ? '__manual__'
+                      : publishForm.address ? String(publishForm.address.poiId || '') : ''}
                     onChange={event => {
-                      const poiId = event.target.value;
-                      const next = addressOptions.find(addr => String(addr.poiId || '') === poiId) || null;
-                      setPublishForm(current => ({ ...current, address: next }));
+                      const value = event.target.value;
+                      if (value === '__loading__') return;
+                      if (value === '__privacy__') {
+                        setPublishForm(current => ({ ...current, address: null, locationMode: 'privacy' }));
+                        setPublishFieldErrors(current => ({ ...current, address: undefined }));
+                        return;
+                      }
+                      if (value === '__manual__') {
+                        setPublishForm(current => ({ ...current, address: null, locationMode: 'manual' }));
+                        return;
+                      }
+                      const next = value
+                        ? addressOptions.find(addr => String(addr.poiId || '') === value) || null
+                        : null;
+                      setPublishForm(current => ({ ...current, address: next, locationMode: 'auto' }));
+                      setPublishFieldErrors(current => ({ ...current, address: undefined }));
                     }}
                     className="ios-input w-full rounded-md px-3 py-2.5"
-                    disabled={addressLoading || addressOptions.length === 0}
                   >
-                    {addressLoading && <option>正在加载地址…</option>}
-                    {!addressLoading && addressOptions.length === 0 && <option>使用账号默认地址</option>}
+                    <option value="__privacy__">隐私模式（仅显示省市，隐藏具体位置）</option>
+                    <option value="__manual__">自主选择省市区</option>
+                    {addressLoading && <option value="__loading__">正在加载地址…</option>}
+                    {!addressLoading && addressOptions.length === 0 && <option value="">自动定位（账号默认地址）</option>}
                     {addressOptions.map(addr => (
                       <option key={String(addr.poiId || '')} value={String(addr.poiId || '')}>
                         {`${addr.prov || ''}${addr.city || ''}${addr.area || ''} · ${addr.poi || addr.aoi || addr.address || ''}`}
                       </option>
                     ))}
                   </select>
+                  {publishForm.locationMode === 'manual' && (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <select
+                        aria-label="省份"
+                        value={publishForm.regionProv}
+                        onChange={event => setPublishForm(current => ({
+                          ...current, regionProv: event.target.value, regionCity: '', regionArea: '',
+                        }))}
+                        className="ios-input w-full rounded-md px-2 py-2.5 text-sm"
+                      >
+                        <option value="">省份</option>
+                        {REGIONS.map(prov => (
+                          <option key={prov.n} value={prov.n}>{prov.n}</option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label="城市"
+                        value={publishForm.regionCity}
+                        disabled={!publishForm.regionProv}
+                        onChange={event => setPublishForm(current => ({
+                          ...current, regionCity: event.target.value, regionArea: '',
+                        }))}
+                        className="ios-input w-full rounded-md px-2 py-2.5 text-sm"
+                      >
+                        <option value="">城市</option>
+                        {(REGIONS.find(prov => prov.n === publishForm.regionProv)?.c || []).map(city => (
+                          <option key={city.n} value={city.n}>{city.n}</option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label="区县"
+                        value={publishForm.regionArea}
+                        disabled={!publishForm.regionCity}
+                        onChange={event => {
+                          setPublishForm(current => ({ ...current, regionArea: event.target.value }));
+                          setPublishFieldErrors(current => ({ ...current, address: undefined }));
+                        }}
+                        className="ios-input w-full rounded-md px-2 py-2.5 text-sm"
+                      >
+                        <option value="">区县</option>
+                        {(REGIONS.find(prov => prov.n === publishForm.regionProv)?.c.find(city => city.n === publishForm.regionCity)?.a || []).map(([name, code]) => (
+                          <option key={code} value={code}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {publishFieldErrors.address && (
+                    <p className="mt-1.5 text-xs font-bold text-red-500">{publishFieldErrors.address}</p>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="mb-2 block text-sm font-bold text-gray-700">商品图片（{publishForm.images.length}/9，第一张为主图）</label>
@@ -2164,10 +2241,23 @@ const ItemList: React.FC<{ syncedAccountId?: string; onSyncedAccountChange?: (id
                         { free: '包邮', freight: '按距离计费', self: '无需邮寄（自提）' }[publishForm.shippingMode]
                       } · 数量 1
                     </p>
-                    {publishForm.address && (
+                    {publishForm.locationMode === 'privacy' ? (
+                      <p className="mt-0.5 text-xs text-gray-500">宝贝所在地：隐私模式（仅显示省市，隐藏具体位置）</p>
+                    ) : publishForm.locationMode === 'manual' ? (() => {
+                      const prov = REGIONS.find(p => p.n === publishForm.regionProv);
+                      const city = prov?.c.find(c => c.n === publishForm.regionCity);
+                      const area = city?.a.find(([name, code]) => code === publishForm.regionArea);
+                      return (
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          宝贝所在地：{publishForm.regionProv} {publishForm.regionCity} {area?.[0] || ''}
+                        </p>
+                      );
+                    })() : publishForm.address ? (
                       <p className="mt-0.5 text-xs text-gray-500">
                         宝贝所在地：{publishForm.address.prov}{publishForm.address.city}{publishForm.address.area} · {publishForm.address.poi || publishForm.address.aoi}
                       </p>
+                    ) : (
+                      <p className="mt-0.5 text-xs text-gray-500">宝贝所在地：账号默认地址</p>
                     )}
                   </div>
                 </div>

@@ -245,6 +245,26 @@ async def fetch_default_address(
     return address
 
 
+def _build_address_dto(address: Dict[str, Any]) -> Dict[str, Any]:
+    """组装 itemAddrDTO，poiId/poiName/gps 仅在有值时携带。
+
+    隐私模式下这三项被去掉，买家侧只显示省市区；协议实测两者均接受。
+    """
+    dto: Dict[str, Any] = {
+        'area': address.get('area'),
+        'city': address.get('city'),
+        'divisionId': address.get('divisionId'),
+        'prov': address.get('prov'),
+    }
+    if address.get('latitude') and address.get('longitude'):
+        dto['gps'] = f"{address.get('latitude')},{address.get('longitude')}"
+    if address.get('poiId'):
+        dto['poiId'] = address.get('poiId')
+    if address.get('poi') or address.get('aoi'):
+        dto['poiName'] = address.get('poi') or address.get('aoi')
+    return dto
+
+
 async def downshelf_item(
     session: aiohttp.ClientSession,
     cookies_str: str,
@@ -432,15 +452,7 @@ async def publish_item(
         'itemPriceDTO': item_price,
         'userRightsProtocols': [],
         'itemPostFeeDTO': post_fee,
-        'itemAddrDTO': {
-            'area': address.get('area'),
-            'city': address.get('city'),
-            'divisionId': address.get('divisionId'),
-            'gps': f"{address.get('latitude')},{address.get('longitude')}",
-            'poiId': address.get('poiId'),
-            'poiName': address.get('poi') or address.get('aoi'),
-            'prov': address.get('prov'),
-        },
+        'itemAddrDTO': _build_address_dto(address),
         'defaultPrice': False,
         'itemCatDTO': {
             'catId': cat.get('catId'),
@@ -485,11 +497,14 @@ async def run_publish(
     shipping_mode: str = 'free',
     address: Optional[Dict[str, Any]] = None,
     category: Optional[Dict[str, Any]] = None,
+    location_privacy: bool = True,
 ) -> Dict[str, Any]:
     """发布全流程入口：违禁词 → 类目推荐 → 发布。images 为已上传的图片列表。
 
     address 不传时使用账号默认发货地址。
     category 可传推荐接口返回的候选分类对象（用户手动选择时），不传取首选。
+    location_privacy 默认开启（隐私模式）：隐去精确 POI（poiId/poiName/gps），
+    买家侧只显示省市区；用户在发布表单显式选择具体地址时由调用方传 False。
     """
     async with aiohttp.ClientSession() as session:
         await check_badwords(session, cookies_str, title, cookie_id)
@@ -499,6 +514,11 @@ async def run_publish(
         )
         if address is None:
             address = await fetch_default_address(session, cookies_str)
+        if location_privacy:
+            address = {
+                key: value for key, value in address.items()
+                if key not in ('poiId', 'poi', 'aoi', 'aoiId', 'latitude', 'longitude')
+            }
         chosen_category = category if category and category.get('catId') else recommend['category']
         result = await publish_item(
             session, cookies_str, cookie_id,

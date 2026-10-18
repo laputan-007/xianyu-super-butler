@@ -587,6 +587,8 @@ export const publishItemToXianyu = async (data: {
   original_price?: number | null;
   shipping_mode?: 'free' | 'freight' | 'self';
   address?: Record<string, string> | null;
+  /** 所在地隐私模式（默认开）：隐去精确 POI，买家只看到省市区 */
+  location_privacy?: boolean;
   category?: Record<string, string> | null;
   images: Array<{ url: string; widthSize: number; heightSize: number }>;
 }): Promise<{ success: boolean; message: string; item_id: string; item_url: string; category?: string }> => {
