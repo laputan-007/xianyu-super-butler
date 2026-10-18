@@ -9,15 +9,17 @@ AI回复引擎模块
 - 遵照指示，未修复 P0-1 (议价竞争条件)
 """
 
-import os
 import json
-import time
-import requests  # 确保已导入
-import threading
+import os
 import re
+import threading
+import time
 from typing import List, Dict, Optional
+
+import requests  # 确保已导入
 from loguru import logger
 from openai import OpenAI
+
 from app.db_manager import db_manager
 
 
@@ -31,7 +33,7 @@ class ReasoningBudgetExhausted(RuntimeError):
 
 class AIReplyEngine:
     """AI回复引擎"""
-    
+
     def __init__(self):
         # 修复 P0-2: 移除有状态的缓存，以支持多进程部署
         # self.clients = {}  # 已移除
@@ -41,32 +43,32 @@ class AIReplyEngine:
         # 用于控制同一chat_id消息的串行处理
         self._chat_locks = {}
         self._chat_locks_lock = threading.Lock()
-    
+
     def _init_default_prompts(self):
         """初始化默认提示词"""
         self.default_prompts = {
             'classify': '''你是一个意图分类专家...（此提示词已不再被 detect_intent 使用）''',
-            
+
             'price': '''你是一位经验丰富的销售专家，擅长议价。
-语言要求：简短直接，每句≤10字，总字数≤40字。
-议价策略：
-1. 根据议价次数递减优惠：第1次小幅优惠，第2次中等优惠，第3次最大优惠
-2. 接近最大议价轮数时要坚持底线，强调商品价值
-3. 优惠不能超过设定的最大百分比和金额
-4. 语气要友好但坚定，突出商品优势
-注意：结合商品信息、对话历史和议价设置，给出合适的回复。''',
-            
+            语言要求：简短直接，每句≤10字，总字数≤40字。
+            议价策略：
+            1. 根据议价次数递减优惠：第1次小幅优惠，第2次中等优惠，第3次最大优惠
+            2. 接近最大议价轮数时要坚持底线，强调商品价值
+            3. 优惠不能超过设定的最大百分比和金额
+            4. 语气要友好但坚定，突出商品优势
+            注意：结合商品信息、对话历史和议价设置，给出合适的回复。''',
+
             'tech': '''你是一位技术专家，专业解答产品相关问题。
-语言要求：简短专业，每句≤10字，总字数≤40字。
-回答重点：产品功能、使用方法、注意事项。
-注意：基于商品信息回答，避免过度承诺。''',
-            
+            语言要求：简短专业，每句≤10字，总字数≤40字。
+            回答重点：产品功能、使用方法、注意事项。
+            注意：基于商品信息回答，避免过度承诺。''',
+
             'default': '''你是一位资深电商卖家，提供优质客服。
-语言要求：简短友好，每句≤10字，总字数≤40字。
-回答重点：商品介绍、物流、售后等常见问题。
-注意：结合商品信息，给出实用建议。'''
+            语言要求：简短友好，每句≤10字，总字数≤40字。
+            回答重点：商品介绍、物流、售后等常见问题。
+            注意：结合商品信息，给出实用建议。'''
         }
-    
+
     def _create_openai_client(self, cookie_id: str) -> Optional[OpenAI]:
         """
         (原 get_client) 创建指定账号的OpenAI客户端
@@ -75,9 +77,10 @@ class AIReplyEngine:
         settings = db_manager.get_ai_reply_settings(cookie_id)
         if not settings['ai_enabled'] or not settings['api_key']:
             return None
-        
+
         try:
-            logger.info(f"创建新的OpenAI客户端实例 {cookie_id}: base_url={settings['base_url']}, api_key={'***' + settings['api_key'][-4:] if settings['api_key'] else 'None'}")
+            logger.info(
+                f"创建新的OpenAI客户端实例 {cookie_id}: base_url={settings['base_url']}, api_key={'***' + settings['api_key'][-4:] if settings['api_key'] else 'None'}")
             client = OpenAI(
                 api_key=settings['api_key'],
                 base_url=settings['base_url'],
@@ -98,7 +101,8 @@ class AIReplyEngine:
         is_custom_model = model_name.lower() in ['custom', '自定义', 'dashscope', 'qwen-custom']
         is_dashscope_url = 'dashscope.aliyuncs.com' in base_url
 
-        logger.info(f"API类型判断: model_name={model_name}, is_custom_model={is_custom_model}, is_dashscope_url={is_dashscope_url}")
+        logger.info(
+            f"API类型判断: model_name={model_name}, is_custom_model={is_custom_model}, is_dashscope_url={is_dashscope_url}")
 
         return is_custom_model and is_dashscope_url
 
@@ -107,7 +111,8 @@ class AIReplyEngine:
         model_name = settings.get('model_name', '').lower()
         return 'gemini' in model_name
 
-    def _call_dashscope_api(self, settings: dict, messages: list, max_tokens: int = 100, temperature: float = 0.7) -> str:
+    def _call_dashscope_api(self, settings: dict, messages: list, max_tokens: int = 100,
+                            temperature: float = 0.7) -> str:
         """调用DashScope API"""
         base_url = settings['base_url']
         if '/apps/' in base_url:
@@ -161,8 +166,8 @@ class AIReplyEngine:
         调用Google Gemini REST API (v1beta)
         """
         api_key = settings['api_key']
-        model_name = settings['model_name'] 
-        
+        model_name = settings['model_name']
+
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
 
         headers = {"Content-Type": "application/json"}
@@ -189,7 +194,7 @@ class AIReplyEngine:
                 "maxOutputTokens": max_tokens
             }
         }
-        
+
         if system_instruction:
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
@@ -201,7 +206,7 @@ class AIReplyEngine:
         if response.status_code != 200:
             logger.error(f"Gemini API 请求失败: HTTP {response.status_code}")
             raise RuntimeError(f"Gemini API 请求失败: HTTP {response.status_code}")
-            
+
         result = response.json()
         try:
             reply_text = result['candidates'][0]['content']['parts'][0]['text']
@@ -217,10 +222,12 @@ class AIReplyEngine:
             logger.error(f"Gemini API 响应格式错误: {type(e).__name__}")
             raise RuntimeError("Gemini API 响应格式错误")
 
-    def _call_openai_api(self, client: OpenAI, settings: dict, messages: list, max_tokens: int = 100, temperature: float = 0.7) -> str:
+    def _call_openai_api(self, client: OpenAI, settings: dict, messages: list, max_tokens: int = 100,
+                         temperature: float = 0.7) -> str:
         """调用OpenAI兼容API"""
         try:
-            logger.info(f"调用OpenAI API: model={settings['model_name']}, base_url={settings.get('base_url', 'default')}")
+            logger.info(
+                f"调用OpenAI API: model={settings['model_name']}, base_url={settings.get('base_url', 'default')}")
             response = client.chat.completions.create(
                 model=settings['model_name'],
                 messages=messages,
@@ -358,8 +365,8 @@ class AIReplyEngine:
         return 'openai'
 
     def _log_ai_call(self, cookie_id: str, chat_id: str, intent: str, settings: dict,
-                      token_usage: Optional[dict], reply_text: str = '',
-                      ok: bool = True, error: Optional[Exception] = None) -> None:
+                     token_usage: Optional[dict], reply_text: str = '',
+                     ok: bool = True, error: Optional[Exception] = None) -> None:
         """AI 调用留痕旁路：token 用量 + 回复内容落 ai_call_logs（7 天保留），
         并把 token 按用户按天聚合进 usage_stats。任何失败静默，绝不影响回复链路。"""
         try:
@@ -537,7 +544,7 @@ class AIReplyEngine:
         """检查指定账号是否启用AI回复"""
         settings = db_manager.get_ai_reply_settings(cookie_id)
         return settings['ai_enabled']
-    
+
     def detect_intent(self, message: str, cookie_id: str) -> str:
         """
         检测用户消息意图 (基于关键词的本地检测)
@@ -555,7 +562,7 @@ class AIReplyEngine:
             # 价格相关关键词
             price_keywords = [
                 '便宜', '优惠', '刀', '降价', '包邮', '价格', '多少钱', '能少', '还能', '最低', '底价',
-                '实诚价', '到100', '能到', '包个邮', '给个价', '什么价', # <-- 增加这些“口语化”的词
+                '实诚价', '到100', '能到', '包个邮', '给个价', '什么价',  # <-- 增加这些“口语化”的词
                 '一口价', '出价', '砍价', '少点', '让点', '成交'
             ]
 
@@ -579,14 +586,14 @@ class AIReplyEngine:
             if any(kw in msg_lower for kw in tech_keywords):
                 logger.debug("本地意图检测: tech")
                 return 'tech'
-            
+
             logger.debug("本地意图检测: default")
             return 'default'
-        
+
         except Exception as e:
             logger.error(f"本地意图检测失败 {cookie_id}: {e}")
             return 'default'
-    
+
     # 整条消息基本就是一个数字（可带钱的单位和语气词），例如「167」「170元」
     # 「165吧」「1块钱」「¥180，」。末尾只放宽到语气词与标点，不含「斤」「码」
     # 这类量词，免得把体重、尺码当成报价。
@@ -677,25 +684,25 @@ class AIReplyEngine:
             if chat_id not in self._chat_locks:
                 self._chat_locks[chat_id] = threading.Lock()
             return self._chat_locks[chat_id]
-    
+
     def generate_reply(self, message: str, item_info: dict, chat_id: str,
-                      cookie_id: str, user_id: str, item_id: str,
-                      skip_wait: bool = False) -> Optional[str]:
+                       cookie_id: str, user_id: str, item_id: str,
+                       skip_wait: bool = False) -> Optional[str]:
         """生成AI回复"""
         if not self.is_ai_enabled(cookie_id):
             return None
         if self.is_system_or_order_event(message):
             logger.info(f"系统/订单事件绕过AI回复: 账号={cookie_id}, chat_id={chat_id}")
             return None
-        
+
         try:
             # 先检测意图（用于后续保存）
             intent = self.detect_intent(message, cookie_id)
             logger.info(f"检测到意图: {intent} (账号: {cookie_id})")
-            
+
             # 在锁外先保存用户消息到数据库，让所有消息都能立即保存
             message_created_at = self.save_conversation(chat_id, cookie_id, user_id, item_id, "user", message, intent)
-            
+
             # 如果调用方已经实现了去抖（debounce），可以通过 skip_wait=True 跳过内部等待
             if not skip_wait:
                 logger.info(f"【{cookie_id}】消息已保存，等待10秒收集后续消息 (时间:{message_created_at})")
@@ -703,10 +710,10 @@ class AIReplyEngine:
                 time.sleep(10)
             else:
                 logger.info(f"【{cookie_id}】消息已保存（外部防抖已启用，跳过内部等待） (时间:{message_created_at})")
-            
+
             # 获取该chat_id的锁，确保同一对话的消息串行处理
             chat_lock = self._get_chat_lock(chat_id)
-            
+
             # 使用锁确保同一chat_id的消息串行处理
             with chat_lock:
                 # 获取最近时间窗口内的所有用户消息
@@ -715,7 +722,7 @@ class AIReplyEngine:
                 query_seconds = 6 if skip_wait else 25
                 recent_messages = self._get_recent_user_messages(chat_id, cookie_id, seconds=query_seconds)
                 logger.info(f"【{cookie_id}】最近{query_seconds}秒内用户消息数={len(recent_messages)}")
-                
+
                 if recent_messages and len(recent_messages) > 0:
                     # 只处理最后一条消息（时间戳最新的）
                     latest_message = recent_messages[-1]
@@ -724,7 +731,7 @@ class AIReplyEngine:
                         return None
                     else:
                         logger.info(f"【{cookie_id}】当前消息是最新消息，开始处理 (时间:{message_created_at})")
-                
+
                 # 1. 获取AI回复设置
                 settings = db_manager.get_ai_reply_settings(cookie_id)
 
@@ -815,7 +822,7 @@ class AIReplyEngine:
                         {"role": msg["role"], "content": msg["content"]}
                         for msg in context
                         if msg.get("role") in {"user", "assistant"}
-                        and not self.is_system_or_order_event(msg.get("content"))
+                           and not self.is_system_or_order_event(msg.get("content"))
                     ],
                     {"role": "user", "content": message},
                 ]
@@ -848,12 +855,12 @@ class AIReplyEngine:
                 if intent == "price":
                     # self.increment_bargain_count(chat_id, cookie_id) # 此行原先就没有，保持不变
                     pass
-                
+
                 logger.info(
                     f"AI回复生成成功: 账号={cookie_id}, intent={intent}, 字符数={len(reply)}"
                 )
                 return reply
-                
+
         except Exception as e:
             logger.error(f"AI回复生成失败: 账号={cookie_id}, 错误={type(e).__name__}: {e}")
             return None
@@ -867,11 +874,12 @@ class AIReplyEngine:
         """
         try:
             import asyncio as _asyncio
-            return await _asyncio.to_thread(self.generate_reply, message, item_info, chat_id, cookie_id, user_id, item_id, skip_wait)
+            return await _asyncio.to_thread(self.generate_reply, message, item_info, chat_id, cookie_id, user_id,
+                                            item_id, skip_wait)
         except Exception as e:
             logger.error(f"异步生成回复失败: {e}")
             return None
-    
+
     def get_conversation_context(self, chat_id: str, cookie_id: str, item_id: Optional[str] = None,
                                  limit: int = 20, max_age_minutes: int = 120,
                                  exclude_current: Optional[Dict] = None) -> List[Dict]:
@@ -886,7 +894,7 @@ class AIReplyEngine:
                   AND created_at >= datetime('now', '-' || ? || ' minutes')
                 ORDER BY created_at DESC LIMIT ?
                 ''', (chat_id, cookie_id, item_id, item_id, max_age_minutes, limit + 1))
-                
+
                 results = cursor.fetchall()
                 skipped_current = False
                 context = []
@@ -895,10 +903,10 @@ class AIReplyEngine:
                         "id": row[0], "role": row[1], "content": row[2], "created_at": row[3]
                     }
                     if (
-                        exclude_current and not skipped_current
-                        and candidate["role"] == exclude_current.get("role")
-                        and candidate["content"] == exclude_current.get("content")
-                        and candidate["created_at"] == exclude_current.get("created_at")
+                            exclude_current and not skipped_current
+                            and candidate["role"] == exclude_current.get("role")
+                            and candidate["content"] == exclude_current.get("content")
+                            and candidate["created_at"] == exclude_current.get("created_at")
                     ):
                         skipped_current = True
                         continue
@@ -909,9 +917,9 @@ class AIReplyEngine:
         except Exception as e:
             logger.error(f"获取对话上下文失败: {e}")
             return []
-    
-    def save_conversation(self, chat_id: str, cookie_id: str, user_id: str, 
-                         item_id: str, role: str, content: str, intent: str = None) -> Optional[str]:
+
+    def save_conversation(self, chat_id: str, cookie_id: str, user_id: str,
+                          item_id: str, role: str, content: str, intent: str = None) -> Optional[str]:
         """保存对话记录，返回创建时间"""
         try:
             with db_manager.lock:
@@ -922,7 +930,7 @@ class AIReplyEngine:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (cookie_id, chat_id, user_id, item_id, role, content, intent))
                 db_manager.conn.commit()
-                
+
                 # 获取刚插入记录的created_at
                 cursor.execute('''
                 SELECT created_at FROM ai_conversations 
@@ -933,6 +941,7 @@ class AIReplyEngine:
         except Exception as e:
             logger.error(f"保存对话记录失败: {e}")
             return None
+
     def get_bargain_count(self, chat_id: str, cookie_id: str) -> int:
         """获取议价次数"""
         try:
@@ -942,13 +951,13 @@ class AIReplyEngine:
                 SELECT COUNT(*) FROM ai_conversations 
                 WHERE chat_id = ? AND cookie_id = ? AND intent = 'price' AND role = 'user'
                 ''', (chat_id, cookie_id))
-                
+
                 result = cursor.fetchone()
                 return result[0] if result else 0
         except Exception as e:
             logger.error(f"获取议价次数失败: {e}")
             return 0
-    
+
     def _get_recent_user_messages(self, chat_id: str, cookie_id: str, seconds: int = 2) -> List[Dict]:
         """获取最近seconds秒内的所有用户消息（包含内容和时间戳）"""
         try:
@@ -960,24 +969,24 @@ class AIReplyEngine:
                 AND julianday('now') - julianday(created_at) < (? / 86400.0)
                 ORDER BY created_at ASC
                 ''', (chat_id, cookie_id, seconds))
-                
+
                 results = cursor.fetchall()
                 return [{"content": row[0], "created_at": row[1]} for row in results]
         except Exception as e:
             logger.error(f"获取最近用户消息列表失败: {e}")
             return []
-    
+
     def increment_bargain_count(self, chat_id: str, cookie_id: str):
         """(此方法已废弃，通过 get_bargain_count 的 SQL 查询实现)"""
-    
+
     #
     # --- 修复 P0-2: 移除所有有状态的缓存管理方法 ---
     #
-    
+
     # def clear_client_cache(self, cookie_id: str = None):
     #     """(已移除) 清理客户端缓存"""
     #     pass
-    
+
     # def cleanup_unused_clients(self, max_idle_hours: int = 24):
     #     """(已移除) 清理长时间未使用的客户端"""
     #     pass
