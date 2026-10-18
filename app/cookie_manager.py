@@ -360,6 +360,15 @@ class CookieManager:
                         logger.error(f"等待任务清理时出错: {cookie_id}, {e}")
                     logger.info(f"【{cookie_id}】旧任务已停止")
 
+                # Cookie 值真正变化（用户重新扫码/手动更新）时，清零 Token
+                # 故障通知的冷却与熔断状态，开启新一轮提醒；实例自愈重启
+                # 路径传入的是同值 Cookie，不清零——否则冷却随重启失效，
+                # 退化为「连续失败5次」通知的循环轰炸。
+                if self.cookies.get(cookie_id) != new_value:
+                    from XianyuAutoAsync import XianyuLive  # 延迟导入，避免循环
+                    XianyuLive.reset_token_notify_state(cookie_id)
+                    logger.info(f"【{cookie_id}】Cookie 已更换，Token 故障通知状态清零")
+
                 # 更新Cookie值
                 self.cookies[cookie_id] = new_value
                 

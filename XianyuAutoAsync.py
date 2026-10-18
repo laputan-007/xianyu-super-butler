@@ -202,7 +202,25 @@ class XianyuLive:
     # 类级别的密码登录时间记录，用于防止重复登录
     _last_password_login_time = {}  # {cookie_id: timestamp}
     _password_login_cooldown = 60  # 密码登录冷却时间：60秒
-    
+
+    # 类级别的 Token 故障通知防轰炸状态，按 cookie_id 存续。
+    # 「连续失败5次 → 未配置密码 → 重启实例」这条路径每次都会重建
+    # XianyuLive 实例，而通知冷却时间戳与熔断计数原先都是实例内存态，
+    # 随重启清零 → 3 小时冷却和 10 次熔断形同虚设，退化成每个重启
+    # 周期（约 15 分钟）一条「连续失败5次」的无限轰炸。改为类级字典
+    # 后跨重启存续，只有 Cookie 真正更换（update_cookie 值变化）或
+    # Token 刷新成功（_reset_token_notify_circuit）才清零。
+    _token_fail_last_notify = {}    # {cookie_id: 上次故障族通知时间戳}
+    _token_fail_notify_counts = {}  # {cookie_id: 已推送的故障通知条数}
+    _token_fail_silenced = {}       # {cookie_id: 是否已达熔断上限进入静默}
+
+    @classmethod
+    def reset_token_notify_state(cls, cookie_id: str):
+        """账号更换 Cookie 时清零故障通知状态（冷却/计数/静默），开启新一轮。"""
+        cls._token_fail_last_notify.pop(cookie_id, None)
+        cls._token_fail_notify_counts.pop(cookie_id, None)
+        cls._token_fail_silenced.pop(cookie_id, None)
+
     def _safe_str(self, e):
         """安全地将异常转换为字符串"""
         try:
@@ -802,12 +820,9 @@ class XianyuLive:
         # 合并发送一封。只作用于邮件渠道，QQ/钉钉等渠道仍逐条推送。
         self._email_notify_buffers = {}
         self._email_notify_buffer_lock = asyncio.Lock()
-        # Token 刷新异常通知熔断：连续推送达到上限（token_refresh_notify_limit，
-        # 默认 10）后静默，刷新成功自动恢复并补一条恢复通知。计数为实例内存态
-        # ——重新扫码/换 Cookie 会重建实例，天然开启新一轮；夜间计划性重启
-        # 同样重置，重启即新周期，可接受。
-        self._token_fail_notify_count = 0
-        self._token_fail_notify_silenced = False
+        # Token 刷新异常通知熔断：故障族计数/冷却/静默状态存类级字典
+        # （_token_fail_notify_counts 等，按 cookie_id），跨实例重启存续。
+        # 更换 Cookie（update_cookie 值变化）或 Token 刷新成功时清零。
 
         # 自动发货防重复机制
         self.last_delivery_time = {}  # 记录每个商品的最后发货时间
@@ -5385,11 +5400,11 @@ class XianyuLive:
 
         恢复通知走 tracked task：随实例生命周期取消，不产生孤儿任务。
         """
-        if not (self._token_fail_notify_count or self._token_fail_notify_silenced):
+        fail_count = XianyuLive._token_fail_notify_counts.get(self.cookie_id, 0)
+        was_silenced = XianyuLive._token_fail_silenced.get(self.cookie_id, False)
+        if not (fail_count or was_silenced):
             return
-        was_silenced = self._token_fail_notify_silenced
-        self._token_fail_notify_count = 0
-        self._token_fail_notify_silenced = False
+        XianyuLive.reset_token_notify_state(self.cookie_id)
         logger.info(f"【{self.cookie_id}】Token刷新已恢复正常，异常通知计数清零")
         if was_silenced:
             logger.info(f"【{self.cookie_id}】Token刷新恢复，异常通知熔断解除")
@@ -5709,7 +5724,7 @@ class XianyuLive:
                 self._is_token_related_error(error_message)
                 or str(notification_type or '') not in self._NON_FAILURE_NOTIFY_TYPES
             )
-            if is_failure_notify and self._token_fail_notify_silenced:
+            if is_failure_notify and XianyuLive._token_fail_silenced.get(self.cookie_id):
                 logger.warning(
                     f"异常通知已达上限，静默中，本次跳过"
                     f"（刷新成功后自动恢复并通知一次）: {self.cookie_id}"
@@ -5721,7 +5736,12 @@ class XianyuLive:
             # 故障族共享一个冷却桶：no_credentials / token_refresh_exception
             # 等类型轮换无法再互相绕过冷却
             cooldown_key = '_token_fail_shared' if is_failure_notify else notification_type
-            last_time = self.last_notification_time.get(cooldown_key, 0)
+            # 故障族冷却时间戳存类级字典：重启会重建实例，实例级时间戳
+            # 每个周期清零，冷却形同虚设。
+            if is_failure_notify:
+                last_time = XianyuLive._token_fail_last_notify.get(self.cookie_id, 0)
+            else:
+                last_time = self.last_notification_time.get(cooldown_key, 0)
 
             if is_failure_notify:
                 cooldown_time = self.token_refresh_notification_cooldown
@@ -5799,9 +5819,10 @@ class XianyuLive:
 
             # 达到熔断上限的最后一条带上说明：让用户知道"不再推送"是保护
             # 策略而不是系统悄悄坏了
-            if is_failure_notify and (self._token_fail_notify_count + 1) >= self._get_token_notify_limit():
+            fail_count = XianyuLive._token_fail_notify_counts.get(self.cookie_id, 0)
+            if is_failure_notify and (fail_count + 1) >= self._get_token_notify_limit():
                 notification_msg += (
-                    f"\n⚠️ 已连续推送 {self._token_fail_notify_count + 1} 次异常通知，"
+                    f"\n⚠️ 已连续推送 {fail_count + 1} 次异常通知，"
                     f"达到上限，此后将停止该类提醒。\n"
                     f"账号恢复（刷新成功或重新扫码登录）后会自动恢复推送并通知一次。\n"
                 )
@@ -5858,7 +5879,10 @@ class XianyuLive:
 
             # 如果成功发送了通知，更新最后发送时间
             if notification_sent:
-                self.last_notification_time[cooldown_key] = current_time
+                if is_failure_notify:
+                    XianyuLive._token_fail_last_notify[self.cookie_id] = current_time
+                else:
+                    self.last_notification_time[cooldown_key] = current_time
 
                 next_send_time = current_time + cooldown_time
                 next_send_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_send_time))
@@ -5867,11 +5891,12 @@ class XianyuLive:
                 # 熔断计数：只在通知真正发出时计数，冷却期内被跳过的尝试
                 # 不计数（否则重试风暴一天就把上限耗光，用户却只收到两条）。
                 if is_failure_notify:
-                    self._token_fail_notify_count += 1
-                    if self._token_fail_notify_count >= self._get_token_notify_limit():
-                        self._token_fail_notify_silenced = True
+                    fail_count = XianyuLive._token_fail_notify_counts.get(self.cookie_id, 0) + 1
+                    XianyuLive._token_fail_notify_counts[self.cookie_id] = fail_count
+                    if fail_count >= self._get_token_notify_limit():
+                        XianyuLive._token_fail_silenced[self.cookie_id] = True
                         logger.warning(
-                            f"异常通知达到上限（{self._token_fail_notify_count} 次），"
+                            f"异常通知达到上限（{fail_count} 次），"
                             f"进入静默直至刷新成功: {self.cookie_id}"
                         )
 
