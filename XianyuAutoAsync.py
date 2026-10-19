@@ -899,6 +899,12 @@ class XianyuLive:
         # 滑块验证相关
         self.captcha_verification_count = 0  # 滑块验证次数计数器
         self.max_captcha_verification_count = 3  # 最大滑块验证次数，防止无限递归
+        # 滑块防重复弹窗（用户痛点：滑块明明成功处理了还连环弹出）：
+        # 会话锁保证同一账号同时只有一个滑块窗口；成功时间戳用于 10 分钟冷却——
+        # 服务器风控有窗口期，刚通过后的连续 punish 只是滞后挑战信号，再弹一遍
+        # 过完还是同一结果，只会让用户以为"没生效"。
+        self._slider_session_lock = asyncio.Lock()
+        self._last_slider_success_time = 0.0
         self.manual_captcha_in_progress = False  # 人工滑块验证进行中标志，暂停自动验证避免争抢浏览器槽位
 
         # WebSocket连接监控
@@ -2345,6 +2351,27 @@ class XianyuLive:
 
                     # 检查是否需要滑块验证
                     if self._need_captcha_verification(res_json):
+                        # 防重复弹窗守卫：
+                        # ① 会话锁被占用 = 已有滑块窗口在跑（周期刷新、初始化、递归
+                        #    重试并发命中 punish 时会叠开多个浏览器窗口）——直接跳过；
+                        # ② 滑块刚成功过（10 分钟冷却）= 服务器风控窗口期未过，此时
+                        #    的 punish 是滞后挑战信号，立即再弹过完还是同一结果；
+                        #    本轮刷新就此作罢，交给周期刷新几分钟后自然重试。
+                        if self._slider_session_lock.locked():
+                            logger.warning(f"【{self.cookie_id}】滑块会话已在进行中，跳过本次重复触发（防叠窗）")
+                            log_captcha_event(self.cookie_id, "跳过重复滑块触发", False, "已有滑块会话进行中")
+                            self.last_token_refresh_status = "slider_already_running"
+                            return None
+                        if time.time() - self._last_slider_success_time < 600:
+                            _since_success = int(time.time() - self._last_slider_success_time)
+                            logger.warning(
+                                f"【{self.cookie_id}】滑块刚成功过（{_since_success} 秒前，冷却期内），"
+                                f"暂不弹窗，等下一轮刷新自然重试"
+                            )
+                            log_captcha_event(self.cookie_id, "滑块成功冷却期内跳过", False,
+                                f"距上次成功 {_since_success} 秒，不足 600 秒冷却")
+                            self.last_token_refresh_status = "slider_success_cooldown"
+                            return None
                         logger.warning(f"【{self.cookie_id}】检测到需要滑块验证，开始处理...")
 
                         # 记录滑块验证检测到日志文件
@@ -2378,6 +2405,9 @@ class XianyuLive:
 
                             if new_cookies_str:
                                 logger.info(f"【{self.cookie_id}】滑块验证成功，准备重启实例...")
+                                # 滑块成功冷却起点：之后 10 分钟内的 punish 不再弹窗
+                                # （风控窗口期滞后信号），避免"成功了还一直弹"的观感
+                                self._last_slider_success_time = time.time()
 
                                 # 更新风控日志为成功状态
                                 if 'log_id' in locals() and log_id:
@@ -2629,7 +2659,16 @@ class XianyuLive:
 
     async def _handle_captcha_verification(self, res_json: dict) -> str:
         """处理滑块验证，返回新的cookies字符串"""
+        # 滑块会话锁：整段持锁（finally 释放），并发触发时后来者直接跳过——
+        # 同一账号同一时刻只允许一个滑块浏览器窗口
+        _slider_lock_held = False
+        if self._slider_session_lock.locked():
+            logger.warning(f"【{self.cookie_id}】已有滑块会话进行中，本次触发直接跳过（防叠窗）")
+            log_captcha_event(self.cookie_id, "滑块会话锁跳过", False, "另一滑块会话进行中")
+            return None
         try:
+            await self._slider_session_lock.acquire()
+            _slider_lock_held = True
             logger.info(f"【{self.cookie_id}】开始处理滑块验证...")
 
             # 总开关（系统设置 slider_auto_enabled，网页「设置」页可实时切换）：
@@ -2918,6 +2957,9 @@ class XianyuLive:
         except Exception as e:
             logger.error(f"【{self.cookie_id}】处理滑块验证时出错: {self._safe_str(e)}")
             return None
+        finally:
+            if _slider_lock_held:
+                self._slider_session_lock.release()
 
     async def _update_cookies_and_restart(self, new_cookies_str: str):
         """更新cookies并重启任务"""

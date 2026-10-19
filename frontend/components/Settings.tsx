@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FlaskConical,
   KeyRound,
   Loader2,
   Mail,
@@ -25,6 +26,7 @@ import {
   changePassword,
   createQuickPhrase,
   deleteQuickPhrase,
+  getAccountDetails,
   getQuickPhrases,
   getSystemSettings,
   publishAnnouncement,
@@ -33,7 +35,7 @@ import {
   updateSystemSettings,
 } from '../services/api';
 import { notify } from '../services/feedback';
-import { QuickPhrase, SystemSettings } from '../types';
+import { AccountDetail, QuickPhrase, SystemSettings } from '../types';
 import {
   NoticeBanner,
   PageHeader,
@@ -159,6 +161,11 @@ const Settings: React.FC = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
   // 快捷短语：人工客服常用话术
   const [phrases, setPhrases] = useState<QuickPhrase[]>([]);
+  // 滑块快捷测试：账号选择 + 进行中状态 + 结果反馈
+  const [sliderTestAccounts, setSliderTestAccounts] = useState<AccountDetail[]>([]);
+  const [sliderTestAccount, setSliderTestAccount] = useState('');
+  const [sliderTesting, setSliderTesting] = useState(false);
+  const [sliderTestResult, setSliderTestResult] = useState<{ ok: boolean | null; text: string } | null>(null);
   const [phraseForm, setPhraseForm] = useState({ category: '默认', title: '', content: '' });
 
   const loadPhrases = () => {
@@ -166,6 +173,14 @@ const Settings: React.FC = () => {
   };
 
   useEffect(() => { loadPhrases(); }, []);
+
+  // 滑块测试需要选账号：拉取一次账号列表即可
+  useEffect(() => {
+    getAccountDetails().then(accounts => {
+      setSliderTestAccounts(accounts);
+      if (accounts.length > 0) setSliderTestAccount(accounts[0].id);
+    }).catch(() => setSliderTestAccounts([]));
+  }, []);
 
   const handleAddPhrase = async () => {
     if (!phraseForm.title.trim() || !phraseForm.content.trim()) return;
@@ -547,6 +562,55 @@ const Settings: React.FC = () => {
               ]}
               onChange={(v) => setSettings({ ...settings, slider_strategy: v })}
             />
+            {/* 快捷测试：取新鲜验证链接当场跑一遍自动过滑块，直观查看当前策略效果 */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-3">
+              <span className="field-label shrink-0">快捷测试</span>
+              <select
+                aria-label="选择测试账号"
+                value={sliderTestAccount}
+                onChange={(event) => setSliderTestAccount(event.target.value)}
+                className="ios-input h-9 w-44 rounded-md px-2 py-1 text-sm"
+              >
+                {sliderTestAccounts.length === 0 && <option value="">暂无账号</option>}
+                {sliderTestAccounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.nickname || account.remark || `账号 ${account.id.slice(-6)}`}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!sliderTestAccount || sliderTesting) return;
+                  setSliderTesting(true);
+                  setSliderTestResult(null);
+                  testSliderSolving(sliderTestAccount)
+                    .then(res => setSliderTestResult({
+                      ok: res.solved === null ? null : res.solved,
+                      text: res.message,
+                    }))
+                    .catch(err => setSliderTestResult({ ok: false, text: err instanceof Error ? err.message : '测试请求失败' }))
+                    .finally(() => setSliderTesting(false));
+                }}
+                disabled={!sliderTestAccount || sliderTesting}
+                className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-xs font-bold text-black transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                {sliderTesting
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> 测试中…</>
+                  : <><FlaskConical className="h-3.5 w-3.5" /> 测试滑块</>}
+              </button>
+              {sliderTestResult && (
+                <span className={`text-xs font-bold ${
+                  sliderTestResult.ok === null ? 'text-[var(--text-soft)]'
+                  : sliderTestResult.ok ? 'text-emerald-600' : 'text-[var(--danger)]'
+                }`}>
+                  {sliderTestResult.text}
+                </span>
+              )}
+              <span className="w-full text-xs text-gray-500">
+                用所选账号取一条新鲜验证链接并当场自动拖动滑块：通过即真实解除风控（凭证自动更新），无风控则直接告知，免白跑。
+              </span>
+            </div>
             <div className="grid gap-4 p-4">
               <label>
                 <span className="field-label">对外过滑块服务秘钥</span>

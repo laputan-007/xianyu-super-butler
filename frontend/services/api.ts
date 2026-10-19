@@ -376,6 +376,16 @@ export const requestFreshCaptchaUrl = async (cookieId: string): Promise<{
   return post(`/api/risk-control/${encodeURIComponent(cookieId)}/fresh-captcha-url`);
 };
 
+// 快捷测试自动过滑块：取新鲜验证链接当场跑一遍，返回通过/失败与耗时
+export const testSliderSolving = async (cookieId: string): Promise<{
+  success: boolean;
+  solved: boolean | null;
+  duration?: number;
+  message: string;
+}> => {
+  return post(`/api/risk-control/${encodeURIComponent(cookieId)}/test-slider`);
+};
+
 export const startManualCaptchaSession = async (
   cookieId: string,
   timeout: number = 300,

@@ -10435,6 +10435,82 @@ async def get_fresh_captcha_url(
     )
 
 
+@app.post('/api/risk-control/{cookie_id}/test-slider')
+async def test_slider_solving(cookie_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """快捷测试自动过滑块：凭账号 Cookie 取新鲜验证链接并当场跑一遍。
+
+    设置页「滑块与风控」区的测试按钮入口。账号无风控时直接告知（不必白跑），
+    有风控则按生产同款策略（XianyuSliderStealth）拖动滑块并返回通过/失败；
+    测试通过即真实解除风控——x5 凭证会合并进账号 Cookie 落库并同步运行中实例。
+    """
+    import asyncio as _asyncio
+    import concurrent.futures
+    import time as _time
+
+    user_cookies = db_manager.get_all_cookies(current_user['user_id'])
+    if cookie_id not in user_cookies:
+        raise HTTPException(status_code=403, detail='无权限操作该账号')
+
+    # 复用取链逻辑：重新请求 Token 接口，被风控则拿到新鲜 punish 链接
+    try:
+        fresh = await get_fresh_captcha_url(cookie_id, current_user)
+    except HTTPException as exc:
+        return {'success': False, 'solved': False, 'message': f'获取验证链接失败：{exc.detail}'}
+
+    if not fresh.get('need_verify'):
+        log_with_user('info', f'账号 {cookie_id} 无风控，滑块测试免跑', current_user)
+        return {'success': True, 'solved': None, 'message': '账号当前无风控，无需滑块测试'}
+
+    cookies_str = user_cookies[cookie_id]
+    verification_url = fresh.get('verification_url')
+
+    from utils.xianyu_slider_stealth import XianyuSliderStealth
+    slider_headless = os.getenv('SLIDER_HEADLESS', 'false').lower() == 'true'
+    slider = XianyuSliderStealth(user_id=cookie_id, enable_learning=True, headless=slider_headless)
+
+    started = _time.time()
+    loop = _asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        success, slider_cookies = await loop.run_in_executor(
+            executor, slider.run, verification_url, cookies_str)
+    duration = round(_time.time() - started, 1)
+
+    # 与生产路径同款边界防御：只有 x5sec 才是通行凭证
+    has_x5sec = bool(slider_cookies) and 'x5sec' in {k.lower() for k in slider_cookies}
+    passed = bool(success and has_x5sec)
+
+    cookies_updated = False
+    if passed:
+        # 测试通过 = 真实解除风控：合并 x5 凭证（清掉挑战标记），落库并同步运行中实例
+        from utils.xianyu_utils import trans_cookies, CAPTCHA_CHALLENGE_COOKIES
+        cookie_dict = trans_cookies(cookies_str)
+        x5_new = {k: v for k, v in slider_cookies.items() if k.lower().startswith('x5')}
+        cookie_dict.update(x5_new)
+        for stale in CAPTCHA_CHALLENGE_COOKIES:
+            if stale not in x5_new:
+                for k in [k for k in cookie_dict if k.lower() == stale]:
+                    cookie_dict.pop(k, None)
+        new_cookies_str = '; '.join(f'{k}={v}' for k, v in cookie_dict.items())
+        try:
+            db_manager.update_cookie_account_info(
+                cookie_id, cookie_value=new_cookies_str,
+                user_id=db_manager.get_cookie_owner_user_id(cookie_id))
+            cookies_updated = True
+            if cookie_manager.manager is not None:
+                instance = cookie_manager.manager.instances.get(cookie_id)
+                if instance is not None:
+                    instance.cookies_str = new_cookies_str
+                    instance.cookies = cookie_dict
+        except Exception as update_e:
+            log_with_user('warning', f'滑块测试通过但 Cookie 落库失败: {update_e}', current_user)
+
+    message = (f'滑块测试通过（{duration} 秒），风控凭证已更新' if passed and cookies_updated
+               else f'滑块测试通过（{duration} 秒），但 Cookie 更新失败，建议重新扫码' if passed
+               else f'滑块测试未通过（{duration} 秒），服务端未放行，可切换策略后重试')
+    log_with_user('info', f'账号 {cookie_id} {message}', current_user)
+    return {'success': True, 'solved': passed, 'duration': duration, 'message': message}
+
+
 @app.get('/api/risk-control/status')
 def get_risk_control_status(current_user: Dict[str, Any] = Depends(get_current_user)):
     """查询各账号的风控熔断状态。
