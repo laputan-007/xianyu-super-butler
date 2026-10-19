@@ -1,0 +1,53 @@
+#!/bin/sh
+# 防泄露钩子：提交内容里出现凭据样式即拦截提交。
+# 覆盖：GitHub OAuth/PAT 令牌（gho_/ghp_/github_pat_）、Gitee 32位十六进制令牌、
+# 以及本机私有的精确令牌清单（.git/secret_tokens.txt，一行一个，.git 目录天然不入库）。
+# 安装：git config core.hooksPath .githooks（已配置）
+
+set -e
+
+# 只查本次暂存的新增行，避免对历史内容误报
+PATTERNS='gho_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}'
+
+# Gitee 令牌是 32 位十六进制；内容哈希一般带前缀（sha1:/integrity:），
+# 单独裸露的 32+ 位连续十六进制串在此仓库正常文件里不出现，命中即拦
+PATTERNS="$PATTERNS|[a-f0-9]{32}"
+
+# 本机精确令牌清单（可选）：.git/secret_tokens.txt 一行一个
+EXACT_FILE="$(git rev-parse --git-dir)/secret_tokens.txt"
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -v '^static/assets/' | grep -v 'package-lock.json' || true)
+[ -z "$staged_files" ] && exit 0
+
+violation=0
+
+for f in $staged_files; do
+  [ -f "$f" ] || continue
+  added=$(git diff --cached -- "$f" | grep '^+' | grep -v '^+++' || true)
+  [ -z "$added" ] && continue
+
+  if echo "$added" | grep -qE "$PATTERNS"; then
+    echo "⛔ 防泄露钩子：$f 的新增内容包含令牌样式字符串（gho_/ghp_/32位十六进制）"
+    echo "   请改为环境变量引用；确认是误报可用 git commit --no-verify 跳过（不建议）。"
+    violation=1
+  fi
+
+  if [ -f "$EXACT_FILE" ]; then
+    while IFS= read -r tok; do
+      tok=$(echo "$tok" | tr -d '[:space:]')
+      [ -z "$tok" ] && continue
+      if echo "$added" | grep -qF "$tok"; then
+        echo "⛔ 防泄露钩子：$f 的新增内容包含精确匹配的私有令牌！提交已拦截。"
+        violation=1
+      fi
+    done < "$EXACT_FILE"
+  fi
+done
+
+if [ "$violation" = "1" ]; then
+  echo ""
+  echo "提交被拦截：凭据不能进仓库。把令牌放环境变量或 .git/secret_tokens.txt（本机私有）。"
+  exit 1
+fi
+
+exit 0
