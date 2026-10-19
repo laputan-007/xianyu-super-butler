@@ -63,6 +63,27 @@ if getattr(sys, 'frozen', False):
         os.environ['API_PORT'] = _port_val
     else:
         os.environ.setdefault('API_PORT', '18099')
+
+    # 同机双实例互斥：开发版（8090）与打包版（18099）端口不同时无法靠端口绑定互斥。
+    # 启动前主动探测已知端口，发现已有实例在跑就拒绝启动——杜绝"开发版后台
+    # 跑着 + exe 又开了"双实例同时监听同一账号，风控连环触发滑块轰炸。
+    _own_port = int(os.environ.get('API_PORT', '18099'))
+    for _check_port in (18099, 8090):
+        if _check_port == _own_port:
+            continue
+        try:
+            import socket
+            _s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            _s.settimeout(0.5)
+            if _s.connect_ex(('127.0.0.1', _check_port)) == 0:
+                print(f'[ERROR] 端口 {_check_port} 已有鱼小铺实例在运行，请先退出再启动！')
+                print('        双实例同时监听同一账号会导致风控连环触发滑块浏览器。')
+                _s.close()
+                os._exit(1)
+            _s.close()
+        except Exception:
+            pass
+
     # 浏览器装在 exe 旁的 playwright/ 目录（_check_and_install_playwright
     # 预检函数约定的布局：playwright/chromium-*/chrome-win/chrome.exe）
     os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, 'playwright'))
