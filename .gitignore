@@ -24,6 +24,10 @@ MANIFEST
 !packaging/*.spec
 # exe 打包的前端产物暂存目录（仓库 static/ 归网页版使用，打包不碰）
 packaging/static-dist/
+
+# 打包工具链（Inno Setup 便携版与安装器缓存，不入库）
+packaging/tools/
+
 .cache
 *.log
 local_settings.py
@@ -818,3 +822,6 @@ deploy/.wrangler/
 scripts/publish_capture*.json
 scripts/publish_*.png
 scripts/publish_addr_panel.txt
+
+# data/ 运行时目录规则不适用于前端源码里的省市区数据模块
+!frontend/data/
