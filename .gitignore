@@ -825,3 +825,7 @@ scripts/publish_addr_panel.txt
 
 # data/ 运行时目录规则不适用于前端源码里的省市区数据模块
 !frontend/data/
+
+# docs/releases/ 是发行说明文档（md），不是构建产物；
+# 全局 *.md 规则按后匹配优先，须以文件级放行收尾
+!docs/releases/*.md
