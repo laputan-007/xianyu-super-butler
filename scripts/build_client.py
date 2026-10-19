@@ -128,6 +128,11 @@ def run_pyinstaller() -> None:
 
 def assemble(version: str, build_time: str, commit: str) -> Path:
     app_dir = DIST / APP_DIR_NAME
+    # 托盘图标与桌面端（exe/安装器图标）同源：app-icon.png 随包分发，
+    # 运行期 Start.py 优先加载它，找不到才回落前端 logo.png
+    app_icon = ROOT / 'packaging' / 'app-icon.png'
+    if app_icon.exists():
+        shutil.copy2(str(app_icon), str(app_dir / 'app-icon.png'))
     # version.txt：运行期 read_dist_version() 读取，升级只换发行包不动源码常量
     (app_dir / 'version.txt').write_text(
         f'{version}\n# built {build_time}\n# git {commit}\n',

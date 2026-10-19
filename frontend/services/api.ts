@@ -1625,3 +1625,42 @@ export const createQuoteBook = async (file: File): Promise<{
 
 export const deleteQuoteBook = async (bookId: number): Promise<{ success: boolean }> =>
   del(`/api/logistics/quote-books/${bookId}`);
+
+
+// 软件更新（Gitee/GitHub 双源检查 + 应用内下载安装）
+export interface UpdateAsset { name: string; url: string; size: number; }
+export interface UpdateCheckResponse {
+  local_version?: string;
+  latest_version?: string;
+  has_update?: boolean;
+  release_url?: string;
+  source?: string;
+  assets?: UpdateAsset[];
+  merge?: boolean;
+  error?: string;
+}
+export interface UpdateProgress {
+  phase: 'idle' | 'downloading' | 'merging' | 'launching' | 'error';
+  downloaded: number;
+  total: number;
+  latest_version?: string;
+  source?: string;
+  error?: string;
+}
+
+export const checkForUpdate = (): Promise<UpdateCheckResponse> =>
+  get<UpdateCheckResponse & { data?: UpdateCheckResponse }>('/api/check-update')
+    .then(r => (r as { data?: UpdateCheckResponse }).data || (r as UpdateCheckResponse));
+
+export const applyUpdate = (plan: UpdateCheckResponse): Promise<{ success: boolean; message: string }> =>
+  post<ApiResponse>('/api/apply-update', {
+    assets: plan.assets || [],
+    merge: plan.merge,
+    latest_version: plan.latest_version || '',
+    source: plan.source || '',
+  }).then(r => ({ success: true, message: r.message || '开始下载' }))
+    .catch(err => { throw err; });
+
+export const getUpdateProgress = (): Promise<UpdateProgress> =>
+  get<UpdateProgress & { data?: UpdateProgress }>('/api/update-progress')
+    .then(r => (r as { data?: UpdateProgress }).data || (r as UpdateProgress));

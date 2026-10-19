@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Info, Megaphone, RefreshCw, ExternalLink, Send, Loader2, Trash2, Monitor, FolderOpen, RotateCw } from 'lucide-react';
-import { getAnnouncement, getAnnouncementHistory, deleteAnnouncement, testQmsgChannel, getStorageLocation, setStorageLocation, resetStorageLocation } from '../services/api';
+import { Info, Megaphone, RefreshCw, ExternalLink, Send, Loader2, Trash2, Monitor, FolderOpen, RotateCw, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { getAnnouncement, getAnnouncementHistory, deleteAnnouncement, testQmsgChannel, getStorageLocation, setStorageLocation, resetStorageLocation, checkForUpdate, applyUpdate, getUpdateProgress } from '../services/api';
+import type { UpdateCheckResponse, UpdateProgress } from '../services/api';
 import type { StorageLocationInfo } from '../services/api';
 import { notify } from '../services/feedback';
 import { AnnouncementItem, AnnouncementPayload } from '../types';
@@ -121,6 +122,65 @@ const About: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
   const [shortcutBusy, setShortcutBusy] = useState(false);
   const [storageBusy, setStorageBusy] = useState(false);
 
+  // ── 软件更新（Gitee/GitHub 双源检查 + 应用内下载安装）──
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResponse | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  const runUpdateCheck = async () => {
+    setUpdateChecking(true);
+    try {
+      const res = await checkForUpdate();
+      setUpdateInfo(res);
+      // 已在下载中则恢复轮询
+      const st = await getUpdateProgress().catch(() => null);
+      if (st && (st.phase === 'downloading' || st.phase === 'merging' || st.phase === 'launching')) {
+        setUpdateProgress(st);
+        if (pollRef.current == null) {
+          pollRef.current = window.setInterval(async () => {
+            const p = await getUpdateProgress().catch(() => null);
+            if (p) setUpdateProgress(p);
+            if (p && (p.phase === 'launching' || p.phase === 'error')) {
+              if (pollRef.current != null) { window.clearInterval(pollRef.current); pollRef.current = null; }
+            }
+          }, 1200);
+        }
+      }
+    } catch {
+      setUpdateInfo({ error: '检查失败，请稍后重试' });
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  useEffect(() => { void runUpdateCheck(); }, []);
+
+  useEffect(() => () => {
+    if (pollRef.current != null) window.clearInterval(pollRef.current);
+  }, []);
+
+  const handleApplyUpdate = async () => {
+    if (!updateInfo?.assets?.length || updateProgress?.phase === 'downloading') return;
+    try {
+      await applyUpdate(updateInfo);
+      if (pollRef.current == null) {
+        pollRef.current = window.setInterval(async () => {
+          const p = await getUpdateProgress().catch(() => null);
+          if (p) setUpdateProgress(p);
+          if (p && (p.phase === 'launching' || p.phase === 'error')) {
+            if (pollRef.current != null) { window.clearInterval(pollRef.current); pollRef.current = null; }
+          }
+        }, 1200);
+      }
+    } catch {
+      notify({ type: 'error', message: '启动下载失败，请稍后重试' });
+    }
+  };
+
+  const progressPct = updateProgress && updateProgress.total > 0
+    ? Math.min(100, Math.round((updateProgress.downloaded / updateProgress.total) * 100)) : 0;
+
   useEffect(() => {
     if (!shellActive || !isAdmin) return;
     void getStorageLocation().then(setStorage).catch(() => {});
@@ -205,8 +265,101 @@ const About: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
           <div className="rounded-md border border-gray-200 p-4">
             <p className="text-xs font-semibold text-gray-500">当前版本</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">
-              {data?.local_version || '—'}
+              {data?.local_version || updateInfo?.local_version || '—'}
             </p>
+          </div>
+
+          {/* 软件更新：直连 Gitee/GitHub 发行页检查 + 应用内下载安装 */}
+          <div className="rounded-md border border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500">
+                最新版本（{updateInfo?.source === 'gitee' ? 'Gitee' : updateInfo?.source === 'github' ? 'GitHub' : 'Gitee / GitHub'}）
+              </p>
+              <button
+                type="button"
+                onClick={() => void runUpdateCheck()}
+                disabled={updateChecking}
+                className="ios-btn-secondary flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${updateChecking ? 'animate-spin' : ''}`} />
+                {updateChecking ? '检查中' : '重新检查'}
+              </button>
+            </div>
+            {(() => {
+              const busy = updateProgress && ['downloading', 'merging', 'launching'].includes(updateProgress.phase);
+              if (busy) {
+                const label = updateProgress.phase === 'downloading' ? `下载中 ${progressPct}%（${(updateProgress.downloaded / 1024 / 1024).toFixed(0)} / ${(updateProgress.total / 1024 / 1024).toFixed(0)} MB）`
+                  : updateProgress.phase === 'merging' ? '分卷合并中…'
+                  : '安装向导启动中，应用即将退出…';
+                return (
+                  <div className="mt-2">
+                    <p className="text-lg font-bold text-[var(--brand-text)]">{updateProgress.latest_version ? `v${updateProgress.latest_version}` : '更新'}</p>
+                    <p className="mt-1 text-xs text-gray-600">{label}</p>
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className={`h-full rounded-full transition-all ${updateProgress.phase === 'downloading' ? 'bg-brand' : 'bg-emerald-500 animate-pulse'}`}
+                        style={{ width: `${updateProgress.phase === 'downloading' ? progressPct : 100}%` }}
+                      />
+                    </div>
+                    {updateProgress.phase === 'launching' && (
+                      <p className="mt-2 text-xs text-gray-500">安装向导将以原地升级模式启动，端口与数据自动保留；完成后重新打开鱼小铺即可。</p>
+                    )}
+                  </div>
+                );
+              }
+              if (updateProgress?.phase === 'error') {
+                return (
+                  <div className="mt-2 flex items-start gap-1.5 text-xs text-red-600">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>下载失败：{updateProgress.error || '未知原因'}，可重试或到发行页手动下载。</span>
+                  </div>
+                );
+              }
+              if (updateInfo?.error) {
+                return <p className="mt-1 text-xs text-gray-500">{updateInfo.error}</p>;
+              }
+              if (updateInfo?.has_update) {
+                return (
+                  <div className="mt-2">
+                    <p className="text-lg font-bold text-[var(--brand-text)]">v{updateInfo.latest_version}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleApplyUpdate()}
+                        disabled={!isAdmin}
+                        className="ios-btn-primary flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        下载并安装更新
+                      </button>
+                      <a
+                        href={updateInfo.release_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-[var(--text-muted)] hover:underline"
+                      >
+                        查看发行说明
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                    {!isAdmin && (
+                      <p className="mt-1.5 text-xs text-gray-500">仅管理员可执行更新安装。</p>
+                    )}
+                    <p className="mt-1.5 text-xs text-gray-500">
+                      安装包约 305 MB，来源 {updateInfo.source === 'gitee' ? 'Gitee（分卷合并后安装）' : 'GitHub（单文件直下）'}。
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <p className="text-sm font-semibold text-emerald-700">
+                    {updateInfo ? '已是最新版本' : '…'}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="rounded-md border border-[var(--border-brand)] bg-[var(--brand-soft)] p-4">

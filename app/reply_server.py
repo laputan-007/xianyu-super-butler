@@ -9956,6 +9956,44 @@ async def get_announcement(
     return payload
 
 
+@app.get('/api/check-update')
+def check_update_endpoint(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """检查 Gitee / GitHub 最新发行版（双源互备，直接读发行页数据）。
+
+    返回 has_update 与下载资产清单；下载安装走 /api/apply-update。
+    """
+    from app.update_service import check_update
+    return check_update()
+
+
+@app.post('/api/apply-update')
+def apply_update_endpoint(update_data: dict,
+                          current_user: Dict[str, Any] = Depends(require_admin)):
+    """下载并安装更新（仅管理员）。后台线程执行，进度经 /api/update-progress 轮询。
+
+    客户端形态下安装向导启动后应用自动退出，原地升级保留端口与数据；
+    网页形态下仅执行下载（装在服务器上的部署应走各自发布流程）。
+    """
+    from app.update_service import apply_update
+    plan = {
+        'assets': update_data.get('assets') or [],
+        'merge': bool(update_data.get('merge')),
+        'latest_version': str(update_data.get('latest_version') or ''),
+        'source': str(update_data.get('source') or ''),
+    }
+    if not plan['assets']:
+        raise HTTPException(status_code=400, detail='缺少下载资产清单')
+    started = apply_update(plan)
+    return {'success': started, 'message': '已在进行中' if not started else '开始下载'}
+
+
+@app.get('/api/update-progress')
+def update_progress_endpoint(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """更新下载/安装进度（关于页轮询）。"""
+    from app.update_service import get_state
+    return get_state()
+
+
 VERSION_PUSH_NOTIFIED_KEY = 'version_push_notified'
 
 

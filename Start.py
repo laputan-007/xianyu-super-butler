@@ -1270,7 +1270,10 @@ if __name__ == '__main__':
             try:
                 import pystray
                 from PIL import Image
-                logo = os.path.join(_exe_dir, '_internal', 'static', 'logo.png')
+                # 优先 app-icon.png：与桌面端 exe/安装器图标同源，找不到回落前端 logo
+                logo = os.path.join(_exe_dir, 'app-icon.png')
+                if not os.path.exists(logo):
+                    logo = os.path.join(_exe_dir, '_internal', 'static', 'logo.png')
                 if not os.path.exists(logo):
                     logo = os.path.join(_exe_dir, 'static', 'logo.png')
                 img = Image.open(logo)

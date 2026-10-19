@@ -7,7 +7,7 @@
 """
 import re
 
-APP_VERSION = '3.3.3'
+APP_VERSION = '3.3.4'
 BUILD_TIME = ''
 GIT_COMMIT = ''
 
