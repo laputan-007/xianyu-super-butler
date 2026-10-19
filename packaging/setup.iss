@@ -16,7 +16,9 @@ AppId={{8B3F5A72-6C4D-4E9A-B1F7-3A5C2D8E9041}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=鱼小铺
-DefaultDirName={localappdata}\Programs\{#AppName}
+DefaultDirName={localappdata}\Programs\yuxiaopu
+; 安装目录用 ASCII（yuxiaopu）：应用显示名仍是中文 AppName，
+; 但目录全 ASCII 可避免某些工具链/脚本处理中文路径出问题
 PrivilegesRequired=lowest
 DefaultGroupName={#AppName}
 UninstallDisplayName={#AppName}

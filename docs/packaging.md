@@ -53,7 +53,7 @@ dist/鱼小铺-<版本>-setup.exe      # 安装包（首选分发形态）
 dist/鱼小铺-<版本>-win64.zip      # 免安装压缩包（约 400+ MB，含 Chromium）
 ```
 
-安装包特性：用户级安装（默认 `~\AppData\Local\Programs\鱼小铺`，免管理员）、
+安装包特性：用户级安装（默认 `~\AppData\Local\Programs\yuxiaopu`，免管理员；目录用 ASCII，应用显示名仍为「鱼小铺」）、
 交互安装可选桌面快捷方式、支持 `/SILENT` / `/VERYSILENT /DIR=路径` 静默部署、
 卸载只清程序文件**保留数据**（`data/` 等运行期目录不在卸载清单里，重装可续用）。
 
