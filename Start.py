@@ -54,6 +54,12 @@ if getattr(sys, 'frozen', False):
     # 浏览器装在 exe 旁的 playwright/ 目录（_check_and_install_playwright
     # 预检函数约定的布局：playwright/chromium-*/chrome-win/chrome.exe）
     os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, 'playwright'))
+    # 安装即用：消息签名需要 Node.js 运行时，直接复用包内 Playwright driver
+    # 自带的 node.exe，前置到 PATH 让 PyExecJS 的运行时探测命中——用户机器
+    # 不再需要安装 Node。
+    _bundled_node_dir = os.path.join(_exe_dir, '_internal', 'playwright', 'driver')
+    if os.path.isfile(os.path.join(_bundled_node_dir, 'node.exe')):
+        os.environ['PATH'] = _bundled_node_dir + os.pathsep + os.environ.get('PATH', '')
     # 窗口模式（console=False）下 sys.stdout/stderr 为 None，loguru/uvicorn
     # 的控制台输出流会异常——统一重定向到当前存储根目录的日志文件。
     if sys.stdout is None or sys.stderr is None:

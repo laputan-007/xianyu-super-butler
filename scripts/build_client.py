@@ -11,10 +11,10 @@
 4. PyInstaller 按 packaging/xianyu_butler.spec 打包（onedir）；
 5. 组装 dist/鱼小铺/：version.txt（read_dist_version 运行时读取）+ 使用说明；
 6. Playwright Chromium 装进发行目录的 _internal/browsers（随包分发）；
-7. 产出 dist/鱼小铺-<版本>-win64.zip。
+7. 产出 dist/鱼小铺-<版本>-win64.zip；
+   装有 Inno Setup 时追加产出 dist/鱼小铺-<版本>-setup.exe 安装包。
 
-前置依赖：venv 里需有 pyinstaller（脚本会自动安装）、Node.js（签名 JS 运行时，
-仅运行期需要）。
+前置依赖：venv 里需有 pyinstaller（脚本会自动安装）；安装包需另装 Inno Setup 6（可选）。
 """
 import argparse
 import datetime
@@ -25,6 +25,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / 'app' / 'version.py'
@@ -158,6 +159,44 @@ def make_zip(app_dir: Path, version: str) -> Path:
     return Path(archive)
 
 
+def locate_iscc() -> Optional[Path]:
+    """定位 Inno Setup 编译器 ISCC.exe（安装包构建用）。"""
+    candidates = []
+    env_dir = os.getenv('INNO_SETUP_DIR')
+    if env_dir:
+        candidates.append(Path(env_dir) / 'ISCC.exe')
+        candidates.append(Path(env_dir) / 'App' / 'ISCC.exe')
+    candidates += [
+        ROOT / 'packaging' / 'tools' / 'innosetup' / 'ISCC.exe',
+        ROOT / 'packaging' / 'tools' / 'innosetup' / 'App' / 'ISCC.exe',
+        Path(os.getenv('ProgramFiles(x86)', '')) / 'Inno Setup 6' / 'ISCC.exe',
+        Path(os.getenv('ProgramFiles', '')) / 'Inno Setup 6' / 'ISCC.exe',
+    ]
+    return next((p for p in candidates if p.is_file()), None)
+
+
+def build_installer(version: str) -> Optional[Path]:
+    """用 Inno Setup 编译安装包：dist/鱼小铺-<版本>-setup.exe。
+
+    用户级安装（无需管理员）、开始菜单/桌面快捷方式、可静默安装（/SILENT）、
+    卸载保留数据。ISCC 未安装时跳过并给出指引，不影响 zip 产物。
+    """
+    iscc = locate_iscc()
+    if iscc is None:
+        print('! 未找到 Inno Setup 编译器（ISCC.exe），跳过安装包构建。')
+        print('  安装方法：https://jrsoftware.org/isdl.php 下载 Inno Setup 6 安装，')
+        print('  或下载安装器后执行 innosetup-6.x.exe /PORTABLE=1 /DIR=<仓库>/packaging/tools/innosetup')
+        print('  也可用环境变量 INNO_SETUP_DIR 指定 ISCC.exe 所在目录。')
+        return None
+    env = dict(os.environ)
+    env['YXP_VERSION'] = version
+    run([str(iscc), str(ROOT / 'packaging' / 'setup.iss')], cwd=str(ROOT / 'packaging'), env=env)
+    setup_exe = DIST / f'鱼小铺-{version}-setup.exe'
+    if setup_exe.exists():
+        return setup_exe
+    raise SystemExit(f'ISCC 执行完成但未找到产物: {setup_exe}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='鱼小铺 Windows 客户端打包')
     parser.add_argument('--skip-frontend', action='store_true', help='跳过前端构建')
@@ -186,7 +225,13 @@ def main() -> None:
     archive = make_zip(app_dir, version)
 
     size_mb = archive.stat().st_size / 1024 / 1024
-    print(f'== 打包完成 ==\n发行目录: {app_dir}\n压缩包: {archive}（{size_mb:.1f} MB）')
+    lines = ['== 打包完成 ==', f'发行目录: {app_dir}',
+             f'压缩包: {archive}（{size_mb:.1f} MB）']
+    setup_exe = build_installer(version)
+    if setup_exe:
+        setup_mb = setup_exe.stat().st_size / 1024 / 1024
+        lines.append(f'安装包: {setup_exe}（{setup_mb:.1f} MB）')
+    print('\n'.join(lines))
 
 
 README_CN = """鱼小铺 - Windows 客户端（单机版）
@@ -199,9 +244,9 @@ README_CN = """鱼小铺 - Windows 客户端（单机版）
 默认管理员账号 admin，默认密码 admin123（请在设置页立即修改）。
 
 【环境要求】
-- 需要安装 Node.js（消息签名计算用，https://nodejs.org 下载 LTS 版安装即可）
-- 浏览器内核已内置在 _internal/browsers，无需另外安装
+- 无需任何环境依赖，安装即用（Node 运行时与浏览器内核均已内置）
 - 杀毒软件误报时请将本目录加入信任区
+- 窗口界面基于 Edge WebView2（Win11 自带；Win10 绝大多数随 Edge 已装）
 
 【数据与升级】
 - data/（数据库）、browser_data/、logs/ 都生成在 exe 同目录，升级时

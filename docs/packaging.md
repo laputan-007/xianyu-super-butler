@@ -1,6 +1,6 @@
-# Windows 客户端打包方案（EXE）
+# Windows 客户端打包方案（EXE / 安装包）
 
-把「鱼小铺」打成一个双击即用的 Windows 桌面客户端：**无边框原生窗口**（pywebview + Edge WebView2 内核）承载管理后台界面，服务端（uvicorn + 账号任务）整体跑在进程内，无需安装 Python、无需另起服务。
+把「鱼小铺」做成**安装即用**的 Windows 桌面客户端：单个 `setup.exe` 安装包 → 用户级安装（无需管理员权限）→ 桌面/开始菜单快捷方式 → 无边框原生窗口（pywebview + Edge WebView2 内核）承载管理后台界面。服务端（uvicorn + 账号任务）整体跑在进程内；**Node 与浏览器内核均已内置，用户机器零环境要求**。
 
 ## 一、方案总览
 
@@ -10,6 +10,7 @@
 | 窗口壳 | **pywebview 6.x（frameless）** | 无原生标题栏；网页自绘标题栏（拖拽 + 最小化/最大化/关闭），窗口控制走 `js_api` 桥 |
 | 界面 | 复用现有 React 前端 | 标题栏组件按 `window.pywebview` 桥存在与否门控——**浏览器访问完全不受影响** |
 | 浏览器内核 | Playwright Chromium 随包分发 | 滑块验证、扫码登录依赖；装在 exe 旁的 `playwright/` 目录 |
+| 安装包 | **Inno Setup 7（用户级）** | 产出单个 `setup.exe`：装到 `~\AppData\Local\Programs`，桌面/开始菜单快捷方式、可静默安装（`/SILENT`）、卸载保留数据 |
 | 版本管理 | `app/version.py` 单一来源 | 打包时回写构建时间与 git 提交号（构建后源码自动还原）；运行期优先读 exe 旁 `version.txt` |
 
 ## 二、产物结构
@@ -38,14 +39,23 @@
 # 前置：一次性安装打包依赖（业务依赖 requirements.txt 另装）
 pip install -r requirements-build.txt   # pyinstaller / pillow / pywebview
 
+# 前置（可选）：安装 Inno Setup 编译安装包；不装则只产出 zip
+# 便携安装到 packaging/tools/innosetup（无需管理员）：
+innosetup-7.x.exe /PORTABLE=1 /DIR=<仓库>/packaging/tools/innosetup
+
 # 一键打包（在仓库根目录，用项目 venv 的 Python）
 .venv/Scripts/python.exe scripts/build_client.py            # 完整构建
 .venv/Scripts/python.exe scripts/build_client.py --skip-frontend  # 前端产物已最新时跳过
 
 # 产物
 dist/鱼小铺/                      # 发行目录
-dist/鱼小铺-<版本>-win64.zip      # 可分发压缩包（约 400+ MB，含 Chromium）
+dist/鱼小铺-<版本>-setup.exe      # 安装包（首选分发形态）
+dist/鱼小铺-<版本>-win64.zip      # 免安装压缩包（约 400+ MB，含 Chromium）
 ```
+
+安装包特性：用户级安装（默认 `~\AppData\Local\Programs\鱼小铺`，免管理员）、
+交互安装可选桌面快捷方式、支持 `/SILENT` / `/VERYSILENT /DIR=路径` 静默部署、
+卸载只清程序文件**保留数据**（`data/` 等运行期目录不在卸载清单里，重装可续用）。
 
 `scripts/build_client.py` 内部流程：
 
@@ -69,16 +79,21 @@ dist/鱼小铺-<版本>-win64.zip      # 可分发压缩包（约 400+ MB，含 
 
 ## 五、用户环境要求
 
-- **Node.js**（消息签名计算用，PyExecJS 运行时；无 Node 时部分环境可回落 Windows 自带 JScript，未充分验证）
-- WebView2 运行时（Win11 自带；Win10 绝大多数随 Edge 已装）
-- 杀软误报：无代码签名的 exe 可能被误报，需引导用户将目录加白（正式分发建议购买代码签名证书）
+**安装即用，零依赖**——以下运行时全部随包分发：
+
+- **Node.js**：消息签名计算用。复用包内 Playwright driver 自带的 node.exe
+  （`Start.py` 冻结块把它前置到 PATH，PyExecJS 探测直接命中；已实测系统
+  无 Node 时签名链路正常）。用户机器无需安装 Node。
+- **Chromium**：滑块/扫码登录用，随包分发（`playwright/` 目录）。
+- **WebView2**：窗口界面用，Win11 自带、Win10 绝大多数随 Edge 已装。
+- 杀软误报：无代码签名的 exe 可能被误报，需引导用户将目录加白（正式分发建议购买代码签名证书）。
 
 ## 六、版本与发布流程
 
 1. 改版本号：`app/version.py` 的 `APP_VERSION`（单一来源，`/health`、关于页、版本检查都从这里取）
 2. 打包：`scripts/build_client.py`（自动带上 git 提交号）
-3. 发布：`dist/鱼小铺-<版本>-win64.zip` 即发行物；公网公告源同步更新 `latest_version` 供「关于」页检查更新
-4. 用户升级：解压覆盖程序目录（`data/` 等不受影响），`version.txt` 随包更新
+3. 发布：`dist/鱼小铺-<版本>-setup.exe` 即发行物；公网公告源同步更新 `latest_version` 供「关于」页检查更新
+4. 用户升级：直接运行新版本 setup.exe 覆盖安装（数据不动），或免安装版解压覆盖程序目录
 
 ## 七、常见问题
 
