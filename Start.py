@@ -1244,6 +1244,78 @@ if __name__ == '__main__':
             user32.SetWindowLongPtrW(hwnd, GWL_WNDPROC, ctypes.cast(proc, ctypes.c_void_p).value)
 
         _win.events.shown += lambda: _patch_window_styles(_win)
+
+        # ── 托盘与关闭策略 ────────────────────────────────────────────
+        # 点关闭（标题栏 ✕ 或窗口系统关闭）提供两种：最小化到托盘后台运行 /
+        # 退出程序；托盘右键菜单支持「显示鱼小铺 / 退出程序」，双击托盘恢复窗口。
+        # 账号监听与自动回复跑在应用后台线程，最小化到托盘期间照常工作。
+        _tray_holder = {}
+        _force_exit = {'flag': False}
+
+        def _tray_show(icon=None, item=None):
+            _win.show()
+            _win.restore()
+
+        def _tray_quit(icon=None, item=None):
+            _force_exit['flag'] = True
+            icon_ref = _tray_holder.get('icon')
+            try:
+                if icon_ref is not None:
+                    icon_ref.stop()
+            except Exception:
+                pass
+            _win.destroy()
+
+        def _make_tray():
+            try:
+                import pystray
+                from PIL import Image
+                logo = os.path.join(_exe_dir, '_internal', 'static', 'logo.png')
+                if not os.path.exists(logo):
+                    logo = os.path.join(_exe_dir, 'static', 'logo.png')
+                img = Image.open(logo)
+                menu = pystray.Menu(
+                    pystray.MenuItem('显示鱼小铺', _tray_show, default=True),
+                    pystray.MenuItem('退出程序', _tray_quit),
+                )
+                return pystray.Icon('yuxiaopu', img, '鱼小铺', menu)
+            except Exception as tray_e:
+                print(f'托盘初始化失败（不影响使用）: {tray_e}')
+                return None
+
+        def _on_closing():
+            if _force_exit['flag']:
+                return True  # 托盘「退出程序」或内部 destroy 触发的关闭：直接放行
+            import ctypes
+            # MB_YESNOCANCEL(0x3) | MB_ICONINFORMATION(0x40)
+            ret = ctypes.windll.user32.MessageBoxW(
+                0,
+                '要最小化到托盘后台运行，还是退出程序？\n\n'
+                '【是】最小化到托盘 —— 窗口隐藏，账号监听与自动回复继续运行\n'
+                '【否】退出程序 —— 停止全部任务并退出\n'
+                '【取消】回到窗口',
+                '关闭鱼小铺',
+                0x3 | 0x40,
+            )
+            if ret == 6:  # 是 → 最小化到托盘
+                _win.hide()
+                icon_ref = _tray_holder.get('icon')
+                if icon_ref is not None:
+                    try:
+                        icon_ref.visible = True
+                    except Exception:
+                        pass
+                return False  # 阻止窗口销毁，进程驻留后台
+            if ret == 7:  # 否 → 退出程序
+                _tray_quit()
+                return True
+            return False  # 取消 → 回到窗口
+
+        _win.events.closing += _on_closing
+        _tray_holder['icon'] = _make_tray()
+        if _tray_holder['icon'] is not None:
+            _tray_holder['icon'].run_detached()
+
         webview.start()
         print('窗口已关闭，进程退出')
         os._exit(0)
