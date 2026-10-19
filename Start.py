@@ -49,8 +49,20 @@ if getattr(sys, 'frozen', False):
                 print(f'数据存储目录: {_root}')
     except Exception as _e:
         print(f'读取自定义存储路径失败，回落 exe 同目录: {_e}')
-    # 打包版默认端口 18099：避开 8080/8090 等常用端口冲突（用户可用环境变量 API_PORT 覆盖）
-    os.environ.setdefault('API_PORT', '18099')
+    # 端口优先级：exe 旁 port.txt（安装向导写入、用户可随时改）> 环境变量 API_PORT > 默认 18099。
+    # port.txt 是安装器的「自定义端口」落点——覆盖式设置，改完重启程序即生效。
+    _port_file = os.path.join(_exe_dir, 'port.txt')
+    _port_val = ''
+    try:
+        if os.path.exists(_port_file):
+            with open(_port_file, encoding='utf-8') as _pf:
+                _port_val = _pf.read().strip()
+    except Exception:
+        _port_val = ''
+    if _port_val.isdigit() and 1 <= int(_port_val) <= 65535:
+        os.environ['API_PORT'] = _port_val
+    else:
+        os.environ.setdefault('API_PORT', '18099')
     # 浏览器装在 exe 旁的 playwright/ 目录（_check_and_install_playwright
     # 预检函数约定的布局：playwright/chromium-*/chrome-win/chrome.exe）
     os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(_exe_dir, 'playwright'))

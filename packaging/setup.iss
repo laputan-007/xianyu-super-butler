@@ -50,3 +50,68 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 [Run]
 ; 静默安装（/SILENT /VERYSILENT）时不自动启动，交互安装完提供「立即运行」
 Filename: "{app}\{#AppExeName}"; Description: "立即运行{#AppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+var
+  PortPage: TInputQueryWizardPage;
+
+procedure InitializeWizard();
+begin
+  // 端口设置页：默认 18099，被占用或用户偏好时可改；安装后写入 {app}\port.txt。
+  // 注意：此阶段 {app} 常量尚未初始化，读回旧端口的逻辑在 CurStepChanged 里做。
+  PortPage := CreateInputQueryPage(wpWelcome,
+    '服务端口设置',
+    '鱼小铺管理后台在本机监听的端口',
+    '默认 18099。若该端口被占用或您有其他偏好，可修改为 1024-65535 之间的任意端口。' + #13#10#13#10 +
+    '安装后如需再改：编辑程序目录下的 port.txt 并重启程序即可。');
+  PortPage.Add('监听端口：', False);
+  PortPage.Values[0] := '18099';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  PortStr: string;
+  PortNum: Integer;
+begin
+  Result := True;
+  if CurPageID = PortPage.ID then
+  begin
+    PortStr := Trim(PortPage.Values[0]);
+    PortNum := StrToIntDef(PortStr, 0);
+    if (PortNum < 1024) or (PortNum > 65535) then
+    begin
+      MsgBox('端口必须是 1024-65535 之间的数字（默认 18099）。', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  FinalPort: string;
+  PrevPort: string;
+  PrevLines: TArrayOfString;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    FinalPort := Trim(PortPage.Values[0]);
+    // 升级安装且用户没在向导里改过（仍是默认值，含静默安装）：读回上一次的
+    // 自定义端口，不悄悄重置用户的选择（旧 port.txt 不在 [Files] 清单，安装不会删它）
+    if FinalPort = '18099' then
+    begin
+      if FileExists(ExpandConstant('{app}\port.txt')) then
+      begin
+        if LoadStringsFromFile(ExpandConstant('{app}\port.txt'), PrevLines) then
+        begin
+          if GetArrayLength(PrevLines) > 0 then
+          begin
+            PrevPort := Trim(PrevLines[0]);
+            if (StrToIntDef(PrevPort, 0) >= 1024) and (StrToIntDef(PrevPort, 0) <= 65535) then
+              FinalPort := PrevPort;
+          end;
+        end;
+      end;
+    end;
+    SaveStringToFile(ExpandConstant('{app}\port.txt'), FinalPort + #13#10, False);
+  end;
+end;
